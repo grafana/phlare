@@ -123,6 +123,9 @@ func (f *Fire) initAgent() (services.Service, error) {
 		return nil, err
 	}
 
+	prefix, handler := agentv1connect.NewAgentServiceHandler(a.ConnectHandler())
+	f.Server.HTTP.NewRoute().PathPrefix(prefix).Handler(handler)
+
 	agentv1connect.RegisterAgentServiceHandler(f.Server.HTTP, a.ConnectHandler())
 	return a, nil
 }
