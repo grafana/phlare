@@ -36,6 +36,7 @@ import (
 	"github.com/grafana/fire/pkg/openapiv2"
 	"github.com/grafana/fire/pkg/querier"
 	"github.com/grafana/fire/pkg/util"
+	"github.com/grafana/fire/web"
 )
 
 // The various modules that make up Fire.
@@ -245,6 +246,13 @@ func (f *Fire) initServer() (services.Service, error) {
 		return nil, fmt.Errorf("unable to initialize openapiv2 handler: %w", err)
 	}
 	f.Server.HTTP.Handle("/api/swagger.json", openapiv2Handler)
+
+	// mount web api
+	webAssets, err := web.Assets()
+	if err != nil {
+		return nil, err
+	}
+	f.Server.HTTP.NewRoute().PathPrefix("/").Handler(http.FileServer(webAssets))
 
 	return s, nil
 }
