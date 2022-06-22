@@ -252,7 +252,17 @@ func (f *Fire) initServer() (services.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Server.HTTP.NewRoute().PathPrefix("/").Handler(http.FileServer(webAssets))
+	webHandler := http.FileServer(webAssets)
+	for _, path := range []string{
+		"/",
+		"/favicon.ico",
+		"/logo192.png",
+		"/logo512.png",
+		"/robots.txt",
+	} {
+		f.Server.HTTP.NewRoute().Path(path).Handler(webHandler)
+	}
+	f.Server.HTTP.NewRoute().PathPrefix("/static").Handler(webHandler)
 
 	return s, nil
 }
