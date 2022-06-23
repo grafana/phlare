@@ -13,8 +13,8 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
-	"github.com/polarsignals/arcticdb/query"
-	"github.com/polarsignals/arcticdb/query/logicalplan"
+	"github.com/polarsignals/frostdb/query"
+	"github.com/polarsignals/frostdb/query/logicalplan"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 

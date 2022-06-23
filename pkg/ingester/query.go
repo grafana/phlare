@@ -12,9 +12,9 @@ import (
 	"github.com/apache/arrow/go/v8/arrow/array"
 	"github.com/bufbuild/connect-go"
 	"github.com/gogo/status"
-	"github.com/parca-dev/parca/pkg/metastore"
+	metastorepb "github.com/parca-dev/parca/gen/proto/go/parca/metastore/v1alpha1"
 	"github.com/parca-dev/parca/pkg/parcacol"
-	"github.com/polarsignals/arcticdb/query/logicalplan"
+	"github.com/polarsignals/frostdb/query/logicalplan"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -163,7 +163,7 @@ func (i *Ingester) selectMerge(ctx context.Context, query profileQuery, start, e
 		return nil, err
 	}
 	defer ar.Release()
-	flame, err := buildFlamebearer(ar, i.profileStore.MetaStore())
+	flame, err := buildFlamebearer(ar, i.profileStore.Metastore())
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (i *Ingester) selectMerge(ctx context.Context, query profileQuery, start, e
 	}, nil
 }
 
-func buildFlamebearer(ar arrow.Record, meta metastore.ProfileMetaStore) (*flamebearer.FlamebearerV1, error) {
+func buildFlamebearer(ar arrow.Record, meta metastorepb.MetastoreServiceClient) (*flamebearer.FlamebearerV1, error) {
 	type sample struct {
 		stacktraceID []byte
 		locationIDs  [][]byte
