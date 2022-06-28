@@ -72,9 +72,9 @@ go/lint: $(BIN)/golangci-lint
 
 .PHONY: go/mod
 go/mod:
-	GO111MODULE=on go mod download
-	GO111MODULE=on go mod verify
-	GO111MODULE=on go mod tidy
+	GOPRIVATE=$(GOPRIVATE) GO111MODULE=on go mod download
+	GOPRIVATE=$(GOPRIVATE) GO111MODULE=on go mod verify
+	GOPRIVATE=$(GOPRIVATE) GO111MODULE=on go mod tidy
 
 .PHONY: fmt
 fmt: $(BIN)/golangci-lint $(BIN)/buf ## Automatically fix some lint errors

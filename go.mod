@@ -261,7 +261,7 @@ require (
 )
 
 replace (
-	github.com/polarsignals/frostdb => github.com/grafana/frostdb v0.0.0-20220623183226-4080ae2447c1
+	github.com/polarsignals/frostdb => github.com/grafana/frostdb v0.0.0-20220628134250-8cb0e631cbb0
 	google.golang.org/api => google.golang.org/api v0.70.0
 	google.golang.org/grpc => google.golang.org/grpc v1.44.0
 )
