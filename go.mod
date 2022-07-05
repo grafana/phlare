@@ -261,7 +261,8 @@ require (
 )
 
 replace (
-	github.com/polarsignals/frostdb => github.com/grafana/frostdb v0.0.0-20220628134250-8cb0e631cbb0
+	github.com/polarsignals/frostdb => github.com/grafana/frostdb v0.0.0-20220705125633-92404d127dca
+	github.com/segmentio/parquet-go => github.com/cyriltovena/parquet-go v0.0.0-20220630071440-e03bbfad69c1
 	google.golang.org/api => google.golang.org/api v0.70.0
 	google.golang.org/grpc => google.golang.org/grpc v1.44.0
 )
