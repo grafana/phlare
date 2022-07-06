@@ -96,7 +96,7 @@ func Test_QueryMetadata(t *testing.T) {
 	d, err := New(cfg, log.NewLogfmtLogger(os.Stdout), nil, profileStore)
 	require.NoError(t, err)
 
-	rawProfile := testProfile(t)
+	rawProfile := testMyHeapProfile(t)
 	resp, err := d.Push(context.Background(), connect.NewRequest(&pushv1.PushRequest{
 		Series: []*pushv1.RawProfileSeries{
 			{

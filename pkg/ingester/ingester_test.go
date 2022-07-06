@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"runtime/pprof"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow/go/v8/arrow"
 	"github.com/apache/arrow/go/v8/arrow/memory"
@@ -79,7 +82,7 @@ func Test_ConnectPush(t *testing.T) {
 
 	client := ingesterv1connect.NewIngesterServiceClient(http.DefaultClient, s.URL)
 
-	rawProfile := testProfile(t)
+	rawProfile := testMyHeapProfile(t)
 	resp, err := client.Push(context.Background(), connect.NewRequest(&pushv1.PushRequest{
 		Series: []*pushv1.RawProfileSeries{
 			{
@@ -145,10 +148,78 @@ func parseRawProfile(t testing.TB, reader io.Reader) *profile.Profile {
 	return p
 }
 
-func testProfile(t *testing.T) []byte {
+func testMyHeapProfile(t testing.TB) []byte {
 	t.Helper()
 
 	buf := bytes.NewBuffer(nil)
 	require.NoError(t, pprof.WriteHeapProfile(buf))
 	return buf.Bytes()
+}
+
+func testStaticCPUProfile(t testing.TB) []byte {
+	t.Helper()
+
+	b, err := os.ReadFile("../firedb/testdata/profile")
+	require.NoError(t, err)
+	return b
+}
+
+func BenchmarkIngestProfiles(b *testing.B) {
+	cfg := defaultIngesterTestConfig(b)
+	logger := log.NewLogfmtLogger(os.Stdout)
+
+	profileStoreCfg := defaultProfileStoreTestConfig(b)
+	profileStore, err := profilestore.New(logger, nil, trace.NewNoopTracerProvider(), profileStoreCfg)
+	require.NoError(b, err)
+
+	i, err := New(cfg, log.NewNopLogger(), nil, profileStore)
+	require.NoError(b, err)
+
+	rawProfile := testStaticCPUProfile(b)
+	for n := 0; n < b.N; n++ {
+		resp, err := i.Push(context.Background(), connect.NewRequest(&pushv1.PushRequest{
+			Series: []*pushv1.RawProfileSeries{
+				{
+					Labels: []*commonv1.LabelPair{
+						{Name: "__name__", Value: "my_own_profile"},
+						{Name: "cluster", Value: "us-central1"},
+						{Name: "n", Value: fmt.Sprintf("%d", b.N)},
+					},
+					Samples: []*pushv1.RawSample{
+						{
+							RawProfile: rawProfile,
+						},
+					},
+				},
+			},
+		}))
+		require.NoError(b, err)
+		require.NotNil(b, resp)
+	}
+
+	require.NoError(b, profileStore.Table().RotateBlock())
+
+	require.Eventually(b, func() bool {
+		files, err := ioutil.ReadDir(profileStoreCfg.DataPath + "/profilestore-v1/fire/stacktraces")
+		if err != nil {
+			return false
+		}
+
+		if len(files) == 0 {
+			return false
+		}
+
+		if !files[0].IsDir() {
+			return false
+		}
+
+		stat, err := os.Stat(profileStoreCfg.DataPath + "/profilestore-v1/fire/stacktraces/" + files[0].Name() + "/data.parquet")
+		if err != nil {
+			return false
+		}
+		b.Logf("bytes_total=%d bytes_per_profile=%2f", stat.Size(), float64(stat.Size())/float64(b.N))
+		return true
+
+	}, time.Second, 50*time.Millisecond)
+
 }
