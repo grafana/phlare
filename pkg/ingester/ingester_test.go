@@ -217,7 +217,7 @@ func BenchmarkIngestProfiles(b *testing.B) {
 		if err != nil {
 			return false
 		}
-		b.Logf("bytes_total=%d bytes_per_profile=%2f", stat.Size(), float64(stat.Size())/float64(b.N))
+		b.Logf("profiles=%3d bytes_total=% 9.d bytes_per_profile=% 9.2f", b.N, stat.Size(), float64(stat.Size())/float64(b.N))
 		return true
 
 	}, time.Second, 50*time.Millisecond)
