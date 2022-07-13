@@ -4,8 +4,10 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -261,6 +263,51 @@ func TestHeadIngestRealProfiles(t *testing.T) {
 
 	require.NoError(t, head.WriteTo(ctx, t.TempDir()))
 	t.Logf("strings=%d samples=%d", len(head.strings.slice), len(head.profiles.slice[0].Samples))
+}
+
+func TestHeadIngestMemoryAllocations(t *testing.T) {
+	profilePaths := []string{
+		"testdata/heap",
+		"testdata/profile",
+	}
+
+	var statsBefore, statsAfter runtime.MemStats
+	var size, diff uint64
+
+	for _, n := range []int{1, 10, 100} {
+		t.Run(fmt.Sprintf("%d ingests", n), func(t *testing.T) {
+			head, err := NewHead(prometheus.NewRegistry())
+			require.NoError(t, err)
+			ctx := context.Background()
+
+			runtime.GC()
+			runtime.GC()
+			runtime.GC()
+			runtime.GC()
+			runtime.ReadMemStats(&statsBefore)
+
+			for i := 0; i < n; i++ {
+				for pos := range profilePaths {
+					profile := parseProfile(t, profilePaths[pos])
+					require.NoError(t, head.Ingest(ctx, profile))
+				}
+			}
+
+			runtime.GC()
+			runtime.GC()
+			runtime.GC()
+			runtime.GC()
+			runtime.ReadMemStats(&statsAfter)
+
+			size = head.Size()
+			diff = statsAfter.HeapAlloc - statsBefore.HeapAlloc
+
+			t.Logf("n=% 3d allocated   =%9d bytes", n, diff)
+			t.Logf("n=% 3d size        =%9d bytes", n, size)
+			t.Logf("n=% 3d unaccounted =%9d bytes (%2f%%)", n, diff-size, 100*(float64(diff-size)/float64(diff)))
+		})
+	}
+
 }
 
 func TestSelectProfiles(t *testing.T) {

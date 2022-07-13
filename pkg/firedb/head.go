@@ -476,3 +476,13 @@ func (h *Head) WriteTo(ctx context.Context, path string) error {
 
 	return nil
 }
+
+func (h *Head) Size() uint64 {
+	return h.functions.size.Load() +
+		h.locations.size.Load() +
+		h.mappings.size.Load() +
+		h.stacktraces.size.Load() +
+		h.functions.size.Load() +
+		h.profiles.size.Load() +
+		h.pprofLabelCache.size.Load()
+}
