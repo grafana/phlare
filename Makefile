@@ -119,7 +119,8 @@ docker-image/fire/build:
 
 .PHONY: docker-image/fire/push
 docker-image/fire/push:
-	$(call docker_buildx,--push)
+	$(call docker_buildx,--push --metadata-file metadata.json)
+	cat metadata.json
 
 .PHONY: clean
 clean: ## Delete intermediate build artifacts
