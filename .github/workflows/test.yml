@@ -104,7 +104,9 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCR_JSON_KEY }}
       - name: Build & push multi-arch image
-        run: make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha"
+        run: |
+          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
+          echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
       - name: Deploy to fire-dev-001
         uses: ./.github/actions/updater
         id: updater
