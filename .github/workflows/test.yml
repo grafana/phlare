@@ -104,6 +104,13 @@ jobs:
           username: _json_key
           password: ${{ secrets.GCR_JSON_KEY }}
       - name: Run directy
+      - name: Build & push multi-arch image
+        id: build-push
+        run: |
+          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
+          echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
+
+      - name: Deploy to fire-dev-001
         run: |
           git config --global url."https://grafanabot:${{ secrets.GRAFANABOT_PAT }}@github.com/grafana/deployment_tools".insteadOf "https://github.com/grafana/deployment_tools"
           go run github.com/grafana/deployment_tools/drone/plugins/cmd/updater@d64d509
@@ -116,32 +123,8 @@ jobs:
                 {
                   "file_path": "ksonnet/environments/fire/dev-us-central-0.fire-dev-001/images.libsonnet",
                   "jsonnet_key": "fire",
-                  "jsonnet_value": "us.gcr.io/kubernetes-dev/fire:main-05800bb"
+                  "jsonnet_value": "${{ steps.build-push.outputs.image }}"
                 }
               ]
             }
-            # echo ${{ steps.random-color-generator.outputs.SELECTED_COLOR }}
-      - name: Build & push multi-arch image
-        id: build-push
-        run: |
-          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
-          echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
-
-      - name: Deploy to fire-dev-001
-        uses: ./.github/actions/updater
-        id: updater
-        with:
-          config: |
-            {
-              "update_jsonnet_attribute_configs": [
-                {
-                  "file_path": "ksonnet/environments/fire/dev-us-central-0.fire-dev-001/images.libsonnet",
-                  "jsonnet_key": "fire",
-                  "jsonnet_value": "us.gcr.io/kubernetes-dev/fire:main-05800bb"
-                }
-              ]
-            }
-            {
-            }
-          token: ${{ secrets.GRAFANABOT_PAT }}
 
