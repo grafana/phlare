@@ -103,12 +103,10 @@ jobs:
           registry: us.gcr.io
           username: _json_key
           password: ${{ secrets.GCR_JSON_KEY }}
-      - name: Build & push multi-arch image
-        run: |
-          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
-          echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
       - name: Run directy
         run: |
+          echo ${outputs.image}
+          git config --global "https://:${GITHUB_TOKEN}X@github.com/grafana/deployment_tools" .insteadOf "https://github.com/grafana/deployment_tools"
           go run github.com/grafana/deployment_tools/drone/plugins/cmd/updater@d64d509
         env:
           GOPRIVATE: github.com/grafana/deployment_tools
@@ -123,6 +121,10 @@ jobs:
                 }
               ]
             }
+      - name: Build & push multi-arch image
+        run: |
+          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
+          echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
 
 
       - name: Deploy to fire-dev-001
