@@ -2,6 +2,7 @@ name: ci
 on:
   push:
     branches:
+      - test-push
       - main
       - r[0-9]+ # Trigger builds after a push to weekly branches
   pull_request:
