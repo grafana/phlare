@@ -105,7 +105,7 @@ jobs:
           password: ${{ secrets.GCR_JSON_KEY }}
       - name: Run directy
         run: |
-          git config --global url."https://:${GITHUB_TOKEN}@github.com/grafana/deployment_tools".insteadOf "https://github.com/grafana/deployment_tools"
+          git config --global url."https://grafanabot:${{ secrets.GRAFANABOT_PAT }}@github.com/grafana/deployment_tools".insteadOf "https://github.com/grafana/deployment_tools"
           go run github.com/grafana/deployment_tools/drone/plugins/cmd/updater@d64d509
         env:
           GOPRIVATE: github.com/grafana/deployment_tools
