@@ -12,7 +12,7 @@ LICENSE_IGNORE := -e /testdata/
 GO_TEST_FLAGS ?= -v -race -cover
 
 IMAGE_PLATFORM = linux/amd64
-BUILDX_ARGS = ""
+BUILDX_ARGS =
 GOPRIVATE=github.com/grafana/frostdb
 
 # Boiler plate for building Docker containers.
@@ -123,6 +123,31 @@ docker-image/fire/build:
 docker-image/fire/push:
 	$(call docker_buildx,--push)
 
+define UPDATER_CONFIG_JSON
+{
+  "repo_name": "deployment_tools",
+  "destination_branch": "master",
+  "wait_for_ci": true,
+  "wait_for_ci_branch_prefix": "automation/fire-dev-deploy",
+  "wait_for_ci_timeout": "10m",
+  "wait_for_ci_required_status": [
+    "continuous-integration/drone/push"
+  ],
+  "update_jsonnet_attribute_configs": [
+    {
+      "file_path": "ksonnet/environments/fire/dev-us-central-0.fire-dev-001/images.libsonnet",
+      "jsonnet_key": "fire",
+      "jsonnet_value": "$(IMAGE_PREFIX)fire:$(IMAGE_TAG)"
+    }
+  ]
+}
+endef
+
+.PHONY: docker-image/fire/deploy-dev-001
+docker-image/fire/deploy-dev-001: export CONFIG_JSON:=$(call UPDATER_CONFIG_JSON)
+docker-image/fire/deploy-dev-001: $(BIN)/updater
+	$(BIN)/updater
+
 .PHONY: clean
 clean: ## Delete intermediate build artifacts
 	@# -X only removes untracked files, -d recurses into directories, -f actually removes files/dirs
@@ -175,6 +200,10 @@ $(BIN)/kubeval: Makefile go.mod
 $(BIN)/mage: Makefile go.mod
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) $(GO) install github.com/magefile/mage@v1.13.0
+
+$(BIN)/updater: Makefile
+	@mkdir -p $(@D)
+	GOBIN=$(abspath $(@D)) GOPRIVATE=github.com/grafana/deployment_tools $(GO) install github.com/grafana/deployment_tools/drone/plugins/cmd/updater@d64d509
 
 KIND_CLUSTER = fire-dev
 

@@ -106,22 +106,10 @@ jobs:
       - name: Build & push multi-arch image
         id: build-push
         run: |
-          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
-          echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
+          make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha"
       - name: Deploy to fire-dev-001
         run: |
           git config --global url."https://grafanabot:${{ secrets.GRAFANABOT_PAT }}@github.com/grafana/deployment_tools".insteadOf "https://github.com/grafana/deployment_tools"
-          go run github.com/grafana/deployment_tools/drone/plugins/cmd/updater@d64d509
+          make docker-image/fire/deploy-dev-001
         env:
-          GOPRIVATE: github.com/grafana/deployment_tools
           GITHUB_TOKEN: ${{ secrets.GRAFANABOT_PAT }}
-          CONFIG_JSON: |
-            {
-              "update_jsonnet_attribute_configs": [
-                {
-                  "file_path": "ksonnet/environments/fire/dev-us-central-0.fire-dev-001/images.libsonnet",
-                  "jsonnet_key": "fire",
-                  "jsonnet_value": "${{ steps.build-push.outputs.image }}"
-                }
-              ]
-            }
