@@ -12,6 +12,7 @@ LICENSE_IGNORE := -e /testdata/
 GO_TEST_FLAGS ?= -v -race -cover
 
 IMAGE_PLATFORM = linux/amd64
+BUILDX_ARGS = ""
 GOPRIVATE=github.com/grafana/frostdb
 
 # Boiler plate for building Docker containers.
@@ -102,7 +103,7 @@ check/go/mod: go/mod
 
 
 define docker_buildx
-	docker buildx build $(1) --ssh default --platform $(IMAGE_PLATFORM) --build-arg=revision=$(GIT_REVISION) -t $(IMAGE_PREFIX)$(shell basename $(@D)) -t $(IMAGE_PREFIX)$(shell basename $(@D)):$(IMAGE_TAG) -f cmd/$(shell basename $(@D))/Dockerfile .
+	docker buildx build $(1) --ssh default --platform $(IMAGE_PLATFORM) $(BUILDX_ARGS) --build-arg=revision=$(GIT_REVISION) -t $(IMAGE_PREFIX)$(shell basename $(@D)) -t $(IMAGE_PREFIX)$(shell basename $(@D)):$(IMAGE_TAG) -f cmd/$(shell basename $(@D))/Dockerfile .
 endef
 
 define deploy
@@ -120,7 +121,7 @@ docker-image/fire/build:
 
 .PHONY: docker-image/fire/push
 docker-image/fire/push:
-	$(call docker_buildx,--push --metadata-file metadata.json --cache-from=type=gha --cache-to=type=gha)
+	$(call docker_buildx,--push)
 	cat metadata.json
 
 .PHONY: clean
