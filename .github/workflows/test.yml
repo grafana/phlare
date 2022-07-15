@@ -103,13 +103,11 @@ jobs:
           registry: us.gcr.io
           username: _json_key
           password: ${{ secrets.GCR_JSON_KEY }}
-      - name: Run directy
       - name: Build & push multi-arch image
         id: build-push
         run: |
           make docker-image/fire/push "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha --metadata-file .image.metadata.json "
           echo '::set-output name=image::us.gcr.io/kubernetes-dev/fire@'$(jq -r .containerimage.digest .image.metadata.json)
-
       - name: Deploy to fire-dev-001
         run: |
           git config --global url."https://grafanabot:${{ secrets.GRAFANABOT_PAT }}@github.com/grafana/deployment_tools".insteadOf "https://github.com/grafana/deployment_tools"
@@ -127,4 +125,3 @@ jobs:
                 }
               ]
             }
-
