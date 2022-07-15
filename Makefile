@@ -119,7 +119,7 @@ docker-image/fire/build:
 
 .PHONY: docker-image/fire/push
 docker-image/fire/push:
-	$(call docker_buildx,--push --metadata-file metadata.json)
+	$(call docker_buildx,--push --metadata-file metadata.json --cache-from=type=gha --cache-to=type=gha)
 	cat metadata.json
 
 .PHONY: clean
