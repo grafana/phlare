@@ -136,9 +136,10 @@ type Fire struct {
 	reg            prometheus.Registerer
 	tracerProvider trace.TracerProvider
 
-	ModuleManager *modules.Manager
-	serviceMap    map[string]services.Service
-	deps          map[string][]string
+	ModuleManager  *modules.Manager
+	serviceMap     map[string]services.Service
+	serviceManager *services.Manager
+	deps           map[string][]string
 
 	HTTPAuthMiddleware middleware.Interface
 	Server             *server.Server
@@ -260,6 +261,7 @@ func (f *Fire) Run() error {
 	if err != nil {
 		return err
 	}
+	f.serviceManager = sm
 	f.Server.HTTP.Path("/ready").Methods("GET").Handler(f.readyHandler(sm))
 
 	grpc_health_v1.RegisterHealthServer(f.Server.GRPC, grpcutil.NewHealthCheck(sm))
