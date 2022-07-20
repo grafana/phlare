@@ -25,40 +25,41 @@ number of `SeriesRefs` is also exactly matching the number of values within a
 
 [pprof]: https://github.com/google/pprof/blob/main/proto/profile.proto
 
-```plantuml
-@startuml
-object String
-object Mapping
-object Location {
+```mermaid
+classDiagram
+  direction TB
+  class String
+  class Mapping {
+    ID : uint64
+  }
+  class Location {
     MappingID: uint64
     Lines: []Line
-}
-object Line {
+  }
+  class Line{
     FunctionID: uint64
     Line: int64
-}
-object Function
-object Stacktrace {
+  }
+  class Function
+  class Stacktrace {
     LocationIDs: []uint64
-}
-object Profile {
+  }
+  class Profile {
     SeriesRefs: []uint64
     Samples: []Sample
-}
-object Sample {
+  }
+  class Sample {
     StacktraceID
     Values: []int64
-}
-object TSDBIndex
+  }
 
-Location::MappingID o-- "1" Mapping
-Location::Lines -- "n" Line
-Line::FunctionID o-- "1" Function
-Stacktrace::LocationIDs o-- "n" Location
-Profile::Samples -- "n" Sample
-Profile::SeriesRefs o-- "n" TSDBIndex
-Sample::StacktraceID o-- "1" Stacktrace
-@enduml
+Mapping "1" --o "1" Location:MappingID
+Line "n" -- Location:Lines
+Line  o-- "1" Function:FunctionID
+Stacktrace o-- "n" Location:LocationIDs
+Profile -- "n" Sample
+Profile o-- "n" TSDBIndex
+Sample "n" o-- "1" Stacktrace:StacktraceID
 ```
 
 ## Memory representation `Head`
