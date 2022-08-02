@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -338,7 +337,7 @@ func (h *Head) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.P
 	}), nil
 }
 
-func (h *Head) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
+func (h *Head) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesRequest, callback func(ts int64, lbs firemodel.Labels, _ model.Fingerprint, idx int, profile *schemav1.Profile) error) error {
 	var (
 		totalSamples   int64
 		totalLocations int64
@@ -356,90 +355,26 @@ func (h *Head) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1
 		sp.Finish()
 	}()
 
-	selectors, err := parser.ParseMetricSelector(req.Msg.LabelSelector)
+	selectors, err := parser.ParseMetricSelector(req.LabelSelector)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "failed to label selector")
+		return status.Error(codes.InvalidArgument, "failed to label selector")
 	}
 	selectors = append(selectors, &labels.Matcher{
 		Type:  labels.MatchEqual,
 		Name:  firemodel.LabelNameProfileType,
-		Value: req.Msg.Type.Name + ":" + req.Msg.Type.SampleType + ":" + req.Msg.Type.SampleUnit + ":" + req.Msg.Type.PeriodType + ":" + req.Msg.Type.PeriodUnit,
+		Value: req.Type.Name + ":" + req.Type.SampleType + ":" + req.Type.SampleUnit + ":" + req.Type.PeriodType + ":" + req.Type.PeriodUnit,
 	})
 
-	result := []*ingestv1.Profile{}
-	names := []string{}
-	stackTraces := map[uint64][]int32{}
-	functions := map[int64]int{}
-
-	h.stacktraces.lock.RLock()
-	h.locations.lock.RLock()
-	h.functions.lock.RLock()
-	h.strings.lock.RLock()
-	defer func() {
-		h.stacktraces.lock.RUnlock()
-		h.locations.lock.RUnlock()
-		h.functions.lock.RUnlock()
-		h.strings.lock.RUnlock()
-	}()
-
-	err = h.index.forMatchingProfiles(selectors, func(lbs firemodel.Labels, _ model.Fingerprint, idx int, profile *schemav1.Profile) error {
+	return h.index.forMatchingProfiles(selectors, func(lbs firemodel.Labels, fp model.Fingerprint, idx int, profile *schemav1.Profile) error {
 		ts := int64(model.TimeFromUnixNano(profile.TimeNanos))
 		// if the timestamp is not matching we skip this profile.
-		if req.Msg.Start > ts || ts > req.Msg.End {
+		if req.Start > ts || ts > req.End {
 			return nil
 		}
 		totalProfiles++
-		p := &ingestv1.Profile{
-			ID:          profile.ID.String(),
-			Type:        req.Msg.Type,
-			Labels:      lbs,
-			Timestamp:   ts,
-			Stacktraces: make([]*ingestv1.StacktraceSample, 0, len(profile.Samples)),
-		}
-		totalSamples += int64(len(profile.Samples))
-		for _, s := range profile.Samples {
-			if s.Values[idx] == 0 {
-				totalSamples--
-				continue
-			}
-			stackTracesIds, ok := stackTraces[s.StacktraceID]
-			if !ok {
-				locs := h.stacktraces.slice[s.StacktraceID].LocationIDs
-				totalLocations += int64(len(locs))
-				stackTracesIds = make([]int32, 0, 2*len(locs))
-				for _, loc := range locs {
-					for _, line := range h.locations.slice[loc].Line {
-						fnNameID := h.functions.slice[line.FunctionId].Name
-						pos, ok := functions[fnNameID]
-						if !ok {
-							functions[fnNameID] = len(names)
-							stackTracesIds = append(stackTracesIds, int32(len(names)))
-							names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
-							continue
-						}
-						stackTracesIds = append(stackTracesIds, int32(pos))
-					}
-				}
-				stackTraces[s.StacktraceID] = stackTracesIds
-			}
-
-			p.Stacktraces = append(p.Stacktraces, &ingestv1.StacktraceSample{
-				Value:       s.Values[idx],
-				FunctionIds: stackTracesIds,
-			})
-		}
-		if len(p.Stacktraces) > 0 {
-			result = append(result, p)
-		}
+		callback(ts, lbs, fp, idx, profile)
 		return nil
 	})
-	sort.Slice(result, func(i, j int) bool {
-		return firemodel.CompareProfile(result[i], result[j]) < 0
-	})
-	return connect.NewResponse(&ingestv1.SelectProfilesResponse{
-		Profiles:      result,
-		FunctionNames: names,
-	}), err
 }
 
 func (h *Head) Flush(ctx context.Context) error {

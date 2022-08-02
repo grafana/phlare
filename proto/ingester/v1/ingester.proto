@@ -13,7 +13,12 @@ service IngesterService {
 
   // Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
   // but this requires to ensure we have correct timestamp and labels ordering.
-  rpc SelectProfiles(SelectProfilesRequest) returns (SelectProfilesResponse) {}
+
+  // Select on Profiles without their samples.
+  rpc SelectProfiles(SelectProfilesRequest) returns (stream SelectProfilesResponse) {}
+
+  // Merge by stacktraces, but selecting profiles IDS.
+  rpc SelectStacktraceSamples(stream SelectStacktraceSamplesRequest) returns (SelectStacktraceSamplesResponse) {}
 }
 
 message LabelValuesRequest {
@@ -43,24 +48,56 @@ message SelectProfilesRequest {
 
 message SelectProfilesResponse {
   repeated Profile profiles = 1;
-  repeated string function_names = 2;
+  repeated Labels  labelsets = 2;
+  // The name and type of the profile.
+  common.v1.ProfileType type = 3;
 }
 
 // Profile represents a point in time profile.
 message Profile {
   // The ID of the profile.
   string ID = 1;
-  // The name and type of the profile.
-  common.v1.ProfileType type = 2;
-  // LabelPair is the key value pairs to identify the corresponding profile
-  repeated common.v1.LabelPair labels = 3;
+  // the index to the labels (from `SelectProfilesResponse.labelsets`) for this profile
+  int64 labelset_index = 2;
   // Timestamp is when that profile was created
-  int64 timestamp = 4;
-  // The list of stracktraces for the profile with their respective value
-  repeated StacktraceSample stacktraces = 5;
+  int64 timestamp = 3;
+  // // The list of stracktraces for the profile with their respective value
+  // repeated StacktraceSample stacktraces = 5;
+  int64 total_value = 4;
+}
+
+message Labels {
+  // LabelPair is the key value pairs to identify the corresponding profile
+  repeated common.v1.LabelPair labels = 1;
+}
+
+
+
+message SelectStacktraceSamplesRequest{
+  // This would only be read the first time.
+  SelectProfilesRequest SelectProfiles = 1;
+  // This can be send multiple times.
+  repeated string ids = 2;
+}
+
+// SelectStacktraceSamplesResponse is a stream of SelectStacktraceSamplesResponse.
+message SelectStacktraceSamplesResponse{
+
+  repeated string names = 1;
+
+  repeated Location locations=2;
+
+  // stacktrace is the stacktrace of the function that was selected.
+  repeated StacktraceSample stacktraces = 3;
+
+}
+
+message Location{
+  int64 location_id = 1;
+  repeated int64 function_ids = 2;
 }
 
 message StacktraceSample {
-  repeated int32 function_ids = 1;
+  int64 location_id = 1;
   int64 value = 2;
 }

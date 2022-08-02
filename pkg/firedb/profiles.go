@@ -68,6 +68,7 @@ func (pi *profilesIndex) Add(ps *schemav1.Profile, lbs []firemodel.Labels, profi
 			pi.metrics.seriesCreated.WithLabelValues(profileName).Inc()
 			continue
 		}
+		// we should make sure this is correcly sorted
 		profiles.profiles = append(profiles.profiles, ps)
 	}
 	pi.totalProfiles.Inc()

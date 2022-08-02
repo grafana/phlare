@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/apache/arrow/go/v8/arrow"
-	"github.com/apache/arrow/go/v8/arrow/array"
 	"github.com/bufbuild/connect-go"
+	"github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/prometheus/common/model"
 
+	schemav1 "github.com/grafana/fire/pkg/firedb/schemas/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	firemodel "github.com/grafana/fire/pkg/model"
 )
 
 // LabelValues returns the possible label values for a given label name.
@@ -177,34 +180,69 @@ func getLocationsFromSerializedLocations(
 }
 */
 
-func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-	return i.fireDB.Head().SelectProfiles(ctx, req)
+// func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
+// 	return i.fireDB.Head().SelectProfiles(ctx, req)
+// }
+const batchSize = 200
+
+func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest], stream *connect.ServerStream[ingestv1.SelectProfilesResponse]) error {
+	var (
+		totalSamples  int64
+		totalProfiles int64
+	)
+	// nolint:ineffassign
+	// we might use ctx later.
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "Ingester - SelectProfiles")
+	defer func() {
+		sp.LogFields(
+			otlog.Int64("total_samples", totalSamples),
+			otlog.Int64("total_profiles", totalProfiles),
+		)
+		sp.Finish()
+	}()
+	labelsIdx := make(map[model.Fingerprint]uint64)
+	batch := &ingestv1.SelectProfilesResponse{
+		Profiles: make([]*ingestv1.Profile, 0, batchSize),
+		Type:     req.Msg.Type,
+	}
+	var labelIdx uint64
+	var ok bool
+	i.fireDB.Head().SelectProfiles(ctx, req.Msg, func(ts int64, lbs firemodel.Labels, fp model.Fingerprint, sampleIdx int, profile *schemav1.Profile) error {
+		totalProfiles++
+		labelIdx, ok = labelsIdx[fp]
+		if !ok {
+			labelIdx = uint64(len(labelsIdx))
+			batch.Labelsets = append(batch.Labelsets, &ingestv1.Labels{Labels: lbs})
+			labelsIdx[fp] = labelIdx
+		}
+		var totalSampleValue int64
+		for _, sample := range profile.Samples {
+			totalSampleValue += sample.Values[sampleIdx]
+			totalSamples++
+		}
+		batch.Profiles = append(batch.Profiles, &ingestv1.Profile{
+			ID:            profile.ID.String(),
+			LabelsetIndex: int64(labelIdx),
+			Timestamp:     ts,
+			TotalValue:    totalSampleValue,
+		})
+
+		if len(batch.Profiles) < batchSize {
+			return nil
+		}
+		err := stream.Send(batch)
+		batch.Profiles = batch.Profiles[:0]
+		batch.Labelsets = batch.Labelsets[:0]
+		labelsIdx = make(map[model.Fingerprint]uint64)
+		return err
+	})
+	// batch was never filled, send it now
+	if len(batch.Profiles) > 0 {
+		return stream.Send(batch)
+	}
+	return nil
 }
 
-func binaryFieldFromRecord(ar arrow.Record, name string) (*array.Binary, error) {
-	indices := ar.Schema().FieldIndices(name)
-	if len(indices) != 1 {
-		return nil, fmt.Errorf("expected 1 column named %q, got %d", name, len(indices))
-	}
-
-	col, ok := ar.Column(indices[0]).(*array.Binary)
-	if !ok {
-		return nil, fmt.Errorf("expected column %q to be a binary column, got %T", name, ar.Column(indices[0]))
-	}
-
-	return col, nil
-}
-
-func int64FieldFromRecord(ar arrow.Record, name string) (*array.Int64, error) {
-	indices := ar.Schema().FieldIndices(name)
-	if len(indices) != 1 {
-		return nil, fmt.Errorf("expected 1 column named %q, got %d", name, len(indices))
-	}
-
-	col, ok := ar.Column(indices[0]).(*array.Int64)
-	if !ok {
-		return nil, fmt.Errorf("expected column %q to be a int64 column, got %T", name, ar.Column(indices[0]))
-	}
-
-	return col, nil
+func (i *Ingester) SelectStacktraceSamples(context.Context, *connect.ClientStream[ingestv1.SelectStacktraceSamplesRequest]) (*connect.Response[ingestv1.SelectStacktraceSamplesResponse], error) {
+	return nil, fmt.Errorf("not implemented")
 }

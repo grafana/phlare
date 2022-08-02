@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/apache/arrow/go/v8/arrow/memory"
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -15,10 +14,10 @@ import (
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
 	"github.com/klauspost/compress/gzip"
-	"github.com/polarsignals/frostdb/query"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/grafana/fire/pkg/firedb"
+	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingesterv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 	pushv1 "github.com/grafana/fire/pkg/gen/push/v1"
@@ -38,6 +37,11 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
+type DB interface {
+	Flush(ctx context.Context) error
+	Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*commonv1.LabelPair) error
+}
+
 type Ingester struct {
 	services.Service
 
@@ -47,7 +51,6 @@ type Ingester struct {
 	lifecycler        *ring.Lifecycler
 	lifecyclerWatcher *services.FailureWatcher
 	fireDB            *firedb.FireDB
-	engine            *query.LocalEngine
 }
 
 type ingesterFlusherCompat struct {
@@ -66,10 +69,6 @@ func New(cfg Config, logger log.Logger, reg prometheus.Registerer, firedb *fired
 		cfg:    cfg,
 		logger: logger,
 		fireDB: firedb,
-		engine: query.NewEngine(
-			memory.DefaultAllocator,
-			nil,
-		),
 	}
 
 	var err error

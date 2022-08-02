@@ -38,9 +38,10 @@ type IngesterServiceClient interface {
 	LabelValues(ctx context.Context, in *LabelValuesRequest, opts ...grpc.CallOption) (*LabelValuesResponse, error)
 	ProfileTypes(ctx context.Context, in *ProfileTypesRequest, opts ...grpc.CallOption) (*ProfileTypesResponse, error)
 	Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error)
-	// Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
-	// but this requires to ensure we have correct timestamp and labels ordering.
-	SelectProfiles(ctx context.Context, in *SelectProfilesRequest, opts ...grpc.CallOption) (*SelectProfilesResponse, error)
+	// Select on Profiles without their samples.
+	SelectProfiles(ctx context.Context, in *SelectProfilesRequest, opts ...grpc.CallOption) (IngesterService_SelectProfilesClient, error)
+	// Merge by stacktraces, but selecting profiles IDS.
+	SelectStacktraceSamples(ctx context.Context, opts ...grpc.CallOption) (IngesterService_SelectStacktraceSamplesClient, error)
 }
 
 type ingesterServiceClient struct {
@@ -87,13 +88,70 @@ func (c *ingesterServiceClient) Flush(ctx context.Context, in *FlushRequest, opt
 	return out, nil
 }
 
-func (c *ingesterServiceClient) SelectProfiles(ctx context.Context, in *SelectProfilesRequest, opts ...grpc.CallOption) (*SelectProfilesResponse, error) {
-	out := new(SelectProfilesResponse)
-	err := c.cc.Invoke(ctx, "/ingester.v1.IngesterService/SelectProfiles", in, out, opts...)
+func (c *ingesterServiceClient) SelectProfiles(ctx context.Context, in *SelectProfilesRequest, opts ...grpc.CallOption) (IngesterService_SelectProfilesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IngesterService_ServiceDesc.Streams[0], "/ingester.v1.IngesterService/SelectProfiles", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &ingesterServiceSelectProfilesClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type IngesterService_SelectProfilesClient interface {
+	Recv() (*SelectProfilesResponse, error)
+	grpc.ClientStream
+}
+
+type ingesterServiceSelectProfilesClient struct {
+	grpc.ClientStream
+}
+
+func (x *ingesterServiceSelectProfilesClient) Recv() (*SelectProfilesResponse, error) {
+	m := new(SelectProfilesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *ingesterServiceClient) SelectStacktraceSamples(ctx context.Context, opts ...grpc.CallOption) (IngesterService_SelectStacktraceSamplesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IngesterService_ServiceDesc.Streams[1], "/ingester.v1.IngesterService/SelectStacktraceSamples", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &ingesterServiceSelectStacktraceSamplesClient{stream}
+	return x, nil
+}
+
+type IngesterService_SelectStacktraceSamplesClient interface {
+	Send(*SelectStacktraceSamplesRequest) error
+	CloseAndRecv() (*SelectStacktraceSamplesResponse, error)
+	grpc.ClientStream
+}
+
+type ingesterServiceSelectStacktraceSamplesClient struct {
+	grpc.ClientStream
+}
+
+func (x *ingesterServiceSelectStacktraceSamplesClient) Send(m *SelectStacktraceSamplesRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *ingesterServiceSelectStacktraceSamplesClient) CloseAndRecv() (*SelectStacktraceSamplesResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(SelectStacktraceSamplesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // IngesterServiceServer is the server API for IngesterService service.
@@ -104,9 +162,10 @@ type IngesterServiceServer interface {
 	LabelValues(context.Context, *LabelValuesRequest) (*LabelValuesResponse, error)
 	ProfileTypes(context.Context, *ProfileTypesRequest) (*ProfileTypesResponse, error)
 	Flush(context.Context, *FlushRequest) (*FlushResponse, error)
-	// Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
-	// but this requires to ensure we have correct timestamp and labels ordering.
-	SelectProfiles(context.Context, *SelectProfilesRequest) (*SelectProfilesResponse, error)
+	// Select on Profiles without their samples.
+	SelectProfiles(*SelectProfilesRequest, IngesterService_SelectProfilesServer) error
+	// Merge by stacktraces, but selecting profiles IDS.
+	SelectStacktraceSamples(IngesterService_SelectStacktraceSamplesServer) error
 	mustEmbedUnimplementedIngesterServiceServer()
 }
 
@@ -126,8 +185,11 @@ func (UnimplementedIngesterServiceServer) ProfileTypes(context.Context, *Profile
 func (UnimplementedIngesterServiceServer) Flush(context.Context, *FlushRequest) (*FlushResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Flush not implemented")
 }
-func (UnimplementedIngesterServiceServer) SelectProfiles(context.Context, *SelectProfilesRequest) (*SelectProfilesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SelectProfiles not implemented")
+func (UnimplementedIngesterServiceServer) SelectProfiles(*SelectProfilesRequest, IngesterService_SelectProfilesServer) error {
+	return status.Errorf(codes.Unimplemented, "method SelectProfiles not implemented")
+}
+func (UnimplementedIngesterServiceServer) SelectStacktraceSamples(IngesterService_SelectStacktraceSamplesServer) error {
+	return status.Errorf(codes.Unimplemented, "method SelectStacktraceSamples not implemented")
 }
 func (UnimplementedIngesterServiceServer) mustEmbedUnimplementedIngesterServiceServer() {}
 
@@ -214,22 +276,51 @@ func _IngesterService_Flush_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _IngesterService_SelectProfiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SelectProfilesRequest)
-	if err := dec(in); err != nil {
+func _IngesterService_SelectProfiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SelectProfilesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(IngesterServiceServer).SelectProfiles(m, &ingesterServiceSelectProfilesServer{stream})
+}
+
+type IngesterService_SelectProfilesServer interface {
+	Send(*SelectProfilesResponse) error
+	grpc.ServerStream
+}
+
+type ingesterServiceSelectProfilesServer struct {
+	grpc.ServerStream
+}
+
+func (x *ingesterServiceSelectProfilesServer) Send(m *SelectProfilesResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _IngesterService_SelectStacktraceSamples_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IngesterServiceServer).SelectStacktraceSamples(&ingesterServiceSelectStacktraceSamplesServer{stream})
+}
+
+type IngesterService_SelectStacktraceSamplesServer interface {
+	SendAndClose(*SelectStacktraceSamplesResponse) error
+	Recv() (*SelectStacktraceSamplesRequest, error)
+	grpc.ServerStream
+}
+
+type ingesterServiceSelectStacktraceSamplesServer struct {
+	grpc.ServerStream
+}
+
+func (x *ingesterServiceSelectStacktraceSamplesServer) SendAndClose(m *SelectStacktraceSamplesResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *ingesterServiceSelectStacktraceSamplesServer) Recv() (*SelectStacktraceSamplesRequest, error) {
+	m := new(SelectStacktraceSamplesRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(IngesterServiceServer).SelectProfiles(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/ingester.v1.IngesterService/SelectProfiles",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IngesterServiceServer).SelectProfiles(ctx, req.(*SelectProfilesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // IngesterService_ServiceDesc is the grpc.ServiceDesc for IngesterService service.
@@ -255,12 +346,19 @@ var IngesterService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Flush",
 			Handler:    _IngesterService_Flush_Handler,
 		},
+	},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "SelectProfiles",
-			Handler:    _IngesterService_SelectProfiles_Handler,
+			StreamName:    "SelectProfiles",
+			Handler:       _IngesterService_SelectProfiles_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SelectStacktraceSamples",
+			Handler:       _IngesterService_SelectStacktraceSamples_Handler,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "ingester/v1/ingester.proto",
 }
 
@@ -604,11 +702,36 @@ func (m *SelectProfilesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if len(m.FunctionNames) > 0 {
-		for iNdEx := len(m.FunctionNames) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.FunctionNames[iNdEx])
-			copy(dAtA[i:], m.FunctionNames[iNdEx])
-			i = encodeVarint(dAtA, i, uint64(len(m.FunctionNames[iNdEx])))
+	if m.Type != nil {
+		if marshalto, ok := interface{}(m.Type).(interface {
+			MarshalToSizedBufferVT([]byte) (int, error)
+		}); ok {
+			size, err := marshalto.MarshalToSizedBufferVT(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarint(dAtA, i, uint64(size))
+		} else {
+			encoded, err := proto.Marshal(m.Type)
+			if err != nil {
+				return 0, err
+			}
+			i -= len(encoded)
+			copy(dAtA[i:], encoded)
+			i = encodeVarint(dAtA, i, uint64(len(encoded)))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Labelsets) > 0 {
+		for iNdEx := len(m.Labelsets) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.Labelsets[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarint(dAtA, i, uint64(size))
 			i--
 			dAtA[i] = 0x12
 		}
@@ -658,22 +781,60 @@ func (m *Profile) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if len(m.Stacktraces) > 0 {
-		for iNdEx := len(m.Stacktraces) - 1; iNdEx >= 0; iNdEx-- {
-			size, err := m.Stacktraces[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarint(dAtA, i, uint64(size))
-			i--
-			dAtA[i] = 0x2a
-		}
+	if m.TotalValue != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.TotalValue))
+		i--
+		dAtA[i] = 0x20
 	}
 	if m.Timestamp != 0 {
 		i = encodeVarint(dAtA, i, uint64(m.Timestamp))
 		i--
-		dAtA[i] = 0x20
+		dAtA[i] = 0x18
+	}
+	if m.LabelsetIndex != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.LabelsetIndex))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.ID) > 0 {
+		i -= len(m.ID)
+		copy(dAtA[i:], m.ID)
+		i = encodeVarint(dAtA, i, uint64(len(m.ID)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Labels) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Labels) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *Labels) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
 	}
 	if len(m.Labels) > 0 {
 		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
@@ -696,37 +857,185 @@ func (m *Profile) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 				i = encodeVarint(dAtA, i, uint64(len(encoded)))
 			}
 			i--
-			dAtA[i] = 0x1a
+			dAtA[i] = 0xa
 		}
 	}
-	if m.Type != nil {
-		if marshalto, ok := interface{}(m.Type).(interface {
-			MarshalToSizedBufferVT([]byte) (int, error)
-		}); ok {
-			size, err := marshalto.MarshalToSizedBufferVT(dAtA[:i])
+	return len(dAtA) - i, nil
+}
+
+func (m *SelectStacktraceSamplesRequest) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SelectStacktraceSamplesRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *SelectStacktraceSamplesRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Ids) > 0 {
+		for iNdEx := len(m.Ids) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Ids[iNdEx])
+			copy(dAtA[i:], m.Ids[iNdEx])
+			i = encodeVarint(dAtA, i, uint64(len(m.Ids[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.SelectProfiles != nil {
+		size, err := m.SelectProfiles.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SelectStacktraceSamplesResponse) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SelectStacktraceSamplesResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *SelectStacktraceSamplesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Stacktraces) > 0 {
+		for iNdEx := len(m.Stacktraces) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.Stacktraces[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
 			i -= size
 			i = encodeVarint(dAtA, i, uint64(size))
-		} else {
-			encoded, err := proto.Marshal(m.Type)
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Locations) > 0 {
+		for iNdEx := len(m.Locations) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.Locations[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
-			i -= len(encoded)
-			copy(dAtA[i:], encoded)
-			i = encodeVarint(dAtA, i, uint64(len(encoded)))
+			i -= size
+			i = encodeVarint(dAtA, i, uint64(size))
+			i--
+			dAtA[i] = 0x12
 		}
+	}
+	if len(m.Names) > 0 {
+		for iNdEx := len(m.Names) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Names[iNdEx])
+			copy(dAtA[i:], m.Names[iNdEx])
+			i = encodeVarint(dAtA, i, uint64(len(m.Names[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Location) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Location) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *Location) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.FunctionIds) > 0 {
+		var pksize2 int
+		for _, num := range m.FunctionIds {
+			pksize2 += sov(uint64(num))
+		}
+		i -= pksize2
+		j1 := i
+		for _, num1 := range m.FunctionIds {
+			num := uint64(num1)
+			for num >= 1<<7 {
+				dAtA[j1] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j1++
+			}
+			dAtA[j1] = uint8(num)
+			j1++
+		}
+		i = encodeVarint(dAtA, i, uint64(pksize2))
 		i--
 		dAtA[i] = 0x12
 	}
-	if len(m.ID) > 0 {
-		i -= len(m.ID)
-		copy(dAtA[i:], m.ID)
-		i = encodeVarint(dAtA, i, uint64(len(m.ID)))
+	if m.LocationId != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.LocationId))
 		i--
-		dAtA[i] = 0xa
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -766,26 +1075,10 @@ func (m *StacktraceSample) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x10
 	}
-	if len(m.FunctionIds) > 0 {
-		var pksize2 int
-		for _, num := range m.FunctionIds {
-			pksize2 += sov(uint64(num))
-		}
-		i -= pksize2
-		j1 := i
-		for _, num1 := range m.FunctionIds {
-			num := uint64(num1)
-			for num >= 1<<7 {
-				dAtA[j1] = uint8(uint64(num)&0x7f | 0x80)
-				num >>= 7
-				j1++
-			}
-			dAtA[j1] = uint8(num)
-			j1++
-		}
-		i = encodeVarint(dAtA, i, uint64(pksize2))
+	if m.LocationId != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.LocationId))
 		i--
-		dAtA[i] = 0xa
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -939,11 +1232,21 @@ func (m *SelectProfilesResponse) SizeVT() (n int) {
 			n += 1 + l + sov(uint64(l))
 		}
 	}
-	if len(m.FunctionNames) > 0 {
-		for _, s := range m.FunctionNames {
-			l = len(s)
+	if len(m.Labelsets) > 0 {
+		for _, e := range m.Labelsets {
+			l = e.SizeVT()
 			n += 1 + l + sov(uint64(l))
 		}
+	}
+	if m.Type != nil {
+		if size, ok := interface{}(m.Type).(interface {
+			SizeVT() int
+		}); ok {
+			l = size.SizeVT()
+		} else {
+			l = proto.Size(m.Type)
+		}
+		n += 1 + l + sov(uint64(l))
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -961,16 +1264,27 @@ func (m *Profile) SizeVT() (n int) {
 	if l > 0 {
 		n += 1 + l + sov(uint64(l))
 	}
-	if m.Type != nil {
-		if size, ok := interface{}(m.Type).(interface {
-			SizeVT() int
-		}); ok {
-			l = size.SizeVT()
-		} else {
-			l = proto.Size(m.Type)
-		}
-		n += 1 + l + sov(uint64(l))
+	if m.LabelsetIndex != 0 {
+		n += 1 + sov(uint64(m.LabelsetIndex))
 	}
+	if m.Timestamp != 0 {
+		n += 1 + sov(uint64(m.Timestamp))
+	}
+	if m.TotalValue != 0 {
+		n += 1 + sov(uint64(m.TotalValue))
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *Labels) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	if len(m.Labels) > 0 {
 		for _, e := range m.Labels {
 			if size, ok := interface{}(e).(interface {
@@ -983,8 +1297,51 @@ func (m *Profile) SizeVT() (n int) {
 			n += 1 + l + sov(uint64(l))
 		}
 	}
-	if m.Timestamp != 0 {
-		n += 1 + sov(uint64(m.Timestamp))
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *SelectStacktraceSamplesRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SelectProfiles != nil {
+		l = m.SelectProfiles.SizeVT()
+		n += 1 + l + sov(uint64(l))
+	}
+	if len(m.Ids) > 0 {
+		for _, s := range m.Ids {
+			l = len(s)
+			n += 1 + l + sov(uint64(l))
+		}
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *SelectStacktraceSamplesResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Names) > 0 {
+		for _, s := range m.Names {
+			l = len(s)
+			n += 1 + l + sov(uint64(l))
+		}
+	}
+	if len(m.Locations) > 0 {
+		for _, e := range m.Locations {
+			l = e.SizeVT()
+			n += 1 + l + sov(uint64(l))
+		}
 	}
 	if len(m.Stacktraces) > 0 {
 		for _, e := range m.Stacktraces {
@@ -998,18 +1355,36 @@ func (m *Profile) SizeVT() (n int) {
 	return n
 }
 
-func (m *StacktraceSample) SizeVT() (n int) {
+func (m *Location) SizeVT() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if m.LocationId != 0 {
+		n += 1 + sov(uint64(m.LocationId))
+	}
 	if len(m.FunctionIds) > 0 {
 		l = 0
 		for _, e := range m.FunctionIds {
 			l += sov(uint64(e))
 		}
 		n += 1 + sov(uint64(l)) + l
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *StacktraceSample) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.LocationId != 0 {
+		n += 1 + sov(uint64(m.LocationId))
 	}
 	if m.Value != 0 {
 		n += 1 + sov(uint64(m.Value))
@@ -1668,9 +2043,9 @@ func (m *SelectProfilesResponse) UnmarshalVT(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FunctionNames", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Labelsets", wireType)
 			}
-			var stringLen uint64
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflow
@@ -1680,23 +2055,69 @@ func (m *SelectProfilesResponse) UnmarshalVT(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLength
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLength
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FunctionNames = append(m.FunctionNames, string(dAtA[iNdEx:postIndex]))
+			m.Labelsets = append(m.Labelsets, &Labels{})
+			if err := m.Labelsets[len(m.Labelsets)-1].UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Type == nil {
+				m.Type = &v11.ProfileType{}
+			}
+			if unmarshal, ok := interface{}(m.Type).(interface {
+				UnmarshalVT([]byte) error
+			}); ok {
+				if err := unmarshal.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				if err := proto.Unmarshal(dAtA[iNdEx:postIndex], m.Type); err != nil {
+					return err
+				}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1782,10 +2203,10 @@ func (m *Profile) UnmarshalVT(dAtA []byte) error {
 			m.ID = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LabelsetIndex", wireType)
 			}
-			var msglen int
+			m.LabelsetIndex = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflow
@@ -1795,37 +2216,101 @@ func (m *Profile) UnmarshalVT(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				m.LabelsetIndex |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			m.Timestamp = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Timestamp |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TotalValue", wireType)
+			}
+			m.TotalValue = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TotalValue |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLength
 			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLength
-			}
-			if postIndex > l {
+			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Type == nil {
-				m.Type = &v11.ProfileType{}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Labels) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
 			}
-			if unmarshal, ok := interface{}(m.Type).(interface {
-				UnmarshalVT([]byte) error
-			}); ok {
-				if err := unmarshal.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
-					return err
-				}
-			} else {
-				if err := proto.Unmarshal(dAtA[iNdEx:postIndex], m.Type); err != nil {
-					return err
-				}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
 			}
-			iNdEx = postIndex
-		case 3:
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Labels: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Labels: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Labels", wireType)
 			}
@@ -1867,11 +2352,62 @@ func (m *Profile) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			iNdEx = postIndex
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
 			}
-			m.Timestamp = 0
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SelectStacktraceSamplesRequest) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SelectStacktraceSamplesRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SelectStacktraceSamplesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SelectProfiles", wireType)
+			}
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflow
@@ -1881,12 +2417,178 @@ func (m *Profile) UnmarshalVT(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Timestamp |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-		case 5:
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SelectProfiles == nil {
+				m.SelectProfiles = &SelectProfilesRequest{}
+			}
+			if err := m.SelectProfiles.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ids", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ids = append(m.Ids, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SelectStacktraceSamplesResponse) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SelectStacktraceSamplesResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SelectStacktraceSamplesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Names", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Names = append(m.Names, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Locations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Locations = append(m.Locations, &Location{})
+			if err := m.Locations[len(m.Locations)-1].UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Stacktraces", wireType)
 			}
@@ -1942,7 +2644,7 @@ func (m *Profile) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
+func (m *Location) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1965,15 +2667,34 @@ func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: StacktraceSample: wiretype end group for non-group")
+			return fmt.Errorf("proto: Location: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: StacktraceSample: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Location: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LocationId", wireType)
+			}
+			m.LocationId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LocationId |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
 			if wireType == 0 {
-				var v int32
+				var v int64
 				for shift := uint(0); ; shift += 7 {
 					if shift >= 64 {
 						return ErrIntOverflow
@@ -1983,7 +2704,7 @@ func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					v |= int32(b&0x7F) << shift
+					v |= int64(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -2024,10 +2745,10 @@ func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
 				}
 				elementCount = count
 				if elementCount != 0 && len(m.FunctionIds) == 0 {
-					m.FunctionIds = make([]int32, 0, elementCount)
+					m.FunctionIds = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
-					var v int32
+					var v int64
 					for shift := uint(0); ; shift += 7 {
 						if shift >= 64 {
 							return ErrIntOverflow
@@ -2037,7 +2758,7 @@ func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						v |= int32(b&0x7F) << shift
+						v |= int64(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -2046,6 +2767,76 @@ func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
 				}
 			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field FunctionIds", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StacktraceSample: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StacktraceSample: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LocationId", wireType)
+			}
+			m.LocationId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LocationId |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
 			}
 		case 2:
 			if wireType != 0 {

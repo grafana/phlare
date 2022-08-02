@@ -32,9 +32,10 @@ type IngesterServiceClient interface {
 	LabelValues(context.Context, *connect_go.Request[v11.LabelValuesRequest]) (*connect_go.Response[v11.LabelValuesResponse], error)
 	ProfileTypes(context.Context, *connect_go.Request[v11.ProfileTypesRequest]) (*connect_go.Response[v11.ProfileTypesResponse], error)
 	Flush(context.Context, *connect_go.Request[v11.FlushRequest]) (*connect_go.Response[v11.FlushResponse], error)
-	// Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
-	// but this requires to ensure we have correct timestamp and labels ordering.
-	SelectProfiles(context.Context, *connect_go.Request[v11.SelectProfilesRequest]) (*connect_go.Response[v11.SelectProfilesResponse], error)
+	// Select on Profiles without their samples.
+	SelectProfiles(context.Context, *connect_go.Request[v11.SelectProfilesRequest]) (*connect_go.ServerStreamForClient[v11.SelectProfilesResponse], error)
+	// Merge by stacktraces, but selecting profiles IDS.
+	SelectStacktraceSamples(context.Context) *connect_go.ClientStreamForClient[v11.SelectStacktraceSamplesRequest, v11.SelectStacktraceSamplesResponse]
 }
 
 // NewIngesterServiceClient constructs a client for the ingester.v1.IngesterService service. By
@@ -72,16 +73,22 @@ func NewIngesterServiceClient(httpClient connect_go.HTTPClient, baseURL string, 
 			baseURL+"/ingester.v1.IngesterService/SelectProfiles",
 			opts...,
 		),
+		selectStacktraceSamples: connect_go.NewClient[v11.SelectStacktraceSamplesRequest, v11.SelectStacktraceSamplesResponse](
+			httpClient,
+			baseURL+"/ingester.v1.IngesterService/SelectStacktraceSamples",
+			opts...,
+		),
 	}
 }
 
 // ingesterServiceClient implements IngesterServiceClient.
 type ingesterServiceClient struct {
-	push           *connect_go.Client[v1.PushRequest, v1.PushResponse]
-	labelValues    *connect_go.Client[v11.LabelValuesRequest, v11.LabelValuesResponse]
-	profileTypes   *connect_go.Client[v11.ProfileTypesRequest, v11.ProfileTypesResponse]
-	flush          *connect_go.Client[v11.FlushRequest, v11.FlushResponse]
-	selectProfiles *connect_go.Client[v11.SelectProfilesRequest, v11.SelectProfilesResponse]
+	push                    *connect_go.Client[v1.PushRequest, v1.PushResponse]
+	labelValues             *connect_go.Client[v11.LabelValuesRequest, v11.LabelValuesResponse]
+	profileTypes            *connect_go.Client[v11.ProfileTypesRequest, v11.ProfileTypesResponse]
+	flush                   *connect_go.Client[v11.FlushRequest, v11.FlushResponse]
+	selectProfiles          *connect_go.Client[v11.SelectProfilesRequest, v11.SelectProfilesResponse]
+	selectStacktraceSamples *connect_go.Client[v11.SelectStacktraceSamplesRequest, v11.SelectStacktraceSamplesResponse]
 }
 
 // Push calls ingester.v1.IngesterService.Push.
@@ -105,8 +112,13 @@ func (c *ingesterServiceClient) Flush(ctx context.Context, req *connect_go.Reque
 }
 
 // SelectProfiles calls ingester.v1.IngesterService.SelectProfiles.
-func (c *ingesterServiceClient) SelectProfiles(ctx context.Context, req *connect_go.Request[v11.SelectProfilesRequest]) (*connect_go.Response[v11.SelectProfilesResponse], error) {
-	return c.selectProfiles.CallUnary(ctx, req)
+func (c *ingesterServiceClient) SelectProfiles(ctx context.Context, req *connect_go.Request[v11.SelectProfilesRequest]) (*connect_go.ServerStreamForClient[v11.SelectProfilesResponse], error) {
+	return c.selectProfiles.CallServerStream(ctx, req)
+}
+
+// SelectStacktraceSamples calls ingester.v1.IngesterService.SelectStacktraceSamples.
+func (c *ingesterServiceClient) SelectStacktraceSamples(ctx context.Context) *connect_go.ClientStreamForClient[v11.SelectStacktraceSamplesRequest, v11.SelectStacktraceSamplesResponse] {
+	return c.selectStacktraceSamples.CallClientStream(ctx)
 }
 
 // IngesterServiceHandler is an implementation of the ingester.v1.IngesterService service.
@@ -115,9 +127,10 @@ type IngesterServiceHandler interface {
 	LabelValues(context.Context, *connect_go.Request[v11.LabelValuesRequest]) (*connect_go.Response[v11.LabelValuesResponse], error)
 	ProfileTypes(context.Context, *connect_go.Request[v11.ProfileTypesRequest]) (*connect_go.Response[v11.ProfileTypesResponse], error)
 	Flush(context.Context, *connect_go.Request[v11.FlushRequest]) (*connect_go.Response[v11.FlushResponse], error)
-	// Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
-	// but this requires to ensure we have correct timestamp and labels ordering.
-	SelectProfiles(context.Context, *connect_go.Request[v11.SelectProfilesRequest]) (*connect_go.Response[v11.SelectProfilesResponse], error)
+	// Select on Profiles without their samples.
+	SelectProfiles(context.Context, *connect_go.Request[v11.SelectProfilesRequest], *connect_go.ServerStream[v11.SelectProfilesResponse]) error
+	// Merge by stacktraces, but selecting profiles IDS.
+	SelectStacktraceSamples(context.Context, *connect_go.ClientStream[v11.SelectStacktraceSamplesRequest]) (*connect_go.Response[v11.SelectStacktraceSamplesResponse], error)
 }
 
 // NewIngesterServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -147,9 +160,14 @@ func NewIngesterServiceHandler(svc IngesterServiceHandler, opts ...connect_go.Ha
 		svc.Flush,
 		opts...,
 	))
-	mux.Handle("/ingester.v1.IngesterService/SelectProfiles", connect_go.NewUnaryHandler(
+	mux.Handle("/ingester.v1.IngesterService/SelectProfiles", connect_go.NewServerStreamHandler(
 		"/ingester.v1.IngesterService/SelectProfiles",
 		svc.SelectProfiles,
+		opts...,
+	))
+	mux.Handle("/ingester.v1.IngesterService/SelectStacktraceSamples", connect_go.NewClientStreamHandler(
+		"/ingester.v1.IngesterService/SelectStacktraceSamples",
+		svc.SelectStacktraceSamples,
 		opts...,
 	))
 	return "/ingester.v1.IngesterService/", mux
@@ -174,6 +192,10 @@ func (UnimplementedIngesterServiceHandler) Flush(context.Context, *connect_go.Re
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("ingester.v1.IngesterService.Flush is not implemented"))
 }
 
-func (UnimplementedIngesterServiceHandler) SelectProfiles(context.Context, *connect_go.Request[v11.SelectProfilesRequest]) (*connect_go.Response[v11.SelectProfilesResponse], error) {
-	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("ingester.v1.IngesterService.SelectProfiles is not implemented"))
+func (UnimplementedIngesterServiceHandler) SelectProfiles(context.Context, *connect_go.Request[v11.SelectProfilesRequest], *connect_go.ServerStream[v11.SelectProfilesResponse]) error {
+	return connect_go.NewError(connect_go.CodeUnimplemented, errors.New("ingester.v1.IngesterService.SelectProfiles is not implemented"))
+}
+
+func (UnimplementedIngesterServiceHandler) SelectStacktraceSamples(context.Context, *connect_go.ClientStream[v11.SelectStacktraceSamplesRequest]) (*connect_go.Response[v11.SelectStacktraceSamplesResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("ingester.v1.IngesterService.SelectStacktraceSamples is not implemented"))
 }
