@@ -1,5 +1,101 @@
 package ingester
 
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/bufbuild/connect-go"
+	"github.com/go-kit/log"
+	"github.com/google/uuid"
+	"github.com/grafana/dskit/kv"
+	"github.com/grafana/dskit/ring"
+	"github.com/prometheus/common/model"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	schemav1 "github.com/grafana/fire/pkg/firedb/schemas/v1"
+	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
+	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
+	ingesterv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/gen/ingester/v1/ingesterv1connect"
+	"github.com/grafana/fire/pkg/iterator"
+	firemodel "github.com/grafana/fire/pkg/model"
+)
+
+var _ DB = (*mockDB)(nil)
+
+type mockDB struct {
+	mock.Mock
+}
+
+func (m *mockDB) Flush(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
+func (m *mockDB) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*commonv1.LabelPair) error {
+	args := m.Called(ctx, p, id, externalLabels)
+	return args.Error(0)
+}
+
+func (m *mockDB) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesRequest) (iterator.Interface[firemodel.Profile], error) {
+	args := m.Called(ctx, req)
+	return args.Get(0).(iterator.Interface[firemodel.Profile]), args.Error(1)
+}
+
+func (m *mockDB) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error) {
+	args := m.Called(ctx, req)
+	return args.Get(0).(*connect.Response[ingestv1.ProfileTypesResponse]), args.Error(1)
+}
+
+func (m *mockDB) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
+	args := m.Called(ctx, req)
+	return args.Get(0).(*connect.Response[ingestv1.LabelValuesResponse]), args.Error(1)
+}
+
+func TestSelectProfiles(t *testing.T) {
+	db := &mockDB{}
+	// batchSize = 1
+	fooLabels := firemodel.NewLabelsBuilder(nil).Set("label", "foo").Labels()
+	barLabels := firemodel.NewLabelsBuilder(nil).Set("label", "bar").Labels()
+	profiles := []firemodel.Profile{
+		{Labels: fooLabels, Profile: &schemav1.Profile{}, Fingerprint: model.Fingerprint(fooLabels.Hash())},
+		{Labels: barLabels, Profile: &schemav1.Profile{}, Fingerprint: model.Fingerprint(barLabels.Hash())},
+	}
+	db.On("SelectProfiles", mock.Anything, mock.Anything).Return(iterator.NewSliceIterator(profiles), nil)
+	ing, err := New(Config{
+		LifecyclerConfig: ring.LifecyclerConfig{Addr: "foo", RingConfig: ring.Config{
+			KVStore: kv.Config{Store: "inmemory"},
+		}},
+	}, log.NewNopLogger(), nil, db)
+	require.NoError(t, err)
+
+	mux := http.NewServeMux()
+	mux.Handle(
+		ingesterv1connect.NewIngesterServiceHandler(ing),
+	)
+	server := httptest.NewUnstartedServer(mux)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	httpClient := server.Client()
+	client := ingesterv1connect.NewIngesterServiceClient(httpClient, server.URL, connect.WithGRPC())
+
+	stream, err := client.SelectProfiles(context.Background(), connect.NewRequest(&ingesterv1.SelectProfilesRequest{}))
+	require.NoError(t, err)
+
+	response := []*ingesterv1.SelectProfilesResponse{}
+
+	for stream.Receive() {
+		response = append(response, stream.Msg())
+	}
+	t.Log(response)
+}
+
 // func Test_selectMerge(t *testing.T) {
 // 	cfg := defaultIngesterTestConfig(t)
 // 	profileStore, err := profilestore.New(log.NewNopLogger(), nil, trace.NewNoopTracerProvider(), defaultProfileStoreTestConfig(t))

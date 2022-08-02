@@ -422,7 +422,7 @@ type Profile struct {
 	ID string `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
 	// the index to the labels (from `SelectProfilesResponse.labelsets`) for this profile
 	LabelsetIndex int64 `protobuf:"varint,2,opt,name=labelset_index,json=labelsetIndex,proto3" json:"labelset_index,omitempty"`
-	// Timestamp is when that profile was created
+	// Timestamp is when that profile was created in nanoseconds.
 	Timestamp int64 `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	// // The list of stracktraces for the profile with their respective value
 	// repeated StacktraceSample stacktraces = 5;

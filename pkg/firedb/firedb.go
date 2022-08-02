@@ -6,9 +6,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/google/uuid"
 	"github.com/grafana/dskit/services"
+	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
+	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
+	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/iterator"
+	firemodel "github.com/grafana/fire/pkg/model"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -117,4 +124,20 @@ func (f *FireDB) Flush(ctx context.Context) error {
 		return nil
 	}
 	return oldHead.Flush(ctx)
+}
+
+func (f *FireDB) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*commonv1.LabelPair) error {
+	return f.head.Ingest(ctx, p, id, externalLabels...)
+}
+
+func (f *FireDB) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesRequest) (iterator.Interface[firemodel.Profile], error) {
+	return f.head.SelectProfiles(ctx, req)
+}
+
+func (f *FireDB) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error) {
+	return f.head.ProfileTypes(ctx, req)
+}
+
+func (f *FireDB) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
+	return f.head.LabelValues(ctx, req)
 }

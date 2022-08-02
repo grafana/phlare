@@ -4,19 +4,27 @@ import (
 	"strings"
 
 	"github.com/gogo/status"
+	"github.com/prometheus/common/model"
 	"google.golang.org/grpc/codes"
 
+	schemav1 "github.com/grafana/fire/pkg/firedb/schemas/v1"
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
-	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 )
 
-// CompareProfile compares the two profiles.
-func CompareProfile(a, b *ingestv1.Profile) int64 {
-	if a.Timestamp == b.Timestamp {
-		return int64(CompareLabelPairs(a.Labels, b.Labels))
-	}
-	return a.Timestamp - b.Timestamp
+type Profile struct {
+	Labels      Labels
+	Fingerprint model.Fingerprint
+	SampleIndex int
+	Profile     *schemav1.Profile
 }
+
+// // CompareProfile compares the two profiles.
+// func CompareProfile(a, b *ingestv1.Profile) int64 {
+// 	if a.Timestamp == b.Timestamp {
+// 		return int64(CompareLabelPairs(a.Labels, b.Labels))
+// 	}
+// 	return a.Timestamp - b.Timestamp
+// }
 
 // ParseProfileTypeSelector parses the profile selector string.
 func ParseProfileTypeSelector(id string) (*commonv1.ProfileType, error) {

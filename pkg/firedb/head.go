@@ -16,7 +16,6 @@ import (
 	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"github.com/oklog/ulid"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -28,6 +27,7 @@ import (
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/iterator"
 	firemodel "github.com/grafana/fire/pkg/model"
 )
 
@@ -337,44 +337,33 @@ func (h *Head) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.P
 	}), nil
 }
 
-func (h *Head) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesRequest, callback func(ts int64, lbs firemodel.Labels, _ model.Fingerprint, idx int, profile *schemav1.Profile) error) error {
-	var (
-		totalSamples   int64
-		totalLocations int64
-		totalProfiles  int64
-	)
-	// nolint:ineffassign
-	// we might use ctx later.
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "Head - SelectProfiles")
-	defer func() {
-		sp.LogFields(
-			otlog.Int64("total_samples", totalSamples),
-			otlog.Int64("total_locations", totalLocations),
-			otlog.Int64("total_profiles", totalProfiles),
-		)
-		sp.Finish()
-	}()
-
+func (h *Head) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesRequest) (iterator.Interface[firemodel.Profile], error) {
 	selectors, err := parser.ParseMetricSelector(req.LabelSelector)
 	if err != nil {
-		return status.Error(codes.InvalidArgument, "failed to label selector")
+		return nil, status.Error(codes.InvalidArgument, "failed to label selector")
 	}
 	selectors = append(selectors, &labels.Matcher{
 		Type:  labels.MatchEqual,
 		Name:  firemodel.LabelNameProfileType,
 		Value: req.Type.Name + ":" + req.Type.SampleType + ":" + req.Type.SampleUnit + ":" + req.Type.PeriodType + ":" + req.Type.PeriodUnit,
 	})
+	profiles := []firemodel.Profile{}
 
-	return h.index.forMatchingProfiles(selectors, func(lbs firemodel.Labels, fp model.Fingerprint, idx int, profile *schemav1.Profile) error {
+	err = h.index.forMatchingProfiles(selectors, func(lbs firemodel.Labels, fp model.Fingerprint, idx int, profile *schemav1.Profile) error {
 		ts := int64(model.TimeFromUnixNano(profile.TimeNanos))
 		// if the timestamp is not matching we skip this profile.
 		if req.Start > ts || ts > req.End {
 			return nil
 		}
-		totalProfiles++
-		callback(ts, lbs, fp, idx, profile)
+		profiles = append(profiles, firemodel.Profile{
+			Labels:      lbs,
+			Fingerprint: fp,
+			SampleIndex: idx,
+			Profile:     profile,
+		})
 		return nil
 	})
+	return iterator.NewSliceIterator(profiles), err
 }
 
 func (h *Head) Flush(ctx context.Context) error {

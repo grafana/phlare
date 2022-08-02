@@ -16,11 +16,13 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/grafana/fire/pkg/firedb"
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingesterv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 	pushv1 "github.com/grafana/fire/pkg/gen/push/v1"
+	"github.com/grafana/fire/pkg/iterator"
+	firemodel "github.com/grafana/fire/pkg/model"
 	"github.com/grafana/fire/pkg/util"
 )
 
@@ -40,6 +42,9 @@ func (cfg *Config) Validate() error {
 type DB interface {
 	Flush(ctx context.Context) error
 	Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*commonv1.LabelPair) error
+	SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesRequest) (iterator.Interface[firemodel.Profile], error)
+	ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error)
+	LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error)
 }
 
 type Ingester struct {
@@ -50,7 +55,7 @@ type Ingester struct {
 
 	lifecycler        *ring.Lifecycler
 	lifecyclerWatcher *services.FailureWatcher
-	fireDB            *firedb.FireDB
+	fireDB            DB
 }
 
 type ingesterFlusherCompat struct {
@@ -64,7 +69,7 @@ func (i *ingesterFlusherCompat) Flush() {
 	}
 }
 
-func New(cfg Config, logger log.Logger, reg prometheus.Registerer, firedb *firedb.FireDB) (*Ingester, error) {
+func New(cfg Config, logger log.Logger, reg prometheus.Registerer, firedb DB) (*Ingester, error) {
 	i := &Ingester{
 		cfg:    cfg,
 		logger: logger,
@@ -138,7 +143,7 @@ func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushReq
 			if err != nil {
 				return nil, err
 			}
-			if err := i.fireDB.Head().Ingest(ctx, p, id, series.Labels...); err != nil {
+			if err := i.fireDB.Ingest(ctx, p, id, series.Labels...); err != nil {
 				return nil, err
 			}
 			p.ReturnToVTPool()

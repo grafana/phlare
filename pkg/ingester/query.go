@@ -9,19 +9,17 @@ import (
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
 
-	schemav1 "github.com/grafana/fire/pkg/firedb/schemas/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
-	firemodel "github.com/grafana/fire/pkg/model"
 )
 
 // LabelValues returns the possible label values for a given label name.
 func (i *Ingester) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
-	return i.fireDB.Head().LabelValues(ctx, req)
+	return i.fireDB.LabelValues(ctx, req)
 }
 
 // ProfileTypes returns the possible profile types.
 func (i *Ingester) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error) {
-	return i.fireDB.Head().ProfileTypes(ctx, req)
+	return i.fireDB.ProfileTypes(ctx, req)
 }
 
 /*
@@ -207,38 +205,51 @@ func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[inge
 	}
 	var labelIdx uint64
 	var ok bool
-	i.fireDB.Head().SelectProfiles(ctx, req.Msg, func(ts int64, lbs firemodel.Labels, fp model.Fingerprint, sampleIdx int, profile *schemav1.Profile) error {
+
+	it, err := i.fireDB.SelectProfiles(ctx, req.Msg)
+	if err != nil {
+		return err
+	}
+	for it.Next() {
+		p := it.At()
 		totalProfiles++
-		labelIdx, ok = labelsIdx[fp]
+		labelIdx, ok = labelsIdx[p.Fingerprint]
 		if !ok {
 			labelIdx = uint64(len(labelsIdx))
-			batch.Labelsets = append(batch.Labelsets, &ingestv1.Labels{Labels: lbs})
-			labelsIdx[fp] = labelIdx
+			batch.Labelsets = append(batch.Labelsets, &ingestv1.Labels{Labels: p.Labels})
+			labelsIdx[p.Fingerprint] = labelIdx
 		}
 		var totalSampleValue int64
-		for _, sample := range profile.Samples {
-			totalSampleValue += sample.Values[sampleIdx]
+		for _, sample := range p.Profile.Samples {
+			totalSampleValue += sample.Values[p.SampleIndex]
 			totalSamples++
 		}
 		batch.Profiles = append(batch.Profiles, &ingestv1.Profile{
-			ID:            profile.ID.String(),
+			ID:            p.Profile.ID.String(),
 			LabelsetIndex: int64(labelIdx),
-			Timestamp:     ts,
+			Timestamp:     p.Profile.TimeNanos,
 			TotalValue:    totalSampleValue,
 		})
 
+		// batch is full, send it
 		if len(batch.Profiles) < batchSize {
-			return nil
+			continue
 		}
-		err := stream.Send(batch)
+		if err := stream.Send(batch); err != nil {
+			return err
+		}
+		// reset batch
 		batch.Profiles = batch.Profiles[:0]
 		batch.Labelsets = batch.Labelsets[:0]
 		labelsIdx = make(map[model.Fingerprint]uint64)
-		return err
-	})
+	}
+
 	// batch was never filled, send it now
 	if len(batch.Profiles) > 0 {
 		return stream.Send(batch)
+	}
+	if it.Err() != nil {
+		return it.Err()
 	}
 	return nil
 }
