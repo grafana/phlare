@@ -135,38 +135,44 @@ func (q *Querier) PrometheusQueryRangeHandler(w http.ResponseWriter, r *http.Req
 		Type:          ptype,
 	})
 
-	responses, err := forAllIngesters(r.Context(), q.ingesterQuerier, func(ic IngesterQueryClient) (*ingestv1.SelectProfilesResponse, error) {
+	responses, err := forAllIngesters(r.Context(), q.ingesterQuerier, func(ic IngesterQueryClient) (*connect.ServerStreamForClient[ingestv1.SelectProfilesResponse], error) {
 		res, err := ic.SelectProfiles(r.Context(), selectReq)
 		if err != nil {
 			return nil, err
 		}
-		return res.Msg, nil
+		return res, nil
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	profiles := dedupeProfiles(responses)
+	it := NewStreamsProfileIterator(responses)
 	series := map[uint64]*promql.Series{}
-	for _, profile := range profiles {
-		lbs := firemodel.Labels(profile.profile.Labels).WithoutPrivateLabels()
 
+	for it.Next() {
+		var (
+			p    = it.At()
+			lbs  = p.Labels.WithoutPrivateLabels()
+			hash = lbs.Hash()
+		)
 		point := promql.Point{
-			T: profile.profile.Timestamp,
+			T: int64(model.TimeFromUnixNano(p.Timestamp)),
 		}
-		for _, s := range profile.profile.Stacktraces {
-			point.V += float64(s.Value)
-		}
-		s, ok := series[lbs.Hash()]
+		point.V += float64(p.TotalValue)
+
+		s, ok := series[hash]
 		if !ok {
-			series[lbs.Hash()] = &promql.Series{
+			series[hash] = &promql.Series{
 				Metric: lbs.ToPrometheusLabels(),
 				Points: []promql.Point{point},
 			}
 			continue
 		}
 		s.Points = append(s.Points, point)
+	}
+	if err := it.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	matrix := make(promql.Matrix, 0, len(series))

@@ -14,7 +14,8 @@ import (
 type IngesterQueryClient interface {
 	LabelValues(context.Context, *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error)
 	ProfileTypes(context.Context, *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error)
-	SelectProfiles(context.Context, *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error)
+	SelectProfiles(context.Context, *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.ServerStreamForClient[ingestv1.SelectProfilesResponse], error)
+	SelectStacktraceSamples(context.Context) *connect.ClientStreamForClient[ingestv1.SelectStacktraceSamplesRequest, ingestv1.SelectStacktraceSamplesResponse]
 }
 
 type responseFromIngesters[T interface{}] struct {

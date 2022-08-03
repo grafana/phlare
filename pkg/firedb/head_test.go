@@ -18,6 +18,7 @@ import (
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/iterator"
 	firemodel "github.com/grafana/fire/pkg/model"
 )
 
@@ -303,7 +304,7 @@ func TestSelectProfiles(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	resp, err := head.SelectProfiles(context.Background(), connect.NewRequest(&ingestv1.SelectProfilesRequest{
+	it, err := head.SelectProfiles(context.Background(), &ingestv1.SelectProfilesRequest{
 		LabelSelector: `{job="bar"}`,
 		Type: &commonv1.ProfileType{
 			Name:       "memory",
@@ -314,64 +315,60 @@ func TestSelectProfiles(t *testing.T) {
 		},
 		Start: int64(model.TimeFromUnixNano(1 * int64(time.Second))),
 		End:   int64(model.TimeFromUnixNano(2 * int64(time.Second))),
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, 2, len(resp.Msg.Profiles))
+	profiles, err := iterator.Slice(it)
+	require.NoError(t, err)
+
+	require.Equal(t, 4, len(profiles))
 
 	// compare the first profile deep
-	profileJSON, err := json.Marshal(&resp.Msg.Profiles[0])
+	profileJSON, err := json.Marshal(profiles[0])
 	require.NoError(t, err)
-	require.JSONEq(t, `{
-  "type": {
-    "name": "memory",
-    "sampleType": "type",
-    "sampleUnit": "unit",
-    "periodType": "type",
-    "periodUnit": "unit"
-  },
-  "ID":"`+resp.Msg.Profiles[0].ID+`",
-  "labels": [
-    {
-      "name": "__name__",
-      "value": "memory"
-    },
-    {
-      "name": "__period_type__",
-      "value": "type"
-    },
-    {
-      "name": "__period_unit__",
-      "value": "unit"
-    },
-    {
-      "name": "__profile_type__",
-      "value": "memory:type:unit:type:unit"
-    },
-    {
-      "name": "__type__",
-      "value": "type"
-    },
-    {
-      "name": "__unit__",
-      "value": "unit"
-    },
-    {
-      "name": "job",
-      "value": "bar"
-    }
-  ],
-  "timestamp": 1000,
-  "stacktraces": [
-    {
-      "function_ids": [
-        0
-      ],
-      "value": 2345
-    }
-  ]}`, string(profileJSON))
-
-	// ensure the func name matches
-	require.Equal(t, []string{"func_a"}, resp.Msg.FunctionNames)
+	require.JSONEq(t, `
+	{
+		"Labels": [{
+			"name": "__name__",
+			"value": "memory"
+		}, {
+			"name": "__period_type__",
+			"value": "type"
+		}, {
+			"name": "__period_unit__",
+			"value": "unit"
+		}, {
+			"name": "__profile_type__",
+			"value": "memory:type:unit:type:unit"
+		}, {
+			"name": "__type__",
+			"value": "type"
+		}, {
+			"name": "__unit__",
+			"value": "unit"
+		}, {
+			"name": "job",
+			"value": "bar"
+		}],
+		"Fingerprint": 5548967136489384704,
+		"SampleIndex": 0,
+		"Profile": {
+			"ID": "`+profiles[0].Profile.ID.String()+`",
+			"SeriesRefs": [5548967136489384704],
+			"Samples": [{
+				"StacktraceID": 2,
+				"Values": [2345],
+				"Labels": []
+			}],
+			"DropFrames": 0,
+			"KeepFrames": 0,
+			"TimeNanos": 1000000000,
+			"DurationNanos": 0,
+			"Period": 0,
+			"Comments": [],
+			"DefaultSampleType": 0
+		}
+	}
+	`, string(profileJSON))
 }
 
 func BenchmarkHeadIngestProfiles(t *testing.B) {
@@ -398,7 +395,7 @@ func BenchmarkHeadIngestProfiles(t *testing.B) {
 	}
 }
 
-var res *connect.Response[ingestv1.SelectProfilesResponse]
+var res iterator.Interface[firemodel.Profile]
 
 func BenchmarkSelectProfile(b *testing.B) {
 	head, err := NewHead(b.TempDir())
@@ -422,7 +419,7 @@ func BenchmarkSelectProfile(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		res, err = head.SelectProfiles(context.Background(), connect.NewRequest(&ingestv1.SelectProfilesRequest{
+		res, err = head.SelectProfiles(context.Background(), &ingestv1.SelectProfilesRequest{
 			LabelSelector: `{job="bar"}`,
 			Type: &commonv1.ProfileType{
 				ID:         "memory:alloc_space:bytes:space:bytes",
@@ -434,9 +431,9 @@ func BenchmarkSelectProfile(b *testing.B) {
 			},
 			Start: int64(model.Earliest),
 			End:   int64(model.Latest),
-		}))
+		})
 		require.NoError(b, err)
-		res, err = head.SelectProfiles(context.Background(), connect.NewRequest(&ingestv1.SelectProfilesRequest{
+		res, err = head.SelectProfiles(context.Background(), &ingestv1.SelectProfilesRequest{
 			LabelSelector: `{job="bar"}`,
 			Type: &commonv1.ProfileType{
 				ID:         "memory:inuse_space:bytes:space:bytes",
@@ -448,7 +445,7 @@ func BenchmarkSelectProfile(b *testing.B) {
 			},
 			Start: int64(model.Earliest),
 			End:   int64(model.Latest),
-		}))
+		})
 		require.NoError(b, err)
 	}
 }

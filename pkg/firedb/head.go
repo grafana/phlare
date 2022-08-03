@@ -220,7 +220,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	// build label set per sample type before references are rewritten
 	var (
 		sb                                             strings.Builder
-		lbls                                           = firemodel.NewLabelsBuilder(externalLabels)
+		lbls                                           = firemodel.NewLabelsBuilder(externalLabels...)
 		sampleType, sampleUnit, periodType, periodUnit string
 		metricName                                     = firemodel.Labels(externalLabels).Get(model.MetricNameLabel)
 	)
@@ -348,11 +348,11 @@ func (h *Head) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesR
 		Value: req.Type.Name + ":" + req.Type.SampleType + ":" + req.Type.SampleUnit + ":" + req.Type.PeriodType + ":" + req.Type.PeriodUnit,
 	})
 	profiles := []firemodel.Profile{}
+	start, end := req.Start*int64(time.Millisecond), req.End*int64(time.Millisecond)
 
 	err = h.index.forMatchingProfiles(selectors, func(lbs firemodel.Labels, fp model.Fingerprint, idx int, profile *schemav1.Profile) error {
-		ts := int64(model.TimeFromUnixNano(profile.TimeNanos))
 		// if the timestamp is not matching we skip this profile.
-		if req.Start > ts || ts > req.End {
+		if start > profile.TimeNanos || profile.TimeNanos > end {
 			return nil
 		}
 		profiles = append(profiles, firemodel.Profile{

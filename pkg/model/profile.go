@@ -18,14 +18,6 @@ type Profile struct {
 	Profile     *schemav1.Profile
 }
 
-// // CompareProfile compares the two profiles.
-// func CompareProfile(a, b *ingestv1.Profile) int64 {
-// 	if a.Timestamp == b.Timestamp {
-// 		return int64(CompareLabelPairs(a.Labels, b.Labels))
-// 	}
-// 	return a.Timestamp - b.Timestamp
-// }
-
 // ParseProfileTypeSelector parses the profile selector string.
 func ParseProfileTypeSelector(id string) (*commonv1.ProfileType, error) {
 	parts := strings.Split(id, ":")

@@ -59,8 +59,9 @@ func (m *mockDB) LabelValues(ctx context.Context, req *connect.Request[ingestv1.
 func TestSelectProfiles(t *testing.T) {
 	db := &mockDB{}
 	// batchSize = 1
-	fooLabels := firemodel.NewLabelsBuilder(nil).Set("label", "foo").Labels()
-	barLabels := firemodel.NewLabelsBuilder(nil).Set("label", "bar").Labels()
+	// todo finish this tests.
+	fooLabels := firemodel.NewLabelsBuilder().Set("label", "foo").Labels()
+	barLabels := firemodel.NewLabelsBuilder().Set("label", "bar").Labels()
 	profiles := []firemodel.Profile{
 		{Labels: fooLabels, Profile: &schemav1.Profile{}, Fingerprint: model.Fingerprint(fooLabels.Hash())},
 		{Labels: barLabels, Profile: &schemav1.Profile{}, Fingerprint: model.Fingerprint(barLabels.Hash())},
@@ -88,12 +89,12 @@ func TestSelectProfiles(t *testing.T) {
 	stream, err := client.SelectProfiles(context.Background(), connect.NewRequest(&ingesterv1.SelectProfilesRequest{}))
 	require.NoError(t, err)
 
-	response := []*ingesterv1.SelectProfilesResponse{}
+	responses := []*ingesterv1.SelectProfilesResponse{}
 
 	for stream.Receive() {
-		response = append(response, stream.Msg())
+		responses = append(responses, stream.Msg())
 	}
-	t.Log(response)
+	require.Equal(t, nil, responses)
 }
 
 // func Test_selectMerge(t *testing.T) {

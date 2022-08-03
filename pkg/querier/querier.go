@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/pyroscope-io/pyroscope/pkg/storage/metadata"
 	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
 
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
@@ -138,43 +137,44 @@ func (q *Querier) LabelValues(ctx context.Context, name string) ([]string, error
 }
 
 func (q *Querier) selectMerge(ctx context.Context, req *ingestv1.SelectProfilesRequest) (*flamebearer.FlamebearerProfile, error) {
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ic IngesterQueryClient) (*ingestv1.SelectProfilesResponse, error) {
-		res, err := ic.SelectProfiles(ctx, connect.NewRequest(req))
-		if err != nil {
-			return nil, err
-		}
-		return res.Msg, nil
-	})
-	if err != nil {
-		return nil, err
-	}
+	// responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ic IngesterQueryClient) (*ingestv1.SelectProfilesResponse, error) {
+	// 	res, err := ic.SelectProfiles(ctx, connect.NewRequest(req))
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	return res.Msg, nil
+	// })
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	// build the flamegraph
-	flame := NewFlamebearer(newTree(mergeStacktraces(dedupeProfiles(responses))))
-	unit := metadata.Units(req.Type.SampleUnit)
-	sampleRate := uint32(100)
+	// // build the flamegraph
+	// flame := NewFlamebearer(newTree(mergeStacktraces(dedupeProfiles(responses))))
+	// unit := metadata.Units(req.Type.SampleUnit)
+	// sampleRate := uint32(100)
 
-	switch req.Type.SampleType {
-	case "inuse_objects", "alloc_objects", "goroutine", "samples":
-		unit = metadata.ObjectsUnits
-	case "cpu":
-		unit = metadata.SamplesUnits
-		sampleRate = uint32(100000000)
+	// switch req.Type.SampleType {
+	// case "inuse_objects", "alloc_objects", "goroutine", "samples":
+	// 	unit = metadata.ObjectsUnits
+	// case "cpu":
+	// 	unit = metadata.SamplesUnits
+	// 	sampleRate = uint32(100000000)
 
-	}
+	// }
 
-	return &flamebearer.FlamebearerProfile{
-		Version: 1,
-		FlamebearerProfileV1: flamebearer.FlamebearerProfileV1{
-			Flamebearer: *flame,
-			Metadata: flamebearer.FlamebearerMetadataV1{
-				Format:     "single",
-				Units:      unit,
-				Name:       req.Type.SampleType,
-				SampleRate: sampleRate,
-			},
-		},
-	}, nil
+	// return &flamebearer.FlamebearerProfile{
+	// 	Version: 1,
+	// 	FlamebearerProfileV1: flamebearer.FlamebearerProfileV1{
+	// 		Flamebearer: *flame,
+	// 		Metadata: flamebearer.FlamebearerMetadataV1{
+	// 			Format:     "single",
+	// 			Units:      unit,
+	// 			Name:       req.Type.SampleType,
+	// 			SampleRate: sampleRate,
+	// 		},
+	// 	},
+	// }, nil
+	return nil, nil
 }
 
 func uniqueSortedStrings(responses []responseFromIngesters[[]string]) []string {

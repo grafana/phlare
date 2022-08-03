@@ -109,14 +109,13 @@ func (ls Labels) ToPrometheusLabels() labels.Labels {
 }
 
 func (ls Labels) WithoutPrivateLabels() Labels {
-	i := 0
+	res := make([]*commonv1.LabelPair, 0, len(ls))
 	for _, l := range ls {
 		if !strings.HasPrefix(l.Name, "__") {
-			ls[i] = l
-			i++
+			res = append(res, l)
 		}
 	}
-	return ls[:i]
+	return res
 }
 
 // Get returns the value for the label with the given name.
@@ -139,6 +138,21 @@ func (ls Labels) Clone() Labels {
 		}
 	}
 	return result
+}
+
+func (ls Labels) String() string {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, l := range ls {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(l.Name)
+		b.WriteByte('=')
+		b.WriteString(l.Value)
+	}
+	b.WriteByte('}')
+	return b.String()
 }
 
 // LabelPairsString returns a string representation of the label pairs.
@@ -234,17 +248,17 @@ type LabelsBuilder struct {
 }
 
 // NewLabelsBuilder returns a new LabelsBuilder.
-func NewLabelsBuilder(base Labels) *LabelsBuilder {
+func NewLabelsBuilder(base ...*commonv1.LabelPair) *LabelsBuilder {
 	b := &LabelsBuilder{
 		del: make([]string, 0, 5),
 		add: make([]*commonv1.LabelPair, 0, 5),
 	}
-	b.Reset(base)
+	b.Reset(base...)
 	return b
 }
 
 // Reset clears all current state for the builder.
-func (b *LabelsBuilder) Reset(base Labels) {
+func (b *LabelsBuilder) Reset(base ...*commonv1.LabelPair) {
 	b.base = base
 	b.del = b.del[:0]
 	b.add = b.add[:0]

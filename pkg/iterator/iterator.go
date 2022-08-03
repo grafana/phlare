@@ -4,6 +4,7 @@ type Interface[T any] interface {
 	Next() bool
 	At() T
 	Err() error
+	Close()
 }
 
 type errIterator[T any] struct {
@@ -20,6 +21,9 @@ func (*errIterator[T]) Next() bool {
 
 func (*errIterator[T]) At() (t T) {
 	return
+}
+
+func (*errIterator[T]) Close() {
 }
 
 func NewErrIterator[T any](err error) Interface[T] {
@@ -49,8 +53,19 @@ func (i *sliceIterator[T]) At() (t T) {
 	return i.s[i.pos-1]
 }
 
+func (i *sliceIterator[T]) Close() {
+}
+
 func NewSliceIterator[T any](s []T) Interface[T] {
 	return &sliceIterator[T]{
 		s: s,
 	}
+}
+
+func Slice[T any](it Interface[T]) ([]T, error) {
+	var res []T
+	for it.Next() {
+		res = append(res, it.At())
+	}
+	return res, it.Err()
 }
