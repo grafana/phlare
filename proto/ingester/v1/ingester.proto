@@ -49,8 +49,6 @@ message SelectProfilesRequest {
 message SelectProfilesResponse {
   repeated Profile profiles = 1;
   repeated Labels  labelsets = 2;
-  // The name and type of the profile.
-  common.v1.ProfileType type = 3;
 }
 
 // Profile represents a point in time profile.

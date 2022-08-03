@@ -311,10 +311,6 @@
           "items": {
             "$ref": "#/definitions/v1Labels"
           }
-        },
-        "type": {
-          "$ref": "#/definitions/v1ProfileType",
-          "description": "The name and type of the profile."
         }
       }
     },

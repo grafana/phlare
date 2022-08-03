@@ -201,7 +201,6 @@ func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[inge
 	labelsIdx := make(map[model.Fingerprint]uint64)
 	batch := &ingestv1.SelectProfilesResponse{
 		Profiles: make([]*ingestv1.Profile, 0, batchSize),
-		Type:     req.Msg.Type,
 	}
 	var labelIdx uint64
 	var ok bool
