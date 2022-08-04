@@ -2,9 +2,9 @@ package ingester
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/google/uuid"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
@@ -252,6 +252,46 @@ func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[inge
 	return nil
 }
 
-func (i *Ingester) SelectStacktraceSamples(context.Context, *connect.ClientStream[ingestv1.SelectStacktraceSamplesRequest]) (*connect.Response[ingestv1.SelectStacktraceSamplesResponse], error) {
-	return nil, fmt.Errorf("not implemented")
+func (i *Ingester) SelectStacktraceSamples(ctx context.Context, stream *connect.ClientStream[ingestv1.SelectStacktraceSamplesRequest]) (*connect.Response[ingestv1.SelectStacktraceSamplesResponse], error) {
+	res := &ingestv1.SelectStacktraceSamplesResponse{}
+	ids := map[uuid.UUID]struct{}{}
+	if stream.Receive() {
+		for _, id := range stream.Msg().Ids {
+			uid, err := uuid.Parse(id)
+			if err != nil {
+				return nil, err
+			}
+			ids[uid] = struct{}{}
+		}
+		// we have already the matchers so we can select all profiles matching then filter by Ids.
+		// todo we could run this in a goroutine.
+		it, err := i.fireDB.SelectProfiles(ctx, stream.Msg().SelectProfiles)
+		if err != nil {
+			return nil, err
+		}
+		// read the rest.
+		for stream.Receive() {
+			for _, id := range stream.Msg().Ids {
+				uid, err := uuid.Parse(id)
+				if err != nil {
+					return nil, err
+				}
+				ids[uid] = struct{}{}
+			}
+		}
+		if err := stream.Err(); err != nil {
+			return nil, err
+		}
+		for it.Next() {
+			p := it.At()
+			if _, ok := ids[p.Profile.ID]; !ok {
+				continue
+			}
+		}
+		if it.Err() != nil {
+			return nil, it.Err()
+		}
+
+	}
+	return connect.NewResponse(res), stream.Err()
 }
