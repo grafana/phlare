@@ -16,6 +16,7 @@ import (
 	pushv1 "github.com/grafana/fire/pkg/gen/push/v1"
 	"github.com/grafana/fire/pkg/iterator"
 	firemodel "github.com/grafana/fire/pkg/model"
+	"github.com/grafana/fire/pkg/testhelper"
 )
 
 var (
@@ -36,7 +37,7 @@ func generateProfile(t *testing.T, i int, lbs firemodel.Labels, ingAddr string) 
 	t.Helper()
 	return ProfileWithLabels{
 		Labels:       lbs,
-		ingesterAddr: ingAddr,
+		IngesterAddr: ingAddr,
 		Profile: &ingesterv1.Profile{
 			ID:        fmt.Sprintf("%d", i) + ingAddr,
 			Timestamp: int64(i),
@@ -106,15 +107,7 @@ func TestDedupe(t *testing.T) {
 			}
 			actual, err := iterator.Slice(NewDedupeProfileIterator(in))
 			require.NoError(t, err)
-			actualStrings, expectedStrigs := []string{}, []string{}
-			for _, p := range actual {
-				actualStrings = append(actualStrings, p.String())
-			}
-			for _, p := range tt.expected {
-				expectedStrigs = append(expectedStrigs, p.String())
-			}
-			require.Equal(t, expectedStrigs, actualStrings)
-			require.Equal(t, tt.expected, actual)
+			testhelper.EqualProto(t, tt.expected, actual)
 		})
 	}
 }
@@ -253,14 +246,7 @@ func TestStreamingIterator(t *testing.T) {
 			})
 			actual, err := iterator.Slice(it)
 			require.NoError(t, err)
-			actualStrings, expectedStrigs := []string{}, []string{}
-			for _, p := range actual {
-				actualStrings = append(actualStrings, p.String())
-			}
-			for _, p := range tt.expected {
-				expectedStrigs = append(expectedStrigs, p.String())
-			}
-			require.Equal(t, expectedStrigs, actualStrings)
+			testhelper.EqualProto(t, tt.expected, actual)
 		})
 	}
 }

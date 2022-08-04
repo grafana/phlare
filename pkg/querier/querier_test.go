@@ -231,18 +231,12 @@ func (f *fakeQuerierIngester) ProfileTypes(ctx context.Context, req *connect.Req
 	return res, err
 }
 
-func (f *fakeQuerierIngester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-	var (
-		args = f.Called(ctx, req)
-		res  *connect.Response[ingestv1.SelectProfilesResponse]
-		err  error
-	)
-	if args[0] != nil {
-		res = args[0].(*connect.Response[ingestv1.SelectProfilesResponse])
-	}
-	if args[1] != nil {
-		err = args.Get(1).(error)
-	}
+func (f *fakeQuerierIngester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.ServerStreamForClient[ingestv1.SelectProfilesResponse], error) {
+	args := f.Called(ctx, req)
+	return args.Get(0).(*connect.ServerStreamForClient[ingestv1.SelectProfilesResponse]), args.Get(1).(error)
+}
 
-	return res, err
+func (f *fakeQuerierIngester) SelectStacktraceSamples(ctx context.Context) *connect.ClientStreamForClient[ingestv1.SelectStacktraceSamplesRequest, ingestv1.SelectStacktraceSamplesResponse] {
+	args := f.Called(ctx)
+	return args.Get(0).(*connect.ClientStreamForClient[ingestv1.SelectStacktraceSamplesRequest, ingestv1.SelectStacktraceSamplesResponse])
 }

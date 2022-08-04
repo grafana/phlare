@@ -5,7 +5,6 @@ package querier
 
 import (
 	"container/heap"
-	"fmt"
 
 	"github.com/bufbuild/connect-go"
 	"github.com/grafana/dskit/multierror"
@@ -23,16 +22,11 @@ var (
 type ProfileWithLabels struct {
 	*ingestv1.Profile
 	firemodel.Labels
-	ingesterAddr string
-}
-
-func (p ProfileWithLabels) String() string {
-	return fmt.Sprintf("id:%s ts:%d labels:%s ingester:%s", p.Profile.ID, p.Timestamp, p.Labels, p.ingesterAddr)
+	IngesterAddr string
 }
 
 type StreamProfileIterator struct {
 	stream       *connect.ServerStreamForClient[ingestv1.SelectProfilesResponse]
-	current      *ingestv1.SelectProfilesResponse
 	ingesterAddr string
 }
 
@@ -52,22 +46,21 @@ func NewStreamsProfileIterator(r []responseFromIngesters[*connect.ServerStreamFo
 }
 
 func (s *StreamProfileIterator) Next() bool {
-	if s.current == nil || len(s.current.Profiles) <= 1 {
+	if s.stream.Msg() == nil || len(s.stream.Msg().Profiles) <= 1 {
 		if s.stream.Receive() {
-			s.current = s.stream.Msg()
-			return len(s.current.Profiles) != 0
+			return len(s.stream.Msg().Profiles) != 0
 		}
 		return false
 	}
-	s.current.Profiles = s.current.Profiles[1:]
+	s.stream.Msg().Profiles = s.stream.Msg().Profiles[1:]
 	return true
 }
 
 func (s *StreamProfileIterator) At() ProfileWithLabels {
 	return ProfileWithLabels{
-		Profile:      s.current.Profiles[0],
-		Labels:       s.current.Labelsets[s.current.Profiles[0].LabelsetIndex].Labels,
-		ingesterAddr: s.ingesterAddr,
+		Profile:      s.stream.Msg().Profiles[0],
+		Labels:       s.stream.Msg().Labelsets[s.stream.Msg().Profiles[0].LabelsetIndex].Labels,
+		IngesterAddr: s.ingesterAddr,
 	}
 }
 

@@ -12,6 +12,8 @@ import (
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 )
 
+var selectProfilesBatchSize = 512
+
 // LabelValues returns the possible label values for a given label name.
 func (i *Ingester) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
 	return i.fireDB.LabelValues(ctx, req)
@@ -181,15 +183,12 @@ func getLocationsFromSerializedLocations(
 // func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
 // 	return i.fireDB.Head().SelectProfiles(ctx, req)
 // }
-const batchSize = 200
 
 func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest], stream *connect.ServerStream[ingestv1.SelectProfilesResponse]) error {
 	var (
 		totalSamples  int64
 		totalProfiles int64
 	)
-	// nolint:ineffassign
-	// we might use ctx later.
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "Ingester - SelectProfiles")
 	defer func() {
 		sp.LogFields(
@@ -200,7 +199,7 @@ func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[inge
 	}()
 	labelsIdx := make(map[model.Fingerprint]uint64)
 	batch := &ingestv1.SelectProfilesResponse{
-		Profiles: make([]*ingestv1.Profile, 0, batchSize),
+		Profiles: make([]*ingestv1.Profile, 0, selectProfilesBatchSize),
 	}
 	var labelIdx uint64
 	var ok bool
@@ -230,8 +229,8 @@ func (i *Ingester) SelectProfiles(ctx context.Context, req *connect.Request[inge
 			TotalValue:    totalSampleValue,
 		})
 
-		// batch is full, send it
-		if len(batch.Profiles) < batchSize {
+		// batch is not full, continue
+		if len(batch.Profiles) < selectProfilesBatchSize {
 			continue
 		}
 		if err := stream.Send(batch); err != nil {

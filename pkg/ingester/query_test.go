@@ -23,6 +23,7 @@ import (
 	"github.com/grafana/fire/pkg/gen/ingester/v1/ingesterv1connect"
 	"github.com/grafana/fire/pkg/iterator"
 	firemodel "github.com/grafana/fire/pkg/model"
+	"github.com/grafana/fire/pkg/testhelper"
 )
 
 var _ DB = (*mockDB)(nil)
@@ -57,44 +58,103 @@ func (m *mockDB) LabelValues(ctx context.Context, req *connect.Request[ingestv1.
 }
 
 func TestSelectProfiles(t *testing.T) {
-	db := &mockDB{}
-	// batchSize = 1
-	// todo finish this tests.
 	fooLabels := firemodel.NewLabelsBuilder().Set("label", "foo").Labels()
 	barLabels := firemodel.NewLabelsBuilder().Set("label", "bar").Labels()
-	profiles := []firemodel.Profile{
-		{Labels: fooLabels, Profile: &schemav1.Profile{}, Fingerprint: model.Fingerprint(fooLabels.Hash())},
-		{Labels: barLabels, Profile: &schemav1.Profile{}, Fingerprint: model.Fingerprint(barLabels.Hash())},
+	for _, tt := range []struct {
+		name      string
+		batchSize int
+		in        []firemodel.Profile
+		expected  []*ingesterv1.SelectProfilesResponse
+	}{
+		{
+			"empty",
+			10,
+			[]firemodel.Profile{},
+			[]*ingesterv1.SelectProfilesResponse{},
+		},
+		{
+			"batch exactly full",
+			2,
+			[]firemodel.Profile{
+				{Labels: fooLabels, Profile: &schemav1.Profile{TimeNanos: 1, ID: uuid.UUID{1}}, Fingerprint: model.Fingerprint(fooLabels.Hash())},
+				{Labels: barLabels, Profile: &schemav1.Profile{TimeNanos: 2, ID: uuid.UUID{2}}, Fingerprint: model.Fingerprint(barLabels.Hash())},
+			},
+			[]*ingesterv1.SelectProfilesResponse{
+				{
+					Profiles:  []*ingestv1.Profile{{ID: "01000000-0000-0000-0000-000000000000", Timestamp: 1, LabelsetIndex: 0}, {ID: "02000000-0000-0000-0000-000000000000", Timestamp: 2, LabelsetIndex: 1}},
+					Labelsets: []*ingestv1.Labels{{Labels: fooLabels}, {Labels: barLabels}},
+				},
+			},
+		},
+		{
+			"batch not full",
+			3,
+			[]firemodel.Profile{
+				{Labels: fooLabels, Profile: &schemav1.Profile{TimeNanos: 1, ID: uuid.UUID{1}}, Fingerprint: model.Fingerprint(fooLabels.Hash())},
+				{Labels: barLabels, Profile: &schemav1.Profile{TimeNanos: 2, ID: uuid.UUID{2}}, Fingerprint: model.Fingerprint(barLabels.Hash())},
+			},
+			[]*ingesterv1.SelectProfilesResponse{
+				{
+					Profiles:  []*ingestv1.Profile{{ID: "01000000-0000-0000-0000-000000000000", Timestamp: 1, LabelsetIndex: 0}, {ID: "02000000-0000-0000-0000-000000000000", Timestamp: 2, LabelsetIndex: 1}},
+					Labelsets: []*ingestv1.Labels{{Labels: fooLabels}, {Labels: barLabels}},
+				},
+			},
+		},
+		{
+			"mutiple batches",
+			1,
+			[]firemodel.Profile{
+				{Labels: fooLabels, Profile: &schemav1.Profile{TimeNanos: 1, ID: uuid.UUID{1}}, Fingerprint: model.Fingerprint(fooLabels.Hash())},
+				{Labels: barLabels, Profile: &schemav1.Profile{TimeNanos: 2, ID: uuid.UUID{2}}, Fingerprint: model.Fingerprint(barLabels.Hash())},
+			},
+			[]*ingesterv1.SelectProfilesResponse{
+				{
+					Profiles:  []*ingestv1.Profile{{ID: "01000000-0000-0000-0000-000000000000", Timestamp: 1, LabelsetIndex: 0}},
+					Labelsets: []*ingestv1.Labels{{Labels: fooLabels}},
+				},
+				{
+					Profiles:  []*ingestv1.Profile{{ID: "02000000-0000-0000-0000-000000000000", Timestamp: 2, LabelsetIndex: 0}},
+					Labelsets: []*ingestv1.Labels{{Labels: barLabels}},
+				},
+			},
+		},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			db := &mockDB{}
+			selectProfilesBatchSize = tt.batchSize
+
+			db.On("SelectProfiles", mock.Anything, mock.Anything).Return(iterator.NewSliceIterator(tt.in), nil)
+			ing, err := New(Config{
+				LifecyclerConfig: ring.LifecyclerConfig{Addr: "foo", RingConfig: ring.Config{
+					KVStore: kv.Config{Store: "inmemory"},
+				}},
+			}, log.NewNopLogger(), nil, db)
+			require.NoError(t, err)
+
+			mux := http.NewServeMux()
+			mux.Handle(
+				ingesterv1connect.NewIngesterServiceHandler(ing),
+			)
+			server := httptest.NewUnstartedServer(mux)
+			server.EnableHTTP2 = true
+			server.StartTLS()
+			defer server.Close()
+
+			httpClient := server.Client()
+			client := ingesterv1connect.NewIngesterServiceClient(httpClient, server.URL, connect.WithGRPC())
+
+			stream, err := client.SelectProfiles(context.Background(), connect.NewRequest(&ingesterv1.SelectProfilesRequest{}))
+			require.NoError(t, err)
+
+			responses := []*ingesterv1.SelectProfilesResponse{}
+
+			for stream.Receive() {
+				responses = append(responses, testhelper.CloneProto(t, stream.Msg()))
+			}
+			testhelper.EqualProto(t, tt.expected, responses)
+		})
 	}
-	db.On("SelectProfiles", mock.Anything, mock.Anything).Return(iterator.NewSliceIterator(profiles), nil)
-	ing, err := New(Config{
-		LifecyclerConfig: ring.LifecyclerConfig{Addr: "foo", RingConfig: ring.Config{
-			KVStore: kv.Config{Store: "inmemory"},
-		}},
-	}, log.NewNopLogger(), nil, db)
-	require.NoError(t, err)
-
-	mux := http.NewServeMux()
-	mux.Handle(
-		ingesterv1connect.NewIngesterServiceHandler(ing),
-	)
-	server := httptest.NewUnstartedServer(mux)
-	server.EnableHTTP2 = true
-	server.StartTLS()
-	defer server.Close()
-
-	httpClient := server.Client()
-	client := ingesterv1connect.NewIngesterServiceClient(httpClient, server.URL, connect.WithGRPC())
-
-	stream, err := client.SelectProfiles(context.Background(), connect.NewRequest(&ingesterv1.SelectProfilesRequest{}))
-	require.NoError(t, err)
-
-	responses := []*ingesterv1.SelectProfilesResponse{}
-
-	for stream.Receive() {
-		responses = append(responses, stream.Msg())
-	}
-	require.Equal(t, nil, responses)
 }
 
 // func Test_selectMerge(t *testing.T) {
