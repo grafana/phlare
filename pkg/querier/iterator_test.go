@@ -148,6 +148,11 @@ func (i *ingesterMock) SelectStacktraceSamples(ctx context.Context, stream *conn
 	return args.Get(0).(*connect.Response[ingesterv1.SelectStacktraceSamplesResponse]), args.Error(1)
 }
 
+func (i *ingesterMock) Series(ctx context.Context, req *connect.Request[ingesterv1.SeriesRequest]) (*connect.Response[ingesterv1.SeriesResponse], error) {
+	args := i.Called(ctx, req)
+	return args.Get(0).(*connect.Response[ingesterv1.SeriesResponse]), args.Error(1)
+}
+
 func TestStreamingIterator(t *testing.T) {
 	for _, tt := range []struct {
 		name     string

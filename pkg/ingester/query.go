@@ -24,6 +24,11 @@ func (i *Ingester) ProfileTypes(ctx context.Context, req *connect.Request[ingest
 	return i.fireDB.ProfileTypes(ctx, req)
 }
 
+// Series returns labels series for the given set of matchers.
+func (i *Ingester) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	return i.fireDB.Series(ctx, req)
+}
+
 /*
 func (i *Ingester) SymbolizeStacktraces(ctx context.Context, req *connect.Request[ingestv1.SymbolizeStacktraceRequest]) (*connect.Response[ingestv1.SymbolizeStacktraceResponse], error) {
 	return nil, errors.New("not implemented")
@@ -269,7 +274,7 @@ func (i *Ingester) SelectStacktraceSamples(ctx context.Context, stream *connect.
 		if err != nil {
 			return nil, err
 		}
-		// read the rest.
+		// read the rest of the ids.
 		for stream.Receive() {
 			for _, id := range stream.Msg().Ids {
 				uid, err := uuid.Parse(id)
@@ -287,6 +292,8 @@ func (i *Ingester) SelectStacktraceSamples(ctx context.Context, stream *connect.
 			if _, ok := ids[p.Profile.ID]; !ok {
 				continue
 			}
+			// todo: we have a matching profile.
+
 		}
 		if it.Err() != nil {
 			return nil, it.Err()

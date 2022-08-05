@@ -132,6 +132,7 @@ type Head struct {
 	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
 	profiles        deduplicatingSlice[*schemav1.Profile, profilesKey, *profilesHelper, *schemav1.ProfilePersister]
 	tables          []Table
+	delta           *deltaProfiles
 	pprofLabelCache labelCache
 }
 
@@ -177,6 +178,7 @@ func NewHead(dataPath string, opts ...HeadOption) (*Head, error) {
 		return nil, err
 	}
 	h.index = index
+	h.delta = newDeltaProfiles()
 
 	h.pprofLabelCache.init()
 	return h, nil
@@ -217,46 +219,8 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 }
 
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*commonv1.LabelPair) error {
-	// build label set per sample type before references are rewritten
-	var (
-		sb                                             strings.Builder
-		lbls                                           = firemodel.NewLabelsBuilder(externalLabels...)
-		sampleType, sampleUnit, periodType, periodUnit string
-		metricName                                     = firemodel.Labels(externalLabels).Get(model.MetricNameLabel)
-	)
-
-	// set common labels
-	if p.PeriodType != nil {
-		periodType = p.StringTable[p.PeriodType.Type]
-		lbls.Set(firemodel.LabelNamePeriodType, periodType)
-		periodUnit = p.StringTable[p.PeriodType.Unit]
-		lbls.Set(firemodel.LabelNamePeriodUnit, periodUnit)
-	}
-
-	seriesRefs := make([]model.Fingerprint, len(p.SampleType))
-	profilesLabels := make([]firemodel.Labels, len(p.SampleType))
-	for pos := range p.SampleType {
-		sampleType = p.StringTable[p.SampleType[pos].Type]
-		lbls.Set(firemodel.LabelNameType, sampleType)
-		sampleUnit = p.StringTable[p.SampleType[pos].Unit]
-		lbls.Set(firemodel.LabelNameUnit, sampleUnit)
-
-		sb.Reset()
-		_, _ = sb.WriteString(metricName)
-		_, _ = sb.WriteRune(':')
-		_, _ = sb.WriteString(sampleType)
-		_, _ = sb.WriteRune(':')
-		_, _ = sb.WriteString(sampleUnit)
-		_, _ = sb.WriteRune(':')
-		_, _ = sb.WriteString(periodType)
-		_, _ = sb.WriteRune(':')
-		_, _ = sb.WriteString(periodUnit)
-		t := sb.String()
-		lbls.Set(firemodel.LabelNameProfileType, t)
-		lbs := lbls.Labels().Clone()
-		profilesLabels[pos] = lbs
-		seriesRefs[pos] = model.Fingerprint(lbs.Hash())
-	}
+	metricName := firemodel.Labels(externalLabels).Get(model.MetricNameLabel)
+	labels, seriesRefs := labelsForProfile(p, externalLabels...)
 
 	// create a rewriter state
 	rewrites := &rewriter{}
@@ -294,14 +258,66 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		DefaultSampleType: p.DefaultSampleType,
 	}
 
+	profile, labels = h.delta.computeDelta(profile, labels)
+
+	if len(labels) == 0 {
+		return nil
+	}
+
 	if err := h.profiles.ingest(ctx, []*schemav1.Profile{profile}, rewrites); err != nil {
 		return err
 	}
-	h.index.Add(profile, profilesLabels, metricName)
+	h.index.Add(profile, labels, metricName)
 
-	h.metrics.sampleValuesIngested.WithLabelValues(metricName).Add(float64(len(p.Sample) * len(profilesLabels)))
+	h.metrics.sampleValuesIngested.WithLabelValues(metricName).Add(float64(len(profile.Samples) * len(labels)))
+	h.metrics.sampleValuesReceived.WithLabelValues(metricName).Add(float64(len(p.Sample) * len(labels)))
 
 	return nil
+}
+
+func labelsForProfile(p *profilev1.Profile, externalLabels ...*commonv1.LabelPair) ([]firemodel.Labels, []model.Fingerprint) {
+	// build label set per sample type before references are rewritten
+	var (
+		sb                                             strings.Builder
+		lbls                                           = firemodel.NewLabelsBuilder(externalLabels...)
+		sampleType, sampleUnit, periodType, periodUnit string
+		metricName                                     = firemodel.Labels(externalLabels).Get(model.MetricNameLabel)
+	)
+
+	// set common labels
+	if p.PeriodType != nil {
+		periodType = p.StringTable[p.PeriodType.Type]
+		lbls.Set(firemodel.LabelNamePeriodType, periodType)
+		periodUnit = p.StringTable[p.PeriodType.Unit]
+		lbls.Set(firemodel.LabelNamePeriodUnit, periodUnit)
+	}
+
+	profilesLabels := make([]firemodel.Labels, len(p.SampleType))
+	seriesRefs := make([]model.Fingerprint, len(p.SampleType))
+	for pos := range p.SampleType {
+		sampleType = p.StringTable[p.SampleType[pos].Type]
+		lbls.Set(firemodel.LabelNameType, sampleType)
+		sampleUnit = p.StringTable[p.SampleType[pos].Unit]
+		lbls.Set(firemodel.LabelNameUnit, sampleUnit)
+
+		sb.Reset()
+		_, _ = sb.WriteString(metricName)
+		_, _ = sb.WriteRune(':')
+		_, _ = sb.WriteString(sampleType)
+		_, _ = sb.WriteRune(':')
+		_, _ = sb.WriteString(sampleUnit)
+		_, _ = sb.WriteRune(':')
+		_, _ = sb.WriteString(periodType)
+		_, _ = sb.WriteRune(':')
+		_, _ = sb.WriteString(periodUnit)
+		t := sb.String()
+		lbls.Set(firemodel.LabelNameProfileType, t)
+		lbs := lbls.Labels().Clone()
+		profilesLabels[pos] = lbs
+		seriesRefs[pos] = model.Fingerprint(lbs.Hash())
+
+	}
+	return profilesLabels, seriesRefs
 }
 
 // LabelValues returns the possible label values for a given label name.
@@ -364,6 +380,35 @@ func (h *Head) SelectProfiles(ctx context.Context, req *ingestv1.SelectProfilesR
 		return nil
 	})
 	return iterator.NewSliceIterator(profiles), err
+}
+
+func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	selectors := make([][]*labels.Matcher, 0, len(req.Msg.Matchers))
+	for _, m := range req.Msg.Matchers {
+		s, err := parser.ParseMetricSelector(m)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "failed to label selector")
+		}
+		selectors = append(selectors, s)
+	}
+	response := &ingestv1.SeriesResponse{}
+	uniqu := map[model.Fingerprint]struct{}{}
+	for _, selector := range selectors {
+		if err := h.index.forMatchingLabels(selector, func(lbs firemodel.Labels, fp model.Fingerprint) error {
+			if _, ok := uniqu[fp]; ok {
+				return nil
+			}
+			uniqu[fp] = struct{}{}
+			response.LabelsSet = append(response.LabelsSet, &commonv1.Labels{Labels: lbs})
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	sort.Slice(response.LabelsSet, func(i, j int) bool {
+		return firemodel.CompareLabelPairs(response.LabelsSet[i].Labels, response.LabelsSet[j].Labels) < 0
+	})
+	return connect.NewResponse(response), nil
 }
 
 func (h *Head) Flush(ctx context.Context) error {

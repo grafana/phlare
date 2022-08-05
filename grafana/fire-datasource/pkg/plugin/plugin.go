@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/bufbuild/connect-go"
-	querierv1 "github.com/grafana/fire/pkg/gen/querier/v1"
 	"github.com/grafana/fire/pkg/gen/querier/v1/querierv1connect"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
@@ -14,6 +13,9 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/live"
+	"github.com/prometheus/common/model"
+
+	querierv1 "github.com/grafana/fire/pkg/gen/querier/v1"
 )
 
 // Make sure FireDatasource implements required interfaces. This is important to do
@@ -27,6 +29,7 @@ import (
 // instance created upon datasource settings changed.
 var (
 	_ backend.QueryDataHandler      = (*FireDatasource)(nil)
+	_ backend.CallResourceHandler   = (*FireDatasource)(nil)
 	_ backend.CheckHealthHandler    = (*FireDatasource)(nil)
 	_ backend.StreamHandler         = (*FireDatasource)(nil)
 	_ instancemgmt.InstanceDisposer = (*FireDatasource)(nil)
@@ -62,6 +65,32 @@ func (d *FireDatasource) Dispose() {
 	// Clean up datasource instance resources.
 }
 
+func (d *FireDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	log.DefaultLogger.Info("CallResource", "req", req)
+	if req.Path == "profileTypes" {
+		return d.callProfileTypes(ctx, req, sender)
+	}
+	return sender.Send(&backend.CallResourceResponse{
+		Status: 404,
+	})
+}
+
+func (d *FireDatasource) callProfileTypes(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	res, err := d.client.ProfileTypes(ctx, connect.NewRequest(&querierv1.ProfileTypesRequest{}))
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(res.Msg.ProfileTypes)
+	if err != nil {
+		return err
+	}
+	err = sender.Send(&backend.CallResourceResponse{Body: data, Headers: req.Headers, Status: 200})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // QueryData handles multiple queries and returns multiple responses.
 // req contains the queries []DataQuery (where each query contains RefID as a unique identifier).
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
@@ -88,7 +117,7 @@ type queryModel struct {
 	WithStreaming bool `json:"withStreaming"`
 }
 
-func (d *FireDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+func (d *FireDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 	response := backend.DataResponse{}
 
 	// Unmarshal the JSON into our queryModel.
@@ -101,13 +130,36 @@ func (d *FireDatasource) query(_ context.Context, pCtx backend.PluginContext, qu
 
 	// create data frame response.
 	frame := data.NewFrame("response")
+	frame.Meta = &data.FrameMeta{PreferredVisualization: "profile"}
+
+	// todo parse the query from queryModel
+	res, err := d.client.SelectMergeStacktraces(ctx, connect.NewRequest(&querierv1.SelectMergeStacktracesRequest{
+		ProfileTypeID: "memory:inuse_space:bytes:space:bytes",
+		Start:         int64(model.TimeFromUnixNano(time.Now().Add(-1 * time.Hour).UnixNano())),
+		End:           int64(model.TimeFromUnixNano(time.Now().UnixNano())),
+		LabelSelector: "{}",
+	}))
+	if err != nil {
+		response.Error = err
+		return response
+	}
+
+	// todo create data frame response.
+	b, err := json.Marshal(res.Msg)
+	if err != nil {
+		response.Error = err
+		return response
+	}
+	log.DefaultLogger.Info("SelectMergeStacktraces", "result", string(b))
 
 	// add fields.
 	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{10, 20}),
+		data.NewField("levels.0", nil, []string{`[0, 4862950000000, 0, 0]`}),
+		data.NewField("levels.1", nil, []string{`[0, 75210000000, 70000000, 6112, 0, 884550000000, 490000000, 5601]`}),
 	)
 
+	// new frame for names
+	// frame.a
 	// If query called with streaming on then return a channel
 	// to subscribe on a client-side and consume updates from a plugin.
 	// Feel free to remove this if you don't need streaming for your datasource.

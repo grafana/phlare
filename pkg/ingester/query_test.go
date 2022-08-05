@@ -57,6 +57,11 @@ func (m *mockDB) LabelValues(ctx context.Context, req *connect.Request[ingestv1.
 	return args.Get(0).(*connect.Response[ingestv1.LabelValuesResponse]), args.Error(1)
 }
 
+func (m *mockDB) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	args := m.Called(ctx, req)
+	return args.Get(0).(*connect.Response[ingestv1.SeriesResponse]), args.Error(1)
+}
+
 func TestSelectProfiles(t *testing.T) {
 	fooLabels := firemodel.NewLabelsBuilder().Set("label", "foo").Labels()
 	barLabels := firemodel.NewLabelsBuilder().Set("label", "bar").Labels()

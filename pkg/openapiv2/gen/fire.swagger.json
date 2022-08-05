@@ -64,6 +64,41 @@
     }
   },
   "definitions": {
+    "commonv1Labels": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1LabelPair"
+          },
+          "title": "LabelPair is the key value pairs to identify the corresponding profile"
+        }
+      }
+    },
+    "ingesterv1LabelValuesResponse": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ingesterv1Labels": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1LabelPair"
+          },
+          "title": "LabelPair is the key value pairs to identify the corresponding profile"
+        }
+      }
+    },
     "ingesterv1Location": {
       "type": "object",
       "properties": {
@@ -116,6 +151,17 @@
         }
       }
     },
+    "ingesterv1SeriesResponse": {
+      "type": "object",
+      "properties": {
+        "labelsSet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/commonv1Labels"
+          }
+        }
+      }
+    },
     "protobufAny": {
       "type": "object",
       "properties": {
@@ -125,6 +171,17 @@
       },
       "additionalProperties": {}
     },
+    "querierv1LabelValuesResponse": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "querierv1ProfileTypesResponse": {
       "type": "object",
       "properties": {
@@ -132,6 +189,17 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/v1ProfileType"
+          }
+        }
+      }
+    },
+    "querierv1SeriesResponse": {
+      "type": "object",
+      "properties": {
+        "labelsSet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/commonv1Labels"
           }
         }
       }
@@ -151,6 +219,31 @@
           "items": {
             "$ref": "#/definitions/protobufAny"
           }
+        }
+      }
+    },
+    "v1FlameGraph": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1Level"
+          }
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "maxSelf": {
+          "type": "string",
+          "format": "int64"
         }
       }
     },
@@ -194,26 +287,15 @@
         }
       }
     },
-    "v1LabelValuesResponse": {
+    "v1Level": {
       "type": "object",
       "properties": {
-        "names": {
+        "values": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "format": "int64"
           }
-        }
-      }
-    },
-    "v1Labels": {
-      "type": "object",
-      "properties": {
-        "labels": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/v1LabelPair"
-          },
-          "title": "LabelPair is the key value pairs to identify the corresponding profile"
         }
       }
     },
@@ -278,6 +360,14 @@
       },
       "title": "RawSample is the set of bytes that correspond to a pprof profile"
     },
+    "v1SelectMergeStacktracesResponse": {
+      "type": "object",
+      "properties": {
+        "flamegraph": {
+          "$ref": "#/definitions/v1FlameGraph"
+        }
+      }
+    },
     "v1SelectProfilesRequest": {
       "type": "object",
       "properties": {
@@ -309,7 +399,7 @@
         "labelsets": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/v1Labels"
+            "$ref": "#/definitions/ingesterv1Labels"
           }
         }
       }

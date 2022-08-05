@@ -245,6 +245,28 @@ func TestHeadLabelValues(t *testing.T) {
 	require.Equal(t, []string{"bar", "foo"}, res.Msg.Names)
 }
 
+func TestHeadSeries(t *testing.T) {
+	head, err := NewHead(t.TempDir())
+	require.NoError(t, err)
+	fooLabels := firemodel.NewLabelsBuilder(nil).Set("namespace", "fire").Set("job", "foo").Labels()
+	barLabels := firemodel.NewLabelsBuilder(nil).Set("namespace", "fire").Set("job", "bar").Labels()
+	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), fooLabels...))
+	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New(), barLabels...))
+
+	expected := firemodel.NewLabelsBuilder(nil).
+		Set("namespace", "fire").
+		Set("job", "foo").
+		Set("__period_type__", "type").
+		Set("__period_unit__", "unit").
+		Set("__type__", "type").
+		Set("__unit__", "unit").
+		Set("__profile_type__", ":type:unit:type:unit").
+		Labels()
+	res, err := head.Series(context.Background(), connect.NewRequest(&ingestv1.SeriesRequest{Matchers: []string{`{job="foo"}`}}))
+	require.NoError(t, err)
+	require.Equal(t, []*commonv1.Labels{{Labels: expected}}, res.Msg.LabelsSet)
+}
+
 func TestHeadProfileTypes(t *testing.T) {
 	head, err := NewHead(t.TempDir())
 	require.NoError(t, err)
