@@ -107,18 +107,15 @@ const FlameGraph = () => {
 	}, [getBarX, levels, names, totalTicks]);
 
 	useEffect(() => {
-		const deltaDecodeLevels = () => {
-			if (levels) {
-				for (const level of levels) {
-					let prev = 0;
-					for (let i = 0; i < level.length; i += STEP_OFFSET) {
-						level[i] += prev;
-						prev = level[i] + level[i + 1];
-					}
+		if (levels) {
+			for (const level of levels) {
+				let prev = 0;
+				for (let i = 0; i < level.length; i += STEP_OFFSET) {
+					level[i] += prev;
+					prev = level[i] + level[i + 1];
 				}
 			}
 		}
-		deltaDecodeLevels();
 	}, [levels]);
 
 	useEffect(() => {
