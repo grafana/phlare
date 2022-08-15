@@ -7,7 +7,6 @@ type Props = {
 	setTopLevelIndex: (level: number) => void;
 	setRangeMin: (range: number) => void;
 	setRangeMax: (range: number) => void;
-
 };
 
 const FlameGraphHeader = ({setTopLevelIndex, setRangeMin, setRangeMax}: Props) => {

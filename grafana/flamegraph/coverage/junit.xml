@@ -1,3 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="0" failures="0" errors="0" time="0.001">
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="2.118">
+  <testsuite name="FlameGraph" errors="0" failures="0" skipped="0" timestamp="2022-08-15T19:28:35" time="1.677" tests="1">
+    <testcase classname="FlameGraph should render children" name="FlameGraph should render children" time="0.587">
+    </testcase>
+  </testsuite>
 </testsuites>
