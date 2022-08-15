@@ -22,7 +22,7 @@ import { useWindowSize } from 'react-use';
 
 import { colors, NO_DATA_COLOR, useStyles2 } from '@grafana/ui';
 
-import { BAR_BORDER_WIDTH, COLLAPSE_THRESHOLD, HIDE_THRESHOLD, LABEL_THRESHOLD, NAME_OFFSET, PIXELS_PER_LEVEL, STEP_OFFSET } from '../Constants';
+import { BAR_BORDER_WIDTH, COLLAPSE_THRESHOLD, HIDE_THRESHOLD, LABEL_THRESHOLD, NAME_OFFSET, PIXELS_PER_LEVEL, STEP_OFFSET } from '../constants';
 
 
 type Props = {
@@ -84,7 +84,7 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, setTopLevelIndex, 
         if (barX + (BAR_BORDER_WIDTH * 2) > graphRef.current!.clientWidth) {continue;}
         const name = names[level[barIndex + NAME_OFFSET]];
         let curBarTicks = level[barIndex + 1];
-                
+
         // merge very small blocks into big "collapsed" ones for performance
         const collapsed = curBarTicks * pixelsPerTick <= COLLAPSE_THRESHOLD;
         if (collapsed) {
