@@ -30,9 +30,9 @@ type Props = {
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
-  setTopLevelIndex: React.Dispatch<React.SetStateAction<number>>;
-  setRangeMin: React.Dispatch<React.SetStateAction<number>>;
-  setRangeMax: React.Dispatch<React.SetStateAction<number>>;
+  setTopLevelIndex: (level: number) => void;
+  setRangeMin: (range: number) => void;
+  setRangeMax: (range: number) => void;
 }
   
 const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, setTopLevelIndex, setRangeMin, setRangeMax}: Props) => {
