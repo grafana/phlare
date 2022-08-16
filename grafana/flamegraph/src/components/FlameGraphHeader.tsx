@@ -34,7 +34,6 @@ const FlameGraphHeader = ({setTopLevelIndex, setRangeMin, setRangeMax}: Props) =
 
 const getStyles = () => ({
   header: css`
-    label: joeyHeader;
     display: flow-root;
     padding: 20px 0;
     width: 100%;
