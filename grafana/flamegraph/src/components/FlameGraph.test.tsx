@@ -2,7 +2,6 @@ import { screen } from '@testing-library/dom';
 import { act, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React, { useState } from 'react';
-import 'jest-canvas-mock';
 
 import FlameGraph from './FlameGraph';
 import { data } from '../data';
@@ -31,20 +30,11 @@ describe('FlameGraph', () => {
     Object.defineProperty(HTMLDivElement.prototype, 'clientWidth', { value: 1600 })
     render(<FlameGraphWithProps/>);
 
-    // no text displayed if bar is below label threshold
-    await userEvent.click(screen.getByTestId('flamegraph').children[0]);
-    expect(screen.getByTestId('flamegraph').children[1].textContent).toEqual('');
-
     // first bar
     expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
     expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
 
     // first bar click goes nowhere
-    await userEvent.click(screen.getByTestId('flamegraph').children[0]);
-    expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
-    expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
-
-    // reset to show all bars
     await userEvent.click(screen.getByTestId('flamegraph').children[0]);
     expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
     expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
@@ -61,6 +51,13 @@ describe('FlameGraph', () => {
       expect(screen.getByTestId('flamegraph').children[35].textContent).toEqual('sync.(*Pool).Get');
     });
 
+    // reset to show all bars
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('flamegraph').children[0]);
+      expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+      expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
+    });
+
     // fourth bar click
     await act(async () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[0]); // reset to show all bars
@@ -68,6 +65,7 @@ describe('FlameGraph', () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[3]);
       expect(screen.getByTestId('flamegraph').children.length).toEqual(31)
       expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
+      expect(screen.getByTestId('flamegraph').children[1].textContent).toEqual('github.com/grafana/fire/pkg/agent.(*Target).start.func1');
     });
 
     // greyed out bar click that has no data-x, data-y attributes (bar is collapsed) so click goes nowhere
@@ -77,11 +75,14 @@ describe('FlameGraph', () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[41]);
       expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
       expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
+      expect(screen.getByTestId('flamegraph').children[2].textContent).toEqual('net/http.(*conn).serve');
+      expect(screen.getByTestId('flamegraph').children[41].textContent).toEqual('');
     });
 
     // clicking down the tree
     await act(async () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[0]);
+      expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
       expect(screen.getByTestId('flamegraph').children[4].textContent).toEqual('runtime.main');
       await userEvent.click(screen.getByTestId('flamegraph').children[4]);
       expect(screen.getByTestId('flamegraph').children.length).toEqual(130)
@@ -136,6 +137,7 @@ describe('FlameGraph', () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[0]);
       expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
       expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
+      expect(screen.getByTestId('flamegraph').children[1].textContent).toEqual('');
       expect(screen.getByTestId('flamegraph').children[2].textContent).toEqual('net/http.(*conn).serve');
       expect(screen.getByTestId('flamegraph').children[19].textContent).toEqual('runtime.gcMarkDone');
       expect(screen.getByTestId('flamegraph').children[20].textContent).toEqual('github.com/weaveworks/common/signals.(*Handler).Loop');
