@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="1" failures="0" errors="0" time="2.82">
-  <testsuite name="FlameGraph" errors="0" failures="0" skipped="0" timestamp="2022-08-16T07:45:46" time="2.177" tests="1">
-    <testcase classname="FlameGraph should render children" name="FlameGraph should render children" time="0.572">
-    </testcase>
-  </testsuite>
-</testsuites>
