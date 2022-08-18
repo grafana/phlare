@@ -11,6 +11,7 @@ describe('FlameGraph', () => {
     const [topLevelIndex, setTopLevelIndex] = useState(0);
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
+    const [query, setQuery] = useState('')
     const flameGraphData = data['flamebearer'];
 
     return (
@@ -19,9 +20,11 @@ describe('FlameGraph', () => {
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
         rangeMax={rangeMax}
+        query={query}
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
+        setQuery={setQuery}
       />
     );
   };

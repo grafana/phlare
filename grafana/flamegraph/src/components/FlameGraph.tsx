@@ -30,12 +30,14 @@ type Props = {
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
+	query: string,
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
+	setQuery: (query: string) => void;
 }
   
-const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, setTopLevelIndex, setRangeMin, setRangeMax}: Props) => {
+const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery}: Props) => {
   const styles = useStyles2(getStyles);
   const levels = data['levels'];
   const names = data['names'];
@@ -113,15 +115,21 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, setTopLevelIndex, 
         const intensity = Math.min(1, (curBarTicks / totalTicks) / (rangeMax - rangeMin));
         const h = 50 - (50 * intensity);
         const l = 65 + (7 * intensity);
-
+  
+        const queryResult = query && (name.toLowerCase().indexOf(query.toLowerCase()) >= 0) || false;
+        
         if (!collapsed) {
-          style['background'] = levelIndex > topLevelIndex - 1 ? getBarColor(h, l) : getBarColor(h, l + 15);
+          if (query) {
+            style['background'] = queryResult ? getBarColor(h, l) : colors[55];
+          } else {
+            style['background'] = levelIndex > topLevelIndex - 1 ? getBarColor(h, l) : getBarColor(h, l + 15);
+          }
           style['outline'] = BAR_BORDER_WIDTH + 'px solid ' + colors[55];
           bars.push(
             <div key={Math.random()} className={styles.bar} data-x={levelIndex} data-y={barIndex} style={style}>{width >= LABEL_THRESHOLD ? name : ''}</div>
           )
         } else {
-          style['background'] = NO_DATA_COLOR;
+          style['background'] = queryResult ? getBarColor(h, l) : NO_DATA_COLOR;;
           bars.push(
             <div key={Math.random()} className={styles.bar} style={style}></div>
           )
@@ -130,7 +138,7 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, setTopLevelIndex, 
     }
 
     setBars(bars);
-  }, [levels, getBarX, names, totalTicks, rangeMax, rangeMin, topLevelIndex, styles.bar]);
+  }, [levels, getBarX, names, query, totalTicks, rangeMax, rangeMin, topLevelIndex, styles.bar]);
 
   useEffect(() => {
     if (graphRef.current) {
