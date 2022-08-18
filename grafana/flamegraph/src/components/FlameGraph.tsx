@@ -50,8 +50,8 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevel
   
   // get the x coordinate of the bar i.e. where it starts on the vertical plane
   const getBarX = useCallback((accumulatedTicks: number, pixelsPerTick: number) => {
-    const rangeTicks = totalTicks * rangeMin;
-    return (accumulatedTicks - rangeTicks) * pixelsPerTick;
+    // rangeTicks = totalTicks * rangeMin;
+    return (accumulatedTicks - totalTicks * rangeMin) * pixelsPerTick;
   }, [rangeMin, totalTicks]);
 
   const getBarColor = (h: number, l: number) => {
@@ -73,26 +73,27 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevel
   const render = useCallback((pixelsPerTick: number) => {
     if (!levels) {return;}
     let bars = [];
+    let level, barX, curBarTicks, collapsed, width, name, queryResult, intensity, h, l;
+    let style: CSSProperties;
     
     const graph = graphRef.current!;
     graph.style.height = (PIXELS_PER_LEVEL * (levels.length)) + "px";
 
     for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
-      const level = levels[levelIndex];
+      level = levels[levelIndex];
 
       for (let barIndex = 0; barIndex < level.length; barIndex += STEP_OFFSET) {
-        const accumulatedBarTicks = level[barIndex];
-        let barX = getBarX(accumulatedBarTicks, pixelsPerTick);
+        // accumulatedBarTicks = level[barIndex];
+        barX = getBarX(level[barIndex], pixelsPerTick);
         if (barX + (BAR_BORDER_WIDTH * 2) > graphRef.current!.clientWidth) {continue;}
-        const name = names[level[barIndex + NAME_OFFSET]];
-        let curBarTicks = level[barIndex + 1];
+        curBarTicks = level[barIndex + 1];
 
         // merge very small blocks into big "collapsed" ones for performance
-        const collapsed = curBarTicks * pixelsPerTick <= COLLAPSE_THRESHOLD;
+        collapsed = curBarTicks * pixelsPerTick <= COLLAPSE_THRESHOLD;
         if (collapsed) {
           while (
             barIndex < level.length - STEP_OFFSET &&
-            accumulatedBarTicks + curBarTicks === level[barIndex + STEP_OFFSET] &&
+            level[barIndex] + curBarTicks === level[barIndex + STEP_OFFSET] &&
             level[barIndex + STEP_OFFSET + 1] * pixelsPerTick <= COLLAPSE_THRESHOLD
           ) {
             barIndex += STEP_OFFSET;
@@ -100,23 +101,24 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevel
           }
         }
 
-        let width = curBarTicks * pixelsPerTick;
+        width = curBarTicks * pixelsPerTick;
         if (barX < 0) {
           width = barX + width;
           barX = 0;
         }
         if (width < HIDE_THRESHOLD) {continue;}
 
-        const style: CSSProperties = {
+        style = {
           left: barX, top: levelIndex * PIXELS_PER_LEVEL, width: width
         }
 
         //  / (rangeMax - rangeMin) here so when you click a bar it will adjust the top (clicked)bar to the most 'intense' color
-        const intensity = Math.min(1, (curBarTicks / totalTicks) / (rangeMax - rangeMin));
-        const h = 50 - (50 * intensity);
-        const l = 65 + (7 * intensity);
-  
-        const queryResult = query && (name.toLowerCase().indexOf(query.toLowerCase()) >= 0) || false;
+        intensity = Math.min(1, (curBarTicks / totalTicks) / (rangeMax - rangeMin));
+        h = 50 - (50 * intensity);
+        l = 65 + (7 * intensity);
+
+        name = names[level[barIndex + NAME_OFFSET]];
+        queryResult = query && (name.toLowerCase().indexOf(query.toLowerCase()) >= 0) || false;
         
         if (!collapsed) {
           if (query) {
