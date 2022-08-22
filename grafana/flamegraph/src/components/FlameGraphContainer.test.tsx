@@ -2,7 +2,6 @@ import { screen } from '@testing-library/dom';
 import { render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React, { useState } from 'react';
-import '@testing-library/jest-dom';
 
 import FlameGraph from './FlameGraph';
 import FlameGraphHeader from './FlameGraphHeader';
