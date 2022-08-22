@@ -10,15 +10,13 @@ describe('FlameGraphHeader', () => {
     const [query, setQuery] = useState('');
 
     return (
-      <>
-        <FlameGraphHeader
-          query={query}
-          setQuery={setQuery}
-          setTopLevelIndex={jest.fn()}
-          setRangeMin={jest.fn()}
-          setRangeMax={jest.fn()}
-        />
-      </>
+      <FlameGraphHeader
+        query={query}
+        setQuery={setQuery}
+        setTopLevelIndex={jest.fn()}
+        setRangeMin={jest.fn()}
+        setRangeMax={jest.fn()}
+      />
     );
   };
 
