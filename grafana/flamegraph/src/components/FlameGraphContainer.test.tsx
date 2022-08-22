@@ -7,6 +7,7 @@ import '@testing-library/jest-dom';
 import FlameGraph from './FlameGraph';
 import FlameGraphHeader from './FlameGraphHeader';
 import { data } from '../data';
+import { MutableDataFrame } from '@grafana/data';
 
 describe('FlameGraphContainer', () => {
   const FlameGraphContainerWithProps = () => {
@@ -14,7 +15,17 @@ describe('FlameGraphContainer', () => {
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
     const [query, setQuery] = useState('')
-    const flameGraphData = data['flamebearer'];
+
+    const flameGraphData = new MutableDataFrame({
+      name: 'flamegraph',
+      fields: [{ name: 'levels', values: data.flamebearer.levels.map(l => JSON.stringify(l)) }],
+    });
+    flameGraphData.meta = {
+      custom: {
+        Names: data.flamebearer.names,
+        Total: data.flamebearer.numTicks,
+      },
+    };
 
     return (
       <>
