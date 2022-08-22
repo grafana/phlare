@@ -6,22 +6,22 @@ import { data } from '../data';
 
 const FlameGraphContainer = () => {
   const flameGraphData = data['flamebearer'];
-  const [topLevelIndex, setTopLevelIndex] = useState(0)
-  const [rangeMin, setRangeMin] = useState(0)
-  const [rangeMax, setRangeMax] = useState(1)
-  const [query, setQuery] = useState('')
+  const [topLevelIndex, setTopLevelIndex] = useState(0);
+  const [rangeMin, setRangeMin] = useState(0);
+  const [rangeMax, setRangeMax] = useState(1);
+  const [query, setQuery] = useState('');
 
   return (
     <>
-      <FlameGraphHeader 
-        setTopLevelIndex={setTopLevelIndex} 
-        setRangeMin={setRangeMin} 
+      <FlameGraphHeader
+        setTopLevelIndex={setTopLevelIndex}
+        setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
         query={query}
         setQuery={setQuery}
       />
 
-      <FlameGraph 
+      <FlameGraph
         data={flameGraphData}
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
@@ -33,6 +33,6 @@ const FlameGraphContainer = () => {
       />
     </>
   );
-}
+};
 
 export default FlameGraphContainer;
