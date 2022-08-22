@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 
 import FlameGraph from './FlameGraph';
 import FlameGraphHeader from './FlameGraphHeader';
-import { data3 } from '../data';
+import { data } from '../data';
 
 const FlameGraphContainer = () => {
-  const flameGraphData = data3['flamebearer'];
+  const flameGraphData = data['flamebearer'];
   const [topLevelIndex, setTopLevelIndex] = useState(0)
   const [rangeMin, setRangeMin] = useState(0)
   const [rangeMax, setRangeMax] = useState(1)
@@ -30,7 +30,6 @@ const FlameGraphContainer = () => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
-        setQuery={setQuery}
       />
     </>
   );

@@ -11,7 +11,7 @@ describe('FlameGraph', () => {
     const [topLevelIndex, setTopLevelIndex] = useState(0);
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
-    const [query, setQuery] = useState('')
+    const [query] = useState('')
     const flameGraphData = data['flamebearer'];
 
     return (
@@ -24,7 +24,6 @@ describe('FlameGraph', () => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
-        setQuery={setQuery}
       />
     );
   };
@@ -34,12 +33,12 @@ describe('FlameGraph', () => {
     render(<FlameGraphWithProps/>);
 
     // first bar
-    expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+    expect(screen.getByTestId('flamegraph').children.length).toEqual(338)
     expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
 
     // first bar click goes nowhere
     await userEvent.click(screen.getByTestId('flamegraph').children[0]);
-    expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+    expect(screen.getByTestId('flamegraph').children.length).toEqual(338)
     expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
     
     // second bar has no text (below label threshold)
@@ -57,7 +56,7 @@ describe('FlameGraph', () => {
     // reset to show all bars
     await act(async () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[0]);
-      expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+      expect(screen.getByTestId('flamegraph').children.length).toEqual(338)
       expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
     });
 
@@ -76,7 +75,7 @@ describe('FlameGraph', () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[0]);
       expect(screen.getByTestId('flamegraph').children[41].textContent).toEqual('');
       await userEvent.click(screen.getByTestId('flamegraph').children[41]);
-      expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+      expect(screen.getByTestId('flamegraph').children.length).toEqual(338)
       expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
       expect(screen.getByTestId('flamegraph').children[2].textContent).toEqual('net/http.(*conn).serve');
       expect(screen.getByTestId('flamegraph').children[41].textContent).toEqual('');
@@ -85,7 +84,7 @@ describe('FlameGraph', () => {
     // clicking down the tree
     await act(async () => {
       await userEvent.click(screen.getByTestId('flamegraph').children[0]);
-      expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+      expect(screen.getByTestId('flamegraph').children.length).toEqual(338)
       expect(screen.getByTestId('flamegraph').children[4].textContent).toEqual('runtime.main');
       await userEvent.click(screen.getByTestId('flamegraph').children[4]);
       expect(screen.getByTestId('flamegraph').children.length).toEqual(130)
@@ -138,7 +137,7 @@ describe('FlameGraph', () => {
       expect(screen.getByTestId('flamegraph').children[19].textContent).toEqual('github.com/mwitkow/go-conntrack.NewDialContextFunc');
       expect(screen.getByTestId('flamegraph').children[20].textContent).toEqual('runtime.doInit');
       await userEvent.click(screen.getByTestId('flamegraph').children[0]);
-      expect(screen.getByTestId('flamegraph').children.length).toEqual(336)
+      expect(screen.getByTestId('flamegraph').children.length).toEqual(338)
       expect(screen.getByTestId('flamegraph').children[0].textContent).toEqual('total');
       expect(screen.getByTestId('flamegraph').children[1].textContent).toEqual('');
       expect(screen.getByTestId('flamegraph').children[2].textContent).toEqual('net/http.(*conn).serve');

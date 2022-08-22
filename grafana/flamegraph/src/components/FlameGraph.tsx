@@ -20,7 +20,7 @@ import { css } from '@emotion/css';
 import React, { CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { useWindowSize } from 'react-use';
 
-import { colors, NO_DATA_COLOR, useStyles2 } from '@grafana/ui';
+import { colors, fuzzyMatch, useStyles2 } from '@grafana/ui';
 
 import { BAR_BORDER_WIDTH, COLLAPSE_THRESHOLD, HIDE_THRESHOLD, LABEL_THRESHOLD, NAME_OFFSET, PIXELS_PER_LEVEL, STEP_OFFSET } from '../constants';
 
@@ -34,10 +34,9 @@ type Props = {
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
-	setQuery: (query: string) => void;
 }
   
-const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery}: Props) => {
+const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevelIndex, setRangeMin, setRangeMax}: Props) => {
   const styles = useStyles2(getStyles);
   const levels = data['levels'];
   const names = data['names'];
@@ -118,7 +117,7 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevel
         l = 65 + (7 * intensity);
 
         name = names[level[barIndex + NAME_OFFSET]];
-        queryResult = query && (name.toLowerCase().indexOf(query.toLowerCase()) >= 0) || false;
+        queryResult = query && fuzzyMatch(name, query).found;
         
         if (!collapsed) {
           if (query) {
@@ -131,7 +130,7 @@ const FlameGraph = ({data, topLevelIndex, rangeMin, rangeMax, query, setTopLevel
             <div key={Math.random()} className={styles.bar} data-x={levelIndex} data-y={barIndex} style={style}>{width >= LABEL_THRESHOLD ? name : ''}</div>
           )
         } else {
-          style['background'] = queryResult ? getBarColor(h, l) : NO_DATA_COLOR;;
+          style['background'] = queryResult ? getBarColor(h, l) : colors[55];
           bars.push(
             <div key={Math.random()} className={styles.bar} style={style}></div>
           )
