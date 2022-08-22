@@ -16,7 +16,7 @@ describe('FlameGraph', () => {
 
     const flameGraphData = new MutableDataFrame({
       name: 'flamegraph',
-      fields: [{ name: 'levels', values: data.flamebearer.levels.map(l => JSON.stringify(l)) }],
+      fields: [{ name: 'levels', values: data.flamebearer.levels.map((l) => JSON.stringify(l)) }],
     });
     flameGraphData.meta = {
       custom: {

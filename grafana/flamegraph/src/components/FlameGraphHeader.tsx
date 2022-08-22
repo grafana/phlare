@@ -4,16 +4,16 @@ import React from 'react';
 import { Button, Input, useStyles } from '@grafana/ui';
 
 type Props = {
-  query: string,
+  query: string;
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
   setQuery: (query: string) => void;
 };
 
-const FlameGraphHeader = ({query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery}: Props) => {
+const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery }: Props) => {
   const styles = useStyles(getStyles);
-  
+
   return (
     <div className={styles.header}>
       <div className={styles.search}>
@@ -43,8 +43,8 @@ const FlameGraphHeader = ({query, setTopLevelIndex, setRangeMin, setRangeMax, se
         </Button>
       </div>
     </div>
-  )
-}
+  );
+};
 
 const getStyles = () => ({
   header: css`

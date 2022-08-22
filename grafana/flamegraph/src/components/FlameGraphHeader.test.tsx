@@ -7,11 +7,11 @@ import FlameGraphHeader from './FlameGraphHeader';
 
 describe('FlameGraphHeader', () => {
   const FlameGraphHeaderWithProps = () => {
-    const [query, setQuery] = useState('')
+    const [query, setQuery] = useState('');
 
     return (
       <>
-        <FlameGraphHeader 
+        <FlameGraphHeader
           query={query}
           setQuery={setQuery}
           setTopLevelIndex={jest.fn()}
@@ -21,12 +21,12 @@ describe('FlameGraphHeader', () => {
       </>
     );
   };
-  
+
   it('reset button should remove query text', async () => {
-    render(<FlameGraphHeaderWithProps/>);
+    render(<FlameGraphHeaderWithProps />);
     await userEvent.type(screen.getByPlaceholderText('Search..'), 'abc');
     expect(screen.getByDisplayValue('abc')).toBeInTheDocument();
-    await screen.getByRole('button', {name: /Reset/i}).click();
+    await screen.getByRole('button', { name: /Reset/i }).click();
     expect(screen.queryByDisplayValue('abc')).not.toBeInTheDocument();
   });
 });
