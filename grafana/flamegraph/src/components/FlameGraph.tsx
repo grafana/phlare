@@ -146,7 +146,7 @@ const FlameGraph = ({
           l = 65 + 7 * intensity;
 
           name = names[level[barIndex + NAME_OFFSET]];
-          queryResult = query && fuzzyMatch(name, query).found;
+          queryResult = query && fuzzyMatch(name.toLowerCase(), query.toLowerCase()).found;
 
           if (!collapsed) {
             if (query) {
