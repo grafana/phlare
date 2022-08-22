@@ -164,28 +164,47 @@ func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.Ser
 	}), nil
 }
 
+var profileIDsBatchSize = 512
+
 func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
 	profileType, err := firemodel.ParseProfileTypeSelector(req.Msg.ProfileTypeID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ic IngesterQueryClient) (*ingestv1.SelectProfilesResponse, error) {
-		_, err := ic.SelectProfiles(ctx, connect.NewRequest(&ingestv1.SelectProfilesRequest{
+	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ic IngesterQueryClient) (*connect.ServerStreamForClient[ingestv1.SelectProfilesResponse], error) {
+		return ic.SelectProfiles(ctx, connect.NewRequest(&ingestv1.SelectProfilesRequest{
 			LabelSelector: req.Msg.LabelSelector,
 			Start:         req.Msg.Start,
 			End:           req.Msg.End,
 			Type:          profileType,
 		}))
-		if err != nil {
-			return nil, err
-		}
-		return nil, nil
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// todo:
+	// - dedupe profiles
+	// - streaming profile ids them to ingester again for merging stacktraces.
+	// - merge together stracktraces samples merged from ingesters
+	it := NewStreamsProfileIterator(responses)
+	profileIdsByIngester := map[string][]string{}
+	for it.Next() {
+		// stream profile ids to ingester for merging stacktraces.
+		ingesterProfile := it.At()
+		if len(profileIdsByIngester[ingesterProfile.IngesterAddr]) >= profileIDsBatchSize {
+			// send the batch and reset it.
+			q.ingesterQuerier.ring.HasInstance(instanceID string)
+		}
+		profileIdsByIngester[ingesterProfile.IngesterAddr] = append(profileIdsByIngester[ingesterProfile.IngesterAddr], ingesterProfile.ID)
+
+	}
+
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+
 	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: NewFlameGraph(newTree(mergeStacktraces(dedupeProfiles(responses)))),
+		Flamegraph: NewFlameGraph(newTree(mergeStacktraces(dedupeProfiles(nil)))),
 	}), nil
 }
 

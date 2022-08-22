@@ -141,3 +141,7 @@ func (f *FireDB) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1
 func (f *FireDB) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
 	return f.head.LabelValues(ctx, req)
 }
+
+func (f *FireDB) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	return f.head.Series(ctx, req)
+}

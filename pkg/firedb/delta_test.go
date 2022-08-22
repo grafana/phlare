@@ -13,7 +13,7 @@ import (
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	firemodel "github.com/grafana/fire/pkg/model"
 	"github.com/grafana/fire/pkg/pprof"
-	"github.com/grafana/fire/pkg/pprof/testhelper"
+	"github.com/grafana/fire/pkg/testhelper"
 )
 
 func TestComputeDelta(t *testing.T) {
