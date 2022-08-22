@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 
 import FlameGraph from './FlameGraph';
 import { data } from '../data';
+import { MutableDataFrame } from '@grafana/data';
 
 describe('FlameGraph', () => {
   const FlameGraphWithProps = () => {
@@ -12,7 +13,17 @@ describe('FlameGraph', () => {
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
     const [query] = useState('');
-    const flameGraphData = data['flamebearer'];
+
+    const flameGraphData = new MutableDataFrame({
+      name: 'flamegraph',
+      fields: [{ name: 'levels', values: data.flamebearer.levels.map(l => JSON.stringify(l)) }],
+    });
+    flameGraphData.meta = {
+      custom: {
+        Names: data.flamebearer.names,
+        Total: data.flamebearer.numTicks,
+      },
+    };
 
     return (
       <FlameGraph

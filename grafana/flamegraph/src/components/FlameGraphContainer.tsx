@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
+import { DataFrame } from '@grafana/data';
 
 import FlameGraph from './FlameGraph';
 import FlameGraphHeader from './FlameGraphHeader';
-import { data } from '../data';
 
-const FlameGraphContainer = () => {
-  const flameGraphData = data['flamebearer'];
+type Props = {
+  data: DataFrame;
+};
+
+const FlameGraphContainer = (props: Props) => {
   const [topLevelIndex, setTopLevelIndex] = useState(0);
   const [rangeMin, setRangeMin] = useState(0);
   const [rangeMax, setRangeMax] = useState(1);
@@ -22,7 +25,7 @@ const FlameGraphContainer = () => {
       />
 
       <FlameGraph
-        data={flameGraphData}
+        data={props.data}
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
         rangeMax={rangeMax}

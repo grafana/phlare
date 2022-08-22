@@ -17,9 +17,10 @@
 // TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 // THIS SOFTWARE.
 import { css } from '@emotion/css';
-import React, { CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import React, { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWindowSize } from 'react-use';
 
+import { DataFrame } from '@grafana/data';
 import { colors, fuzzyMatch, useStyles2 } from '@grafana/ui';
 
 import {
@@ -33,7 +34,7 @@ import {
 } from '../constants';
 
 type Props = {
-  data: any;
+  data: DataFrame;
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
@@ -54,9 +55,10 @@ const FlameGraph = ({
   setRangeMax,
 }: Props) => {
   const styles = useStyles2(getStyles);
-  const levels = data['levels'];
-  const names = data['names'];
-  const totalTicks = data['numTicks'];
+
+  const levels = useLevels(data);
+  const names = data.meta!.custom!.Names;
+  const totalTicks = data.meta!.custom!.Total;
 
   const { width: windowWidth } = useWindowSize();
   const graphRef = useRef<HTMLDivElement>(null);
@@ -206,6 +208,20 @@ const FlameGraph = ({
     </div>
   );
 };
+
+function useLevels(frame: DataFrame) {
+  return useMemo(() => {
+    const levels: number[][] = [];
+    const levelsField = frame.fields.find((f) => f.name === 'levels');
+    if (!levelsField) {
+      return [];
+    }
+    for (let i = 0; i < levelsField.values.length; i++) {
+      levels.push(JSON.parse(levelsField.values.get(i)));
+    }
+    return levels;
+  }, [frame]);
+}
 
 const getStyles = () => ({
   graph: css`
