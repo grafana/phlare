@@ -67,7 +67,7 @@ const FlameGraph = ({
   // get the x coordinate of the bar i.e. where it starts on the vertical plane
   const getBarX = useCallback(
     (accumulatedTicks: number, pixelsPerTick: number) => {
-      // rangeTicks = totalTicks * rangeMin;
+      // totalTicks * rangeMin is essentially the range of ticks for this bar
       return (accumulatedTicks - totalTicks * rangeMin) * pixelsPerTick;
     },
     [rangeMin, totalTicks]
@@ -105,7 +105,7 @@ const FlameGraph = ({
         level = levels[levelIndex];
 
         for (let barIndex = 0; barIndex < level.length; barIndex += STEP_OFFSET) {
-          // accumulatedBarTicks = level[barIndex];
+          // level[barIndex] is the accumulated bar ticks
           barX = getBarX(level[barIndex], pixelsPerTick);
           if (barX + BAR_BORDER_WIDTH * 2 > graphRef.current!.clientWidth) {
             continue;
