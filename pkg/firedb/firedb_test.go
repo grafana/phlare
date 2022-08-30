@@ -8,14 +8,16 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/google/uuid"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/stretchr/testify/require"
+
 	v1 "github.com/grafana/fire/pkg/firedb/schemas/v1"
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	googlev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 	firemodel "github.com/grafana/fire/pkg/model"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/labels"
-	"github.com/stretchr/testify/require"
+	"github.com/grafana/fire/pkg/testhelper"
 )
 
 var cpuProfileGenerator = func(tsNano int64, t testing.TB) (*googlev1.Profile, string) {
@@ -43,21 +45,37 @@ func TestIteratorOrder(t *testing.T) {
 	end := time.Unix(0, int64(15*time.Second))
 	start := time.Unix(0, 0)
 	step := 15 * time.Second
-	ingestProfiles(t, db, cpuProfileGenerator, start.UnixNano(), end.UnixNano(), step, &commonv1.LabelPair{Name: "foo", Value: "a"})
+	ingestProfiles(t, db, cpuProfileGenerator, start.UnixNano(), end.UnixNano(), step, &commonv1.LabelPair{Name: "foo", Value: "z"})
 	ingestProfiles(t, db, cpuProfileGenerator, start.UnixNano(), end.UnixNano(), step, &commonv1.LabelPair{Name: "foo", Value: "b"})
 	require.NoError(t, db.Flush(context.Background()))
 	db.runBlockQuerierSync(context.Background())
 	require.NoError(t, db.blockQuerier.queriers[0].open(context.Background()))
-	actual := []int64{}
+	actualTs := []int64{}
+	actualLbs := []firemodel.Labels{}
 	err = db.blockQuerier.queriers[0].forMatchingProfiles(context.Background(),
 		[]*labels.Matcher{{Type: labels.MatchEqual, Name: firemodel.LabelNameProfileType, Value: "process_cpu:cpu:nanoseconds:cpu:nanoseconds"}},
 		func(lbs firemodel.Labels, _ model.Fingerprint, _ int, profile *v1.Profile) error {
 			t.Log(lbs.WithoutPrivateLabels())
 			t.Log(time.Unix(0, profile.TimeNanos))
-			actual = append(actual, profile.TimeNanos)
+			actualTs = append(actualTs, profile.TimeNanos)
+			actualLbs = append(actualLbs, lbs.WithoutPrivateLabels())
 			return nil
 		})
-	require.Equal(t, []int64{0, 0, int64(15 * time.Second), int64(15 * time.Second)}, actual)
+	require.Equal(t, []int64{0, 0, int64(15 * time.Second), int64(15 * time.Second)}, actualTs)
+	testhelper.EqualProto(t, []firemodel.Labels{
+		{
+			{Name: "foo", Value: "b"},
+		},
+		{
+			{Name: "foo", Value: "z"},
+		},
+		{
+			{Name: "foo", Value: "b"},
+		},
+		{
+			{Name: "foo", Value: "z"},
+		},
+	}, actualLbs)
 	require.NoError(t, err)
 }
 
