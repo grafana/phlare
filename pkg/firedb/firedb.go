@@ -14,12 +14,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/samber/lo"
-	"github.com/thanos-io/objstore/providers/filesystem"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/grafana/fire/pkg/firedb/block"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 	"github.com/grafana/fire/pkg/objstore"
+	"github.com/grafana/fire/pkg/objstore/filesystem"
 )
 
 type Config struct {
@@ -84,6 +84,7 @@ func (f *FireDB) LocalDataPath() string {
 func (f *FireDB) BlockMetas(ctx context.Context) ([]*block.Meta, error) {
 	return f.blockQuerier.BlockMetas(ctx)
 }
+
 func (f *FireDB) runBlockQuerierSync(ctx context.Context) {
 	if err := f.blockQuerier.Sync(ctx); err != nil {
 		level.Error(f.logger).Log("msg", "sync blocks failed", "err", err)
@@ -155,7 +156,6 @@ type profileSelecter interface {
 type profileSelecters []profileSelecter
 
 func (ps profileSelecters) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-
 	// first check which profileSelecters are in range before executing
 	ps = lo.Filter(ps, func(e profileSelecter, _ int) bool {
 		return e.InRange(
@@ -167,7 +167,7 @@ func (ps profileSelecters) SelectProfiles(ctx context.Context, req *connect.Requ
 	results := make([]*ingestv1.SelectProfilesResponse, len(ps))
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(16)
+	g.SetLimit(1)
 
 	query := func(ctx context.Context, pos int) {
 		g.Go(func() error {
@@ -235,7 +235,7 @@ func mergeSelectProfilesResponse(responses ...*ingestv1.SelectProfilesResponse) 
 		}
 
 		// rewrite existing function ids, by building a list of unique slices
-		var functionIDsUniq = make(map[*int32][]int32)
+		functionIDsUniq := make(map[*int32][]int32)
 		for _, profile := range resp.Profiles {
 			for _, sample := range profile.Stacktraces {
 				if len(sample.FunctionIds) == 0 {
@@ -262,7 +262,7 @@ func mergeSelectProfilesResponse(responses ...*ingestv1.SelectProfilesResponse) 
 }
 
 func (f *FireDB) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-	var sources = append(f.blockQuerier.profileSelecters(), f.Head())
+	sources := append(f.blockQuerier.profileSelecters(), f.Head())
 	return sources.SelectProfiles(ctx, req)
 }
 
