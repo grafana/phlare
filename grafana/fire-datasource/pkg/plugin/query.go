@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/bufbuild/connect-go"
 	querierv1 "github.com/grafana/fire/pkg/gen/querier/v1"
@@ -37,7 +39,7 @@ func (d *FireDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 		response.Error = err
 		return response
 	}
-	frame, err := responseToDataFrames(resp)
+	profileFrame, err := profileToDataFrame(resp)
 	if err != nil {
 		response.Error = err
 		return response
@@ -52,13 +54,8 @@ func (d *FireDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 			Namespace: pCtx.DataSourceInstanceSettings.UID,
 			Path:      "stream",
 		}
-		frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
+		profileFrame.SetMeta(&data.FrameMeta{Channel: channel.String()})
 	}
-
-	// add the frames to the response.
-	response.Frames = append(response.Frames, frame)
-
-	log.DefaultLogger.Debug("Querying SelectSeries()", "queryModel", qm)
 
 	seriesResp, err := d.client.SelectSeries(ctx, connect.NewRequest(&querierv1.SelectSeriesRequest{
 		ProfileTypeID: qm.ProfileTypeID,
@@ -73,8 +70,11 @@ func (d *FireDatasource) query(ctx context.Context, pCtx backend.PluginContext, 
 		response.Error = err
 		return response
 	}
-	// todo remove me and add the series to the frame.
-	log.DefaultLogger.Debug("Series", seriesResp.Msg.Series)
+
+	// add the frames to the response.
+	response.Frames = append(response.Frames, seriesToDataFrame(seriesResp, qm.ProfileTypeID))
+	response.Frames = append(response.Frames, profileFrame)
+
 	return response
 }
 
@@ -95,13 +95,13 @@ type CustomMeta struct {
 	MaxSelf int64
 }
 
-// responseToDataFrames turns fire response to data.Frame. At this point this transform is very simple, each
+// profileToDataFrame turns fire profile response to data.Frame. At this point this transform is very simple, each
 // level being encoded as json string and set as a single value in a single column. Reason for this is that each level
 // can have variable number of values but in data.Frame each column needs to have the same number of values.
 // In addition, Names, Total, MaxSelf is added to Meta.Custom which may not be the best practice so needs to be
 // evaluated later on
-func responseToDataFrames(resp *connect.Response[querierv1.SelectMergeStacktracesResponse]) (*data.Frame, error) {
-	frame := data.NewFrame("response")
+func profileToDataFrame(resp *connect.Response[querierv1.SelectMergeStacktracesResponse]) (*data.Frame, error) {
+	frame := data.NewFrame("profile")
 	frame.Meta = &data.FrameMeta{PreferredVisualization: "profile"}
 
 	levelsField := data.NewField("levels", nil, []string{})
@@ -120,4 +120,38 @@ func responseToDataFrames(resp *connect.Response[querierv1.SelectMergeStacktrace
 		MaxSelf: resp.Msg.Flamegraph.MaxSelf,
 	}
 	return frame, nil
+}
+
+func seriesToDataFrame(seriesResp *connect.Response[querierv1.SelectSeriesResponse], profileTypeID string) *data.Frame {
+	frame := data.NewFrame("series")
+	frame.Meta = &data.FrameMeta{PreferredVisualization: "graph"}
+
+	fields := data.Fields{}
+	timeField := data.NewField("time", nil, []time.Time{})
+	fields = append(fields, timeField)
+
+	for seriesIndex, series := range seriesResp.Msg.Series {
+		label := ""
+		if len(series.Labels) > 0 {
+			label = series.Labels[0].Name
+		} else {
+			parts := strings.Split(profileTypeID, ":")
+			if len(parts) == 5 {
+				label = parts[3]
+			}
+		}
+		valueField := data.NewField(label, nil, []float64{})
+
+		for _, point := range series.Points {
+			if seriesIndex == 0 {
+				timeField.Append(time.UnixMilli(point.T))
+			}
+			valueField.Append(point.V)
+		}
+
+		fields = append(fields, valueField)
+	}
+
+	frame.Fields = fields
+	return frame
 }
