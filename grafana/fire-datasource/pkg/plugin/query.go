@@ -130,7 +130,7 @@ func seriesToDataFrame(seriesResp *connect.Response[querierv1.SelectSeriesRespon
 	timeField := data.NewField("time", nil, []time.Time{})
 	fields = append(fields, timeField)
 
-	for seriesIndex, series := range seriesResp.Msg.Series {
+	for index, series := range seriesResp.Msg.Series {
 		label := ""
 		if len(series.Labels) > 0 {
 			label = series.Labels[0].Name
@@ -143,7 +143,7 @@ func seriesToDataFrame(seriesResp *connect.Response[querierv1.SelectSeriesRespon
 		valueField := data.NewField(label, nil, []float64{})
 
 		for _, point := range series.Points {
-			if seriesIndex == 0 {
+			if index == 0 {
 				timeField.Append(time.UnixMilli(point.T))
 			}
 			valueField.Append(point.V)
