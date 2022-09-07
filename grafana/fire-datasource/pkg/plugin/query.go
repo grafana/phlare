@@ -137,7 +137,7 @@ func seriesToDataFrame(seriesResp *connect.Response[querierv1.SelectSeriesRespon
 		} else {
 			parts := strings.Split(profileTypeID, ":")
 			if len(parts) == 5 {
-				label = parts[3]
+				label = parts[1] // sample type e.g. cpu, goroutine, alloc_objects
 			}
 		}
 		valueField := data.NewField(label, nil, []float64{})
