@@ -437,11 +437,11 @@ func (b *singleBlockQuerier) forMatchingProfiles(ctx context.Context, matchers [
 				panic("label hash conflict")
 			}
 		} else {
-			lbls = make(firemodel.Labels, 0, 6)
 			lblsPerRef[int64(chks[0].SeriesIndex)] = labelsInfo{
 				fp:  model.Fingerprint(fp),
 				lbs: lbls,
 			}
+			lbls = make(firemodel.Labels, 0, 6)
 		}
 	}
 
