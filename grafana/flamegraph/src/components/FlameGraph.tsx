@@ -34,7 +34,7 @@ import {
   STEP_OFFSET,
 } from '../constants';
 import FlameGraphTooltip from './FlameGraphTooltip';
-import { SampleUnit } from './types';
+import { TooltipData, SampleUnit } from './types';
 
 type Props = {
   data: DataFrame;
@@ -69,8 +69,8 @@ const FlameGraph = ({
   const { width: windowWidth } = useWindowSize();
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [tooltip, setTooltip] = useState([''])
-  const [showTooltip, setShowTooltip] = useState(false)
+  const [tooltipData, setTooltipData] = useState<TooltipData>();
+  const [showTooltip, setShowTooltip] = useState(false) // can prob remove this and just show based on there being content in tooltip
 
   // get the x coordinate of the bar i.e. where it starts on the vertical plane
   const getBarX = useCallback(
@@ -210,14 +210,14 @@ const FlameGraph = ({
     }
   }, [getBarX, levels, names, query, rangeMax, rangeMin, topLevelIndex, totalTicks]);
 
-  const getProfileMetrics = useCallback((samples: number) => {
-    const unit = profileTypeId.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+  const getTooltipData = useCallback((samples: number): Omit<TooltipData, 'name' | 'percentValue' | 'samples'> => {
+    const sampleUnit = profileTypeId.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
 
-    switch (unit) {
+    switch (sampleUnit) {
       // memory:alloc_space:bytes:space:bytes
       // memory:inuse_space:bytes:space:bytes
       case SampleUnit.Bytes:
-        return getMetrics(
+        return getTooltipDataForUnit(
           samples, 
           [
             { divider: 1024, suffix: 'KB'},
@@ -236,7 +236,7 @@ const FlameGraph = ({
       // mutex:contentions:count:contentions:count
       // process_cpu:samples:count:cpu:nanoseconds
       case SampleUnit.Count:
-        return getMetrics(
+        return getTooltipDataForUnit(
           samples, 
           [
             { divider: 1000, suffix: 'K'},
@@ -255,7 +255,7 @@ const FlameGraph = ({
         // convert nanoseconds to seconds
         samples = samples / 1000000000;
         
-        return getMetrics(
+        return getTooltipDataForUnit(
           samples, 
           [
             { divider: 60, suffix: 'minutes'},
@@ -278,8 +278,8 @@ const FlameGraph = ({
     }
   }, [profileTypeId]);
 
-  const getMetrics = (samples: number, units: any, title: string, subtitle: string, baseSuffix = '') => {
-    let unitVal: number | string;
+  const getTooltipDataForUnit = (samples: number, units: any, title: string, subtitle: string, baseSuffix = ''): Omit<TooltipData, 'name' | 'percentValue' | 'samples'> => {
+    let value: number | string;
     let suffix = '';
 
     for (let unit of units) {
@@ -291,13 +291,13 @@ const FlameGraph = ({
       }
     }
 
-    unitVal = suffix ? samples.toFixed(2) : samples + ' ' + baseSuffix;
-    unitVal += ' ' + suffix;
+    value = suffix ? samples.toFixed(2) : samples + ' ' + baseSuffix;
+    value += ' ' + suffix;
 
     return {
       percentTitle: title,
       unitTitle: subtitle,
-      unitValue: unitVal
+      unitValue: value
     }
   }
 
@@ -327,13 +327,18 @@ const FlameGraph = ({
             if (barIndex !== -1) {
               const name = `${names[levels[levelIndex][barIndex + NAME_OFFSET]]}`;
               const curBarTicks = levels[levelIndex][barIndex + 1];
-              const ratio = curBarTicks / totalTicks;
-              const percent = Math.round(10000 * ratio) / 100;
-              const metrics = getProfileMetrics(curBarTicks); 
+              const percent = Math.round(10000 * (curBarTicks / totalTicks)) / 100;
+              const tooltipData = getTooltipData(curBarTicks); 
 
               tooltipRef.current.style.left = (e.clientX + 10) + "px";
               tooltipRef.current.style.top = (e.clientY + 40) + "px";
-              setTooltip([name, `${metrics.percentTitle}: ${percent}`, `${metrics.unitTitle}: ${metrics.unitValue}`, `${curBarTicks}`]);
+              
+              setTooltipData({
+                ...tooltipData,
+                name: name,
+                percentValue: percent,
+                samples: curBarTicks
+              });
               setShowTooltip(true);
             }
           }
@@ -358,7 +363,7 @@ const FlameGraph = ({
   }, [
     render,
     convertPixelCoordinatesToBarCoordinates,
-    getProfileMetrics,
+    getTooltipData,
     levels,
     names,
     rangeMin,
@@ -378,7 +383,7 @@ const FlameGraph = ({
       
       <FlameGraphTooltip
         tooltipRef={tooltipRef}
-        tooltip={tooltip}
+        tooltipData={tooltipData!}
         showTooltip={showTooltip}
       />
     </>
