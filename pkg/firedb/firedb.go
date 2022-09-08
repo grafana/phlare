@@ -12,16 +12,17 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/services"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/samber/lo"
-	"github.com/thanos-io/objstore/providers/filesystem"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/grafana/fire/pkg/firedb/block"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
-	"github.com/grafana/fire/pkg/objstore"
+	"github.com/grafana/fire/pkg/objstore/client"
+	"github.com/grafana/fire/pkg/objstore/providers/filesystem"
 )
 
 type Config struct {
@@ -64,7 +65,11 @@ func New(cfg *Config, logger log.Logger, reg prometheus.Registerer) (*FireDB, er
 	}
 	f.Service = services.NewBasicService(f.starting, f.running, f.stopping)
 
-	bucketReader, err := filesystem.NewBucket(cfg.DataPath)
+	fs, err := filesystem.NewBucket(cfg.DataPath)
+	if err != nil {
+		return nil, err
+	}
+	bucketReader, err := client.ReaderAtBucket(pathLocal, fs, prometheus.WrapRegistererWithPrefix("firedb", reg))
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,7 @@ func New(cfg *Config, logger log.Logger, reg prometheus.Registerer) (*FireDB, er
 		return nil, fmt.Errorf("mkdir %s: %w", f.LocalDataPath(), err)
 	}
 
-	f.blockQuerier = NewBlockQuerier(logger, objstore.BucketReaderWithPrefix(bucketReader, pathLocal))
+	f.blockQuerier = NewBlockQuerier(logger, bucketReader)
 
 	// do an initial querier sync
 	ctx := context.Background()
@@ -145,7 +150,14 @@ func (f *FireDB) running(ctx context.Context) error {
 }
 
 func (f *FireDB) stopping(_ error) error {
-	return f.head.Flush(context.TODO())
+	errs := multierror.New()
+	if err := f.blockQuerier.Close(); err != nil {
+		errs.Add(err)
+	}
+	if err := f.Close(context.Background()); err != nil {
+		errs.Add(err)
+	}
+	return errs.Err()
 }
 
 func (f *FireDB) Head() *Head {
@@ -173,6 +185,7 @@ func (ps profileSelecters) SelectProfiles(ctx context.Context, req *connect.Requ
 	results := make([]*ingestv1.SelectProfilesResponse, len(ps))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// todo not sure this help on disk IO
 	g.SetLimit(16)
 
 	query := func(ctx context.Context, pos int) {
@@ -294,4 +307,8 @@ func (f *FireDB) Flush(ctx context.Context) error {
 		return nil
 	}
 	return oldHead.Flush(ctx)
+}
+
+func (f *FireDB) Close(ctx context.Context) error {
+	return f.head.Flush(ctx)
 }

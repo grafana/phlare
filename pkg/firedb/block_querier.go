@@ -12,6 +12,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/status"
+	"github.com/google/uuid"
+	"github.com/grafana/dskit/multierror"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -21,33 +23,36 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
-	"github.com/thanos-io/objstore"
+	"golang.org/x/exp/constraints"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 
 	"github.com/grafana/fire/pkg/firedb/block"
+	query "github.com/grafana/fire/pkg/firedb/query"
 	schemav1 "github.com/grafana/fire/pkg/firedb/schemas/v1"
 	"github.com/grafana/fire/pkg/firedb/tsdb/index"
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/iter"
 	firemodel "github.com/grafana/fire/pkg/model"
 	fireobjstore "github.com/grafana/fire/pkg/objstore"
 )
 
 type tableReader interface {
 	open(ctx context.Context, bucketReader fireobjstore.BucketReader) error
+	io.Closer
 }
 
 type BlockQuerier struct {
 	logger log.Logger
 
-	bucketReader objstore.BucketReader
+	bucketReader fireobjstore.BucketReader
 
 	queriers     []*singleBlockQuerier
 	queriersLock sync.RWMutex
 }
 
-func NewBlockQuerier(logger log.Logger, bucketReader objstore.BucketReader) *BlockQuerier {
+func NewBlockQuerier(logger log.Logger, bucketReader fireobjstore.BucketReader) *BlockQuerier {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -150,7 +155,6 @@ func (b *BlockQuerier) BlockMetas(ctx context.Context) (metas []*block.Meta, _ e
 // Sync gradually scans the available blcoks. If there are any changes to the
 // last run it will Open/Close new/no longer existing ones.
 func (b *BlockQuerier) Sync(ctx context.Context) error {
-
 	observedMetas, err := b.BlockMetas(ctx)
 	if err != nil {
 		return err
@@ -160,9 +164,9 @@ func (b *BlockQuerier) Sync(ctx context.Context) error {
 	b.queriersLock.Lock()
 
 	// build lookup map
-	var (
-		querierByULID = make(map[ulid.ULID]*singleBlockQuerier)
-	)
+
+	querierByULID := make(map[ulid.ULID]*singleBlockQuerier)
+
 	for pos := range b.queriers {
 		querierByULID[b.queriers[pos].meta.ULID] = b.queriers[pos]
 	}
@@ -198,6 +202,19 @@ func (b *BlockQuerier) Sync(ctx context.Context) error {
 	return nil
 }
 
+func (b *BlockQuerier) Close() error {
+	b.queriersLock.Lock()
+	defer b.queriersLock.Unlock()
+
+	errs := multierror.New()
+	for pos := range b.queriers {
+		if err := b.queriers[pos].Close(); err != nil {
+			errs.Add(err)
+		}
+	}
+	return errs.Err()
+}
+
 type TableInfo struct {
 	Rows      uint64
 	RowGroups uint64
@@ -227,7 +244,7 @@ func (b *BlockQuerier) SelectProfiles(ctx context.Context, req *connect.Request[
 }
 
 func (b *BlockQuerier) profileSelecters() profileSelecters {
-	var result = make(profileSelecters, len(b.queriers))
+	result := make(profileSelecters, len(b.queriers))
 	for pos := range result {
 		result[pos] = b.queriers[pos]
 	}
@@ -280,13 +297,21 @@ func newSingleBlockQuerierFromMeta(logger log.Logger, bucketReader fireobjstore.
 func (b *singleBlockQuerier) Close() error {
 	b.openLock.Lock()
 	defer b.openLock.Unlock()
-
+	errs := multierror.New()
 	if b.index != nil {
 		err := b.index.Close()
 		b.index = nil
-		return err
+		if err != nil {
+			errs.Add(err)
+		}
 	}
-	return nil
+
+	for _, t := range b.tables {
+		if err := t.Close(); err != nil {
+			errs.Add(err)
+		}
+	}
+	return errs.Err()
 }
 
 func (b *singleBlockQuerier) InRange(start, end model.Time) bool {
@@ -328,20 +353,76 @@ func (b *singleBlockQuerier) reconstructMeta(ctx context.Context) (*block.Meta, 
 	}, nil
 }
 
-func (b *singleBlockQuerier) forMatchingProfiles(ctx context.Context, matchers []*labels.Matcher,
-	fn func(lbs firemodel.Labels, fp model.Fingerprint, sampleIdx int, profile *schemav1.Profile) error,
-) error {
+type mapPredicate[K constraints.Integer, V any] struct {
+	min K
+	max K
+	m   map[K]V
+}
 
+func newMapPredicate[K constraints.Integer, V any](m map[K]V) query.Predicate {
+	p := &mapPredicate[K, V]{
+		m: m,
+	}
+
+	first := true
+	for k := range m {
+		if first || p.max < k {
+			p.max = k
+		}
+		if first || p.min > k {
+			p.min = k
+		}
+		first = false
+	}
+
+	return p
+}
+
+func (m *mapPredicate[K, V]) KeepColumnChunk(c parquet.ColumnChunk) bool {
+	if ci := c.ColumnIndex(); ci != nil {
+		for i := 0; i < ci.NumPages(); i++ {
+			min := K(ci.MinValue(i).Int64())
+			max := K(ci.MaxValue(i).Int64())
+			if m.max >= min && m.min <= max {
+				return true
+			}
+		}
+		return false
+	}
+
+	return true
+}
+
+func (m *mapPredicate[K, V]) KeepPage(page parquet.Page) bool {
+	if min, max, ok := page.Bounds(); ok {
+		return m.max >= K(min.Int64()) && m.min <= K(max.Int64())
+	}
+	return true
+}
+
+func (m *mapPredicate[K, V]) KeepValue(v parquet.Value) bool {
+	_, exists := m.m[K(v.Int64())]
+	return exists
+}
+
+func (b *singleBlockQuerier) forMatchingProfiles(ctx context.Context, matchers []*labels.Matcher, start, end model.Time,
+	fn func(lbs firemodel.Labels, fp model.Fingerprint, profile *schemav1.Profile, samples []schemav1.Sample) error,
+) error {
 	postings, err := PostingsForMatchers(b.index, nil, matchers...)
 	if err != nil {
 		return err
 	}
 
+	type labelsInfo struct {
+		fp  model.Fingerprint
+		lbs firemodel.Labels
+	}
+
 	var (
-		lbls        = make(firemodel.Labels, 0, 6)
-		chks        = make([]index.ChunkMeta, 1)
-		lblsPerFP   = make(map[model.Fingerprint]firemodel.Labels)
-		fpPerRowNum = make(map[int64]model.Fingerprint)
+		lbls = make(firemodel.Labels, 0, 6)
+		chks = make([]index.ChunkMeta, 1)
+		// todo we might want to change the schema to have SeriesRef as uint32
+		lblsPerRef = make(map[int64]labelsInfo)
 	)
 
 	// get all relevant labels/fingerprints
@@ -350,56 +431,97 @@ func (b *singleBlockQuerier) forMatchingProfiles(ctx context.Context, matchers [
 		if err != nil {
 			return err
 		}
-		if lblsExisting, exists := lblsPerFP[model.Fingerprint(fp)]; exists {
+		if lblsExisting, exists := lblsPerRef[int64(chks[0].SeriesIndex)]; exists {
 			// Compare to check if there is a clash
-			if firemodel.CompareLabelPairs(lbls, lblsExisting) != 0 {
+			if firemodel.CompareLabelPairs(lbls, lblsExisting.lbs) != 0 {
 				panic("label hash conflict")
 			}
 		} else {
-			lblsPerFP[model.Fingerprint(fp)] = lbls
 			lbls = make(firemodel.Labels, 0, 6)
+			lblsPerRef[int64(chks[0].SeriesIndex)] = labelsInfo{
+				fp:  model.Fingerprint(fp),
+				lbs: lbls,
+			}
 		}
 	}
 
-	// get all relevant profile row nums
-	rowNums := b.profiles.rowNumsFor(
-		ctx,
-		repeatedColumnMatches("SeriesRefs", func(rowNum int64, v *parquet.Value) bool {
-			if v.Kind() != parquet.Int64 {
-				panic(fmt.Sprintf("unexpected kind: %s", v.GoString()))
-			}
-
-			_, ok := lblsPerFP[model.Fingerprint(v.Int64())]
-			if ok {
-				fpPerRowNum[rowNum] = model.Fingerprint(v.Int64())
-			}
-			return ok
+	rowNums := query.NewJoinIterator(
+		0,
+		[]query.Iterator{
+			b.profiles.columnIter(ctx, "SeriesRefs.list.element", newMapPredicate(lblsPerRef), "SeriesRefs"),                     // get all profiles with matching seriesRef
+			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(start.UnixNano(), end.UnixNano()), "TimeNanos"), // get all profiles within the time window
+			b.profiles.columnIter(ctx, "ID", nil, "ID"),                                                                          // get all IDs
+			// TODO: Provide option to ignore samples
+			b.profiles.columnIter(ctx, "Samples.list.element.StacktraceID", nil, "StacktraceIDs"),
+			b.profiles.columnIter(ctx, "Samples.list.element.Values.list.element", nil, "SampleValues"),
 		},
-		),
+		nil,
+	)
+
+	var (
+		samples       reconstructSamples
+		profile       schemav1.Profile
+		schemaSamples []schemav1.Sample
+		series        [][]parquet.Value
 	)
 
 	// retrieve the full profiles
-	profiles := b.profiles.retrieveRows(ctx, rowNums)
-	for {
-		p, ok := profiles.Next()
-		if !ok {
-			if err := profiles.Err(); err != nil {
+	for rowNums.Next() {
+		result := rowNums.At()
+
+		series = result.Columns(series, "ID", "TimeNanos", "SeriesRefs")
+		var err error
+		profile.ID, err = uuid.FromBytes(series[0][0].ByteArray())
+		if err != nil {
+			return err
+		}
+		profile.TimeNanos = series[1][0].Int64()
+
+		samples.buffer = result.Columns(samples.buffer, "StacktraceIDs", "SampleValues")
+
+		for pos, v := range series[2] {
+			labelsInfo, matched := lblsPerRef[v.Int64()]
+			if !matched {
+				continue
+			}
+
+			schemaSamples = samples.samples(pos, schemaSamples)
+
+			if err := fn(labelsInfo.lbs, labelsInfo.fp, &profile, schemaSamples); err != nil {
 				return err
 			}
-			break
-		}
 
-		for i, seriesRef := range p.Result.SeriesRefs {
-			fp := fpPerRowNum[p.RowNum]
-			if seriesRef == fp {
-				if err := fn(lblsPerFP[fp], fp, i, p.Result); err != nil {
-					return err
-				}
-			}
 		}
 	}
 
-	return nil
+	return rowNums.Err()
+}
+
+type reconstructSamples struct {
+	buffer [][]parquet.Value
+}
+
+// TODO: This approach is way too simple and might fail if there any null values
+func (s *reconstructSamples) samples(idx int, samples []schemav1.Sample) []schemav1.Sample {
+	bufferStacktraceIDs := s.buffer[0]
+	bufferValues := s.buffer[1]
+
+	if cap(samples) < len(bufferStacktraceIDs) {
+		samples = make([]schemav1.Sample, len(bufferStacktraceIDs))
+	}
+	samples = samples[:len(bufferStacktraceIDs)]
+
+	valuesPerSample := len(bufferValues) / len(bufferStacktraceIDs)
+	for pos := range samples {
+		samples[pos].StacktraceID = bufferStacktraceIDs[pos].Uint64()
+		if cap(samples[pos].Values) != 1 {
+			samples[pos].Values = make([]int64, 1)
+		} else {
+			samples[pos].Values = samples[pos].Values[:1]
+		}
+		samples[pos].Values[0] = bufferValues[(valuesPerSample*pos)+idx].Int64()
+	}
+	return samples
 }
 
 type uniqueIDs[T any] map[int64]T
@@ -408,12 +530,12 @@ func newUniqueIDs[T any]() uniqueIDs[T] {
 	return uniqueIDs[T](make(map[int64]T))
 }
 
-func (m uniqueIDs[T]) iterator() Iterator[int64] {
+func (m uniqueIDs[T]) iterator() iter.Iterator[int64] {
 	ids := lo.Keys(m)
 	sort.Slice(ids, func(i, j int) bool {
 		return ids[i] < ids[j]
 	})
-	return NewSliceIterator(ids)
+	return iter.NewSliceIterator(ids)
 }
 
 func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
@@ -431,6 +553,9 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "BlockQuerier - SelectProfiles")
 	defer func() {
 		sp.LogFields(
+			otlog.String("block_ulid", b.meta.ULID.String()),
+			otlog.String("block_min", b.meta.MinTime.Time().String()),
+			otlog.String("block_max", b.meta.MaxTime.Time().String()),
 			otlog.Int64("total_samples", totalSamples),
 			otlog.Int64("total_locations", totalLocations),
 			otlog.Int64("total_profiles", totalProfiles),
@@ -451,7 +576,7 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 		locationsByStacktraceID         = map[int64][]int64{}
 	)
 
-	if err := b.forMatchingProfiles(ctx, selectors, func(lbs firemodel.Labels, _ model.Fingerprint, idx int, profile *schemav1.Profile) error {
+	if err := b.forMatchingProfiles(ctx, selectors, model.Time(req.Msg.Start), model.Time(req.Msg.End), func(lbs firemodel.Labels, _ model.Fingerprint, profile *schemav1.Profile, samples []schemav1.Sample) error {
 		ts := int64(model.TimeFromUnixNano(profile.TimeNanos))
 		// if the timestamp is not matching we skip this profile.
 		if req.Msg.Start > ts || ts > req.Msg.End {
@@ -464,18 +589,18 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 			Type:        req.Msg.Type,
 			Labels:      lbs,
 			Timestamp:   ts,
-			Stacktraces: make([]*ingestv1.StacktraceSample, 0, len(profile.Samples)),
+			Stacktraces: make([]*ingestv1.StacktraceSample, 0, len(samples)),
 		}
-		totalSamples += int64(len(profile.Samples))
+		totalSamples += int64(len(samples))
 
-		for _, s := range profile.Samples {
-			if s.Values[idx] == 0 {
+		for _, s := range samples {
+			if s.Values[0] == 0 {
 				totalSamples--
 				continue
 			}
 
 			sample := &ingestv1.StacktraceSample{
-				Value: s.Values[idx],
+				Value: s.Values[0],
 			}
 
 			p.Stacktraces = append(p.Stacktraces, sample)
@@ -487,7 +612,6 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 		}
 
 		return nil
-
 	}); err != nil {
 		return nil, err
 	}
@@ -500,16 +624,10 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 
 	var (
 		locationIDs = newUniqueIDs[struct{}]()
-		stacktraces = b.stacktraces.retrieveRows(ctx, NewSliceIterator(stacktraceIDs))
+		stacktraces = b.stacktraces.retrieveRows(ctx, iter.NewSliceIterator(stacktraceIDs))
 	)
-	for {
-		s, ok := stacktraces.Next()
-		if !ok {
-			if err := stacktraces.Err(); err != nil {
-				return nil, err
-			}
-			break
-		}
+	for stacktraces.Next() {
+		s := stacktraces.At()
 
 		// update locations metrics
 		totalLocations += int64(len(s.Result.LocationIDs))
@@ -520,24 +638,24 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 			locationIDs[int64(locationID)] = struct{}{}
 		}
 	}
+	if err := stacktraces.Err(); err != nil {
+		return nil, err
+	}
 
 	// gather locations
 	var (
 		locationIDsByFunctionID = newUniqueIDs[[]int64]()
 		locations               = b.locations.retrieveRows(ctx, locationIDs.iterator())
 	)
-	for {
-		s, ok := locations.Next()
-		if !ok {
-			if err := locations.Err(); err != nil {
-				return nil, err
-			}
-			break
-		}
+	for locations.Next() {
+		s := locations.At()
 
 		for _, line := range s.Result.Line {
 			locationIDsByFunctionID[int64(line.FunctionId)] = append(locationIDsByFunctionID[int64(line.FunctionId)], s.RowNum)
 		}
+	}
+	if err := locations.Err(); err != nil {
+		return nil, err
 	}
 
 	// gather functions
@@ -545,16 +663,13 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 		functionIDsByStringID = newUniqueIDs[[]int64]()
 		functions             = b.functions.retrieveRows(ctx, locationIDsByFunctionID.iterator())
 	)
-	for {
-		s, ok := functions.Next()
-		if !ok {
-			if err := functions.Err(); err != nil {
-				return nil, err
-			}
-			break
-		}
+	for functions.Next() {
+		s := functions.At()
 
 		functionIDsByStringID[s.Result.Name] = append(functionIDsByStringID[s.Result.Name], s.RowNum)
+	}
+	if err := functions.Err(); err != nil {
+		return nil, err
 	}
 
 	// gather strings
@@ -564,17 +679,14 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 		strings = b.strings.retrieveRows(ctx, functionIDsByStringID.iterator())
 		idx     = 0
 	)
-	for {
-		s, ok := strings.Next()
-		if !ok {
-			if err := functions.Err(); err != nil {
-				return nil, err
-			}
-			break
-		}
+	for strings.Next() {
+		s := strings.At()
 		names[idx] = s.Result
 		idSlice[idx] = []int64{s.RowNum}
 		idx++
+	}
+	if err := strings.Err(); err != nil {
+		return nil, err
 	}
 
 	// idSlice contains stringIDs and gets rewritten into functionIDs
@@ -626,7 +738,6 @@ func (b *singleBlockQuerier) SelectProfiles(ctx context.Context, req *connect.Re
 		Profiles:      result,
 		FunctionNames: names,
 	}), err
-
 }
 
 func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []minMax, error) {
@@ -680,7 +791,6 @@ func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []mi
 	}
 
 	return tsBoundary, tsBoundaryPerRowGroup, nil
-
 }
 
 func newByteSliceFromBucketReader(bucketReader fireobjstore.BucketReader, path string) (index.RealByteSlice, error) {
@@ -728,54 +838,23 @@ func (q *singleBlockQuerier) open(ctx context.Context) error {
 	return nil
 }
 
-type Predicate interface {
-	Execute(context.Context, *parquet.File) Iterator[int64]
-}
-
 type parquetReader[M Models, P schemav1.Persister[M]] struct {
 	persister P
 	file      *parquet.File
-}
-
-func newReaderAtFromBucketReader(ctx context.Context, bucketReader fireobjstore.BucketReader, path string) (io.ReaderAt, int64, error) {
-	r := &readerAtFromBucketReader{
-		ctx:          ctx,
-		bucketReader: bucketReader,
-		path:         path,
-	}
-	size, err := r.Size()
-	return r, size, err
-}
-
-type readerAtFromBucketReader struct {
-	ctx          context.Context
-	bucketReader fireobjstore.BucketReader
-	path         string
-}
-
-func (r readerAtFromBucketReader) Size() (int64, error) {
-	attribs, err := r.bucketReader.Attributes(r.ctx, r.path)
-	return attribs.Size, err
-}
-
-func (r readerAtFromBucketReader) ReadAt(p []byte, off int64) (n int, err error) {
-	reader, err := r.bucketReader.GetRange(r.ctx, r.path, off, int64(len(p)))
-	if err != nil {
-		return -1, err
-	}
-	defer reader.Close()
-	return reader.Read(p)
+	reader    fireobjstore.ReaderAt
 }
 
 func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader fireobjstore.BucketReader) error {
 	filePath := r.persister.Name() + block.ParquetSuffix
-	f, size, err := newReaderAtFromBucketReader(ctx, bucketReader, filePath)
+
+	ra, err := bucketReader.ReaderAt(ctx, filePath)
 	if err != nil {
 		return errors.Wrapf(err, "opening file '%s'", filePath)
 	}
+	r.reader = ra
 
 	// first try to open file, this is required otherwise OpenFile panics
-	parquetFile, err := parquet.OpenFile(f, size, parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
+	parquetFile, err := parquet.OpenFile(ra, ra.Size(), parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
@@ -784,12 +863,23 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader fireobjstor
 	}
 
 	// now open it for real
-	r.file, err = parquet.OpenFile(f, size)
+	r.file, err = parquet.OpenFile(ra, ra.Size())
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
 
 	return nil
+}
+
+func (r *parquetReader[M, P]) Close() error {
+	if r.reader != nil {
+		return r.reader.Close()
+	}
+	return nil
+}
+
+func (r *parquetReader[M, P]) relPath() string {
+	return r.persister.Name() + block.ParquetSuffix
 }
 
 func (r *parquetReader[M, P]) info() block.File {
@@ -799,112 +889,16 @@ func (r *parquetReader[M, P]) info() block.File {
 			NumRowGroups: uint64(len(r.file.RowGroups())),
 		},
 		SizeBytes: uint64(r.file.Size()),
-		RelPath:   r.persister.Name() + block.ParquetSuffix,
+		RelPath:   r.relPath(),
 	}
 }
 
-type predicateRepeatedColumnMatches struct {
-	column string
-
-	f matchFunc
-}
-
-func (p *predicateRepeatedColumnMatches) Execute(ctx context.Context, f *parquet.File) Iterator[int64] {
-
-	// find leaf column
-	var leafColumn *parquet.Column
-	for _, c := range f.Root().Columns() {
-		if c.Name() == p.column {
-			for {
-				if c.Leaf() {
-					leafColumn = c
-					break
-				}
-				c = c.Columns()[0]
-			}
-
-			if leafColumn != nil {
-				break
-			}
-		}
+func (r *parquetReader[M, P]) columnIter(ctx context.Context, columnName string, predicate query.Predicate, alias string) query.Iterator {
+	index, _ := query.GetColumnIndexByPath(r.file, columnName)
+	if index == -1 {
+		return query.NewErrIterator(fmt.Errorf("column '%s' not found in parquet file '%s'", columnName, r.relPath()))
 	}
-	if leafColumn == nil {
-		return NewErrIterator[int64](fmt.Errorf("column '%s' not found", p.column))
-	}
-
-	var (
-		rowNums []int64
-		pages   = leafColumn.Pages()
-		idx     = 1
-		rowNum  int64
-	)
-
-	// nolint:ineffassign
-	// we might use ctx later.
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "BlockQuerier - predicateRepeatedColumnMatches")
-	defer func() {
-		sp.LogFields(
-			otlog.String("column_name", p.column),
-			otlog.Int64("column_rows_scanned", rowNum),
-			otlog.Int("column_pages_scanned", idx-1),
-			otlog.Int("column_rows_selected", len(rowNums)),
-		)
-		sp.Finish()
-	}()
-
-	for {
-		page, err := pages.ReadPage()
-		if err == io.EOF {
-			// we have reached the last page
-			break
-		} else if err != nil {
-			return NewErrIterator[int64](errors.Wrapf(err, "error reading page %d", idx))
-		}
-		var values = make([]parquet.Value, page.Size())
-		if _, err := page.Values().ReadValues(values); err != io.EOF {
-			return NewErrIterator[int64](errors.Wrapf(err, "error reading values on page %d", idx))
-		}
-		for _, v := range values {
-			// TODO: When this column is sorted skip the remainder of the page
-
-			if v.Column() < 0 {
-				continue
-			}
-
-			// increase row num for each new record
-			// TODO this might not work correctly with multi series profiles
-			if v.RepetitionLevel() == 0 && v.DefinitionLevel() == 1 {
-				rowNum++
-			}
-
-			// matching value
-			if p.f(rowNum-1, &v) {
-				rowNums = append(rowNums, rowNum-1)
-			}
-		}
-		idx++
-	}
-	return NewSliceIterator(rowNums)
-}
-
-type matchFunc = func(int64, *parquet.Value) bool
-
-func repeatedColumnMatches(columnName string, matchFn matchFunc) Predicate {
-	return &predicateRepeatedColumnMatches{
-		column: columnName,
-		f:      matchFn,
-	}
-}
-
-func (r *parquetReader[M, P]) rowNumsFor(ctx context.Context, predicates ...Predicate) Iterator[int64] {
-	if len(predicates) < 1 {
-		return NewErrIterator[int64](errors.New("no predicate given"))
-	}
-	if len(predicates) > 1 {
-		return NewErrIterator[int64](errors.New("more than one predicate not supported currently"))
-	}
-
-	return predicates[0].Execute(ctx, r.file)
+	return query.NewColumnIterator(ctx, r.file.RowGroups(), index, columnName, 1000, predicate, alias)
 }
 
 type retrieveRowIterator[M any] struct {
@@ -914,12 +908,13 @@ type retrieveRowIterator[M any] struct {
 	rowReader            parquet.Rows
 	reconstruct          func(parquet.Row) (uint64, M, error)
 
+	result         ResultWithRowNum[M]
 	row            []parquet.Row
-	rowNumIterator Iterator[int64]
+	rowNumIterator iter.Iterator[int64]
 	err            error
 }
 
-func (r *parquetReader[M, P]) retrieveRows(ctx context.Context, rowNumIterator Iterator[int64]) Iterator[ResultWithRowNum[M]] {
+func (r *parquetReader[M, P]) retrieveRows(ctx context.Context, rowNumIterator iter.Iterator[int64]) iter.Iterator[ResultWithRowNum[M]] {
 	return &retrieveRowIterator[M]{
 		rowGroups:      r.file.RowGroups(),
 		row:            make([]parquet.Row, 1),
@@ -948,62 +943,62 @@ func (i *retrieveRowIterator[M]) nextRowGroup() error {
 	return nil
 }
 
-func (i *retrieveRowIterator[M]) Next() (ResultWithRowNum[M], bool) {
-	var (
-		m ResultWithRowNum[M]
-	)
+func (i *retrieveRowIterator[M]) At() ResultWithRowNum[M] {
+	return i.result
+}
 
+func (i *retrieveRowIterator[M]) Next() bool {
 	// get the next row num
-	rowNum, ok := i.rowNumIterator.Next()
-	if !ok {
+	if !i.rowNumIterator.Next() {
 		if err := i.rowNumIterator.Err(); err != nil {
 			i.err = errors.Wrap(err, "error from row number iterator")
 		}
-		return m, ok
+		return false
 	}
+	rowNum := i.rowNumIterator.At()
 
 	// ensure we initialise on first iteration
 	if i.rowReader == nil {
 		if err := i.nextRowGroup(); err != nil {
 			i.err = errors.Wrap(err, "getting next row group")
-			return m, false
+			return false
 		}
 	}
 
 	for {
 		if rowNum < i.minRowNum {
 			i.err = fmt.Errorf("row number selected %d is before current row number %d", rowNum, i.minRowNum)
-			return m, false
+			return false
 		}
 
 		if rowNum < i.maxRowNum {
 			if err := i.rowReader.SeekToRow(rowNum - i.minRowNum); err != nil {
 				i.err = errors.Wrapf(err, "seek to row at rowNum=%d", rowNum)
-				return m, false
+				return false
 			}
 
 			_, err := i.rowReader.ReadRows(i.row)
 			if err != nil && err != io.EOF {
 				i.err = errors.Wrapf(err, "reading row at rowNum=%d", rowNum)
-				return m, false
+				return false
 			}
 
-			m.RowNum = rowNum
-			_, m.Result, err = i.reconstruct(i.row[0])
+			i.result.RowNum = rowNum
+			_, i.result.Result, err = i.reconstruct(i.row[0])
 			if err != nil {
 				i.err = errors.Wrapf(err, "error reconstructing row at %d rowgroup (%d) relative=%d", rowNum, i.idxRowGroup, rowNum-i.minRowNum)
-				return m, false
+				return false
 			}
 			break
 		}
 
 		if err := i.nextRowGroup(); err != nil {
 			i.err = errors.Wrap(err, "getting next row group")
-			return m, false
+			return false
 		}
 	}
 
-	return m, true
+	return true
 }
 
 func (i *retrieveRowIterator[M]) Close() error {

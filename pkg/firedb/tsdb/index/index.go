@@ -454,12 +454,6 @@ func (w *Writer) AddSeries(ref storage.SeriesRef, lset firemodel.Labels, fp mode
 	// without this label in storage.
 	labelHash := uint64(fp)
 
-	lastHash := w.lastSeriesHash
-	// Ensure series are sorted by the priorities: [`hash(labels)`, `labels`]
-	if (labelHash < lastHash && len(w.lastSeries) > 0) || labelHash == lastHash && firemodel.CompareLabelPairs(lset, w.lastSeries) < 0 {
-		return errors.Errorf("out-of-order series added with label set %q", lset)
-	}
-
 	if ref < w.lastRef && len(w.lastSeries) != 0 {
 		return errors.Errorf("series with reference greater than %d already added", ref)
 	}
@@ -514,7 +508,7 @@ func (w *Writer) AddSeries(ref storage.SeriesRef, lset firemodel.Labels, fp mode
 		w.buf2.PutVarint64(c.MinTime)
 		w.buf2.PutUvarint64(uint64(c.MaxTime - c.MinTime))
 		w.buf2.PutUvarint32(c.KB)
-		w.buf2.PutUvarint32(c.Entries)
+		w.buf2.PutUvarint32(c.SeriesIndex)
 		w.buf2.PutBE32(c.Checksum)
 		t0 := c.MaxTime
 
@@ -525,7 +519,7 @@ func (w *Writer) AddSeries(ref storage.SeriesRef, lset firemodel.Labels, fp mode
 			w.buf2.PutVarint64(c.MinTime - t0)
 			w.buf2.PutUvarint64(uint64(c.MaxTime - c.MinTime))
 			w.buf2.PutUvarint32(c.KB)
-			w.buf2.PutUvarint32(c.Entries)
+			w.buf2.PutUvarint32(c.SeriesIndex)
 			t0 = c.MaxTime
 
 			w.buf2.PutBE32(c.Checksum)
@@ -1878,28 +1872,6 @@ func (r *Reader) LabelNames(matchers ...*labels.Matcher) ([]string, error) {
 	return labelNames, nil
 }
 
-// NewStringListIter returns a StringIter for the given sorted list of strings.
-func NewStringListIter(s []string) StringIter {
-	return &stringListIter{l: s}
-}
-
-// symbolsIter implements StringIter.
-type stringListIter struct {
-	l   []string
-	cur string
-}
-
-func (s *stringListIter) Next() bool {
-	if len(s.l) == 0 {
-		return false
-	}
-	s.cur = s.l[0]
-	s.l = s.l[1:]
-	return true
-}
-func (s stringListIter) At() string { return s.cur }
-func (s stringListIter) Err() error { return nil }
-
 // Decoder provides decoding methods for the v1 and v2 index file format.
 //
 // It currently does not contain decoding methods for all entry types but can be extended
@@ -2018,11 +1990,11 @@ func (dec *Decoder) Series(b []byte, lbls *firemodel.Labels, chks *[]ChunkMeta) 
 	checksum := d.Be32()
 
 	*chks = append(*chks, ChunkMeta{
-		Checksum: checksum,
-		MinTime:  t0,
-		MaxTime:  maxt,
-		KB:       kb,
-		Entries:  entries,
+		Checksum:    checksum,
+		MinTime:     t0,
+		MaxTime:     maxt,
+		KB:          kb,
+		SeriesIndex: entries,
 	})
 	t0 = maxt
 
@@ -2041,11 +2013,11 @@ func (dec *Decoder) Series(b []byte, lbls *firemodel.Labels, chks *[]ChunkMeta) 
 		}
 
 		*chks = append(*chks, ChunkMeta{
-			Checksum: checksum,
-			MinTime:  mint,
-			MaxTime:  maxt,
-			KB:       kb,
-			Entries:  entries,
+			Checksum:    checksum,
+			MinTime:     mint,
+			MaxTime:     maxt,
+			KB:          kb,
+			SeriesIndex: entries,
 		})
 	}
 	return fprint, d.Err()
