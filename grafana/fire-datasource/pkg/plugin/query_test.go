@@ -53,7 +53,7 @@ func Test_responseToDataFrames(t *testing.T) {
 			},
 		},
 	}
-	frame, err := responseToDataFrames(resp)
+	frame, err := responseToDataFrames(resp, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"func1", "func2", "func3"}, frame.Meta.Custom.(CustomMeta).Names)
 	require.Equal(t, int64(123), frame.Meta.Custom.(CustomMeta).MaxSelf)

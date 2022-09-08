@@ -17,7 +17,7 @@
 // TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 // THIS SOFTWARE.
 import { css } from '@emotion/css';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useWindowSize } from 'react-use';
 
 import { DataFrame } from '@grafana/data';
@@ -33,6 +33,8 @@ import {
   PIXELS_PER_LEVEL,
   STEP_OFFSET,
 } from '../constants';
+import FlameGraphTooltip from './FlameGraphTooltip';
+import { SampleUnit } from './types';
 
 type Props = {
   data: DataFrame;
@@ -43,6 +45,7 @@ type Props = {
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
+  setQuery: (query: string) => void;
 };
 
 const FlameGraph = ({
@@ -54,15 +57,20 @@ const FlameGraph = ({
   setTopLevelIndex,
   setRangeMin,
   setRangeMax,
+  setQuery,
 }: Props) => {
   const styles = useStyles2(getStyles);
 
   const levels = useLevels(data);
   const names = data.meta!.custom!.Names;
   const totalTicks = data.meta!.custom!.Total;
+  const profileTypeId = data.meta!.custom!.ProfileTypeID;
 
   const { width: windowWidth } = useWindowSize();
   const graphRef = useRef<HTMLCanvasElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState([''])
+  const [showTooltip, setShowTooltip] = useState(false)
 
   // get the x coordinate of the bar i.e. where it starts on the vertical plane
   const getBarX = useCallback(
@@ -202,10 +210,101 @@ const FlameGraph = ({
     }
   }, [getBarX, levels, names, query, rangeMax, rangeMin, topLevelIndex, totalTicks]);
 
+  const getProfileMetrics = useCallback((samples: number) => {
+    const unit = profileTypeId.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+
+    switch (unit) {
+      // memory:alloc_space:bytes:space:bytes
+      // memory:inuse_space:bytes:space:bytes
+      case SampleUnit.Bytes:
+        return getMetrics(
+          samples, 
+          [
+            { divider: 1024, suffix: 'KB'},
+            { divider: 1024, suffix: 'MB'},
+            { divider: 1024, suffix: 'GB'},
+            { divider: 1024, suffix: 'PT'},
+          ], 
+          '% of total RAM', 
+          'RAM'
+        );
+
+      // block:contentions:count:contentions:count
+      // goroutine:goroutine:count:goroutine:count
+      // memory:alloc_objects:count:space:bytes
+      // memory:inuse_objects:count:space:bytes
+      // mutex:contentions:count:contentions:count
+      // process_cpu:samples:count:cpu:nanoseconds
+      case SampleUnit.Count:
+        return getMetrics(
+          samples, 
+          [
+            { divider: 1000, suffix: 'K'},
+            { divider: 1000, suffix: 'M'},
+            { divider: 1000, suffix: 'G'},
+            { divider: 1000, suffix: 'T'},
+          ], 
+          '% of total objects', 
+          'Allocated objects'
+        );
+
+      // block:delay:nanoseconds:contentions:count
+      // mutex:delay:nanoseconds:contentions:count
+      // process_cpu:cpu:nanoseconds:cpu:nanoseconds
+      case SampleUnit.Nanoseconds:
+        // convert nanoseconds to seconds
+        samples = samples / 1000000000;
+        
+        return getMetrics(
+          samples, 
+          [
+            { divider: 60, suffix: 'minutes'},
+            { divider: 60, suffix: 'hours'},
+            { divider: 24, suffix: 'days'},
+          ], 
+          '% of total time', 
+          'Time', 
+          // seconds not above in units array so we can show fraction of a second 
+          // e.g. 0.45 seconds instead of samples if below 1 second
+          'seconds'
+        );
+
+      default: 
+        return {
+          percentTitle: '',
+          unitTitle: '',
+          unitValue: ''
+        }
+    }
+  }, [profileTypeId]);
+
+  const getMetrics = (samples: number, units: any, title: string, subtitle: string, baseSuffix = '') => {
+    let unitVal: number | string;
+    let suffix = '';
+
+    for (let unit of units) {
+      if (samples >= unit.divider) {
+        suffix = unit.suffix;
+        samples = samples / unit.divider;
+      } else {
+        break;
+      }
+    }
+
+    unitVal = suffix ? samples.toFixed(2) : samples + ' ' + baseSuffix;
+    unitVal += ' ' + suffix;
+
+    return {
+      percentTitle: title,
+      unitTitle: subtitle,
+      unitValue: unitVal
+    }
+  }
+
   useEffect(() => {
     if (graphRef.current) {
       const pixelsPerTick = graphRef.current.clientWidth / totalTicks / (rangeMax - rangeMin);
-      render(pixelsPerTick);        
+      render(pixelsPerTick);       
 
       graphRef.current.onclick = (e) => {
         const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
@@ -217,10 +316,49 @@ const FlameGraph = ({
           setRangeMax((levels[levelIndex][barIndex] + levels[levelIndex][barIndex + 1]) / totalTicks);
         }
       };
+
+      graphRef.current!.onmousemove = (e) => {
+        if (tooltipRef.current) {
+          setShowTooltip(false);
+          const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
+          const {levelIndex, barIndex} = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
+
+          if (!isNaN(levelIndex) && !isNaN(barIndex)) {
+            if (barIndex !== -1) {
+              const name = `${names[levels[levelIndex][barIndex + NAME_OFFSET]]}`;
+              const curBarTicks = levels[levelIndex][barIndex + 1];
+              const ratio = curBarTicks / totalTicks;
+              const percent = Math.round(10000 * ratio) / 100;
+              const metrics = getProfileMetrics(curBarTicks); 
+
+              tooltipRef.current.style.left = (e.clientX + 10) + "px";
+              tooltipRef.current.style.top = (e.clientY + 40) + "px";
+              setTooltip([name, `${metrics.percentTitle}: ${percent}`, `${metrics.unitTitle}: ${metrics.unitValue}`, `${curBarTicks}`]);
+              setShowTooltip(true);
+            }
+          }
+        }
+      }
+
+      graphRef.current!.onmouseleave = () => {
+        setShowTooltip(false);
+      };
+
+      graphRef.current.oncontextmenu = (e) => {
+        e.preventDefault();
+        const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
+        const {levelIndex, barIndex} = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
+        const nameIndex = levels[levelIndex][barIndex + 4 - 1];
+        const name = names[nameIndex];
+
+        setQuery(name);
+        navigator.clipboard.writeText(name);
+      }
     }
   }, [
     render,
     convertPixelCoordinatesToBarCoordinates,
+    getProfileMetrics,
     levels,
     names,
     rangeMin,
@@ -231,10 +369,19 @@ const FlameGraph = ({
     setTopLevelIndex,
     setRangeMin,
     setRangeMax,
+    setQuery
   ]);
 
   return (
-    <canvas className={styles.graph} ref={graphRef}  data-testid="flamegraph"/>
+    <>
+      <canvas className={styles.graph} ref={graphRef}  data-testid="flamegraph"/>
+      
+      <FlameGraphTooltip
+        tooltipRef={tooltipRef}
+        tooltip={tooltip}
+        showTooltip={showTooltip}
+      />
+    </>
   );
 };
 
