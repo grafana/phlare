@@ -20,10 +20,10 @@ const FlameGraphTooltip = ({tooltipRef, tooltipData, showTooltip}: Props) => {
         <Tooltip 
           content={
             <div>
-              <div>{tooltipData.name}</div>
-              <div>{tooltipData.percentTitle}: {tooltipData.percentValue}%</div>
-              <div>{tooltipData.unitTitle}: {tooltipData.unitValue}</div>
-              <div>Samples: {tooltipData.samples}</div>
+              <div className={styles.name}>{tooltipData.name}</div>
+              <div>{tooltipData.percentTitle}: <b>{tooltipData.percentValue}%</b></div>
+              <div>{tooltipData.unitTitle}: <b>{tooltipData.unitValue}</b></div>
+              <div>Samples: <b>{tooltipData.samples}</b></div>
             </div>
           } 
           placement={'right'} 
@@ -38,9 +38,11 @@ const FlameGraphTooltip = ({tooltipRef, tooltipData, showTooltip}: Props) => {
 
 const getStyles = () => ({
   tooltip: css`
-    label: joey-tooltip;
     position: fixed;
     z-index: -10;
+  `,
+  name: css`
+    margin-bottom: 10px;
   `,
 });
 
