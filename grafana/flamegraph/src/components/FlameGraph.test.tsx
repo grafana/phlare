@@ -2,7 +2,8 @@ import { screen } from '@testing-library/dom';
 import { render } from '@testing-library/react';
 import React, { useState } from 'react';
 
-import FlameGraph, { getTooltipData } from './FlameGraph';
+import FlameGraph from './FlameGraph';
+import { getTooltipData } from './FlameGraphTooltip';
 import { data } from '../data';
 import { MutableDataFrame } from '@grafana/data';
 import 'jest-canvas-mock';

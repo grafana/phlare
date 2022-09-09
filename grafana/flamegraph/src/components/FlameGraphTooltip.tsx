@@ -3,7 +3,8 @@ import React, { LegacyRef } from 'react';
 
 import { useStyles, Tooltip } from '@grafana/ui';
 
-import { TooltipData } from './types';
+import { NAME_OFFSET } from '../constants';
+import { TooltipData, SampleUnit } from './types';
 
 type Props = {
   tooltipRef: LegacyRef<HTMLDivElement>,
@@ -34,6 +35,89 @@ const FlameGraphTooltip = ({tooltipRef, tooltipData, showTooltip}: Props) => {
       }
     </div>
 	)
+}
+
+export const getTooltipData = (profileTypeId: string, names: any, levels: any, totalTicks: number, levelIndex: any, barIndex: any): TooltipData => {
+  let samples = levels[levelIndex][barIndex + 1];
+  let percentTitle = '';
+  let unitTitle = '';
+  let unitValue = '';
+
+  const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+  const name = `${names[levels[levelIndex][barIndex + NAME_OFFSET]]}`;
+  const percent = Math.round(10000 * (samples / totalTicks)) / 100;
+
+  switch (sampleUnit) {
+    case SampleUnit.Bytes:
+      unitValue = getUnitValue(
+        samples, 
+        [
+          { divider: 1024, suffix: 'KB'},
+          { divider: 1024, suffix: 'MB'},
+          { divider: 1024, suffix: 'GB'},
+          { divider: 1024, suffix: 'PT'},
+        ],
+      );
+      percentTitle = '% of total RAM';
+      unitTitle = 'RAM';
+      break;
+
+    case SampleUnit.Count:
+      unitValue = getUnitValue(
+        samples, 
+        [
+          { divider: 1000, suffix: 'K'},
+          { divider: 1000, suffix: 'M'},
+          { divider: 1000, suffix: 'G'},
+          { divider: 1000, suffix: 'T'},
+        ],
+      );
+      percentTitle = '% of total objects';
+      unitTitle = 'Allocated objects';
+      break;
+
+    case SampleUnit.Nanoseconds:      
+      unitValue = getUnitValue(
+        // convert nanoseconds to seconds
+        samples / 1000000000, 
+        [
+          { divider: 60, suffix: 'minutes'},
+          { divider: 60, suffix: 'hours'},
+          { divider: 24, suffix: 'days'},
+        ],
+        'seconds'
+      );
+      percentTitle = '% of total time';
+      unitTitle = 'Time';
+  }
+
+  return {
+    name: name,
+    percentTitle: percentTitle,
+    percentValue: percent,
+    unitTitle: unitTitle,
+    unitValue: unitValue,
+    samples: samples.toLocaleString()
+  }
+};
+
+const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
+  let unitValue: string;
+  let suffix = '';
+
+  for (let unit of units) {
+    if (samples >= unit.divider) {
+      suffix = unit.suffix;
+      samples = samples / unit.divider;
+    } else {
+      break;
+    }
+  }
+
+  unitValue = samples.toString().length > 4 ? samples.toFixed(2) : samples.toString();
+  unitValue += ' ' + (suffix !== '' ? suffix : fallbackSuffix);
+
+  return unitValue;
 }
 
 const getStyles = () => ({
