@@ -333,7 +333,7 @@ const FlameGraph = ({
                 ...tooltipData,
                 name: name,
                 percentValue: percent,
-                samples: total
+                samples: total.toLocaleString()
               });
               setShowTooltip(true);
             }

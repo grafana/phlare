@@ -4,7 +4,7 @@ export type TooltipData = {
   percentValue: number,
   unitTitle: string,
   unitValue: string,
-  samples: number
+  samples: string
 }
 
 export enum SampleUnit {
