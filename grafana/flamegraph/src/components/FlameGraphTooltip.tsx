@@ -39,7 +39,6 @@ const FlameGraphTooltip = ({tooltipRef, tooltipData, showTooltip}: Props) => {
 const getStyles = () => ({
   tooltip: css`
     position: fixed;
-    z-index: -10;
   `,
   name: css`
     margin-bottom: 10px;
