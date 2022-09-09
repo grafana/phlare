@@ -237,7 +237,7 @@ const FlameGraph = ({
               tooltipRef.current.style.left = (e.clientX + 10) + "px";
               tooltipRef.current.style.top = (e.clientY + 40) + "px";
               
-              const tooltipData = getTooltipData(profileTypeId, names, levels, levelIndex, barIndex, totalTicks); 
+              const tooltipData = getTooltipData(profileTypeId, names, levels, totalTicks, levelIndex, barIndex); 
               setTooltipData(tooltipData);
               setShowTooltip(true);
             }
@@ -279,7 +279,7 @@ const FlameGraph = ({
   );
 };
 
-export const getTooltipData = (profileTypeId: string, names: any, levels: any, levelIndex: any, barIndex: any, totalTicks: number): TooltipData => {
+export const getTooltipData = (profileTypeId: string, names: any, levels: any, totalTicks: number, levelIndex: any, barIndex: any): TooltipData => {
   let samples = levels[levelIndex][barIndex + 1];
   let percentTitle = '';
   let unitTitle = '';
