@@ -13,7 +13,7 @@ describe('FlameGraph', () => {
     const [topLevelIndex, setTopLevelIndex] = useState(0);
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
-    const [query, setQuery] = useState('');
+    const [query] = useState('');
 
     const flameGraphData = new MutableDataFrame({
       name: 'flamegraph',
@@ -36,7 +36,6 @@ describe('FlameGraph', () => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
-        setQuery={setQuery}
       />
     );
   };

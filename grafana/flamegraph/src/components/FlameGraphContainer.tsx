@@ -33,7 +33,6 @@ const FlameGraphContainer = (props: Props) => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
-        setQuery={setQuery}
       />
     </>
   );

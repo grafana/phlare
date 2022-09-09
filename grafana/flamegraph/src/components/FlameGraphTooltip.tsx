@@ -8,15 +8,15 @@ import { TooltipData, SampleUnit } from './types';
 
 type Props = {
   tooltipRef: LegacyRef<HTMLDivElement>,
-	tooltipData: TooltipData,
+  tooltipData: TooltipData,
   showTooltip: boolean,
 };
 
 const FlameGraphTooltip = ({tooltipRef, tooltipData, showTooltip}: Props) => {
-	const styles = useStyles(getStyles);
-	
-	return (
-		<div ref={tooltipRef} className={styles.tooltip}>
+  const styles = useStyles(getStyles);
+  
+  return (
+    <div ref={tooltipRef} className={styles.tooltip}>
       {tooltipData &&
         <Tooltip 
           content={
@@ -34,7 +34,7 @@ const FlameGraphTooltip = ({tooltipRef, tooltipData, showTooltip}: Props) => {
         </Tooltip>
       }
     </div>
-	)
+  )
 }
 
 export const getTooltipData = (profileTypeId: string, names: any, levels: any, totalTicks: number, levelIndex: any, barIndex: any): TooltipData => {
@@ -114,7 +114,14 @@ const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
     }
   }
 
-  unitValue = samples.toString().length > 4 ? samples.toFixed(2) : samples.toString();
+  unitValue = samples.toString();
+  if (unitValue.toString().includes('.')) {
+    const afterDot = unitValue.toString().split('.')[1];
+    if (afterDot.length > 2) {
+      unitValue = samples.toFixed(2);
+    }
+  }
+
   unitValue += ' ' + (suffix !== '' ? suffix : fallbackSuffix);
 
   return unitValue;

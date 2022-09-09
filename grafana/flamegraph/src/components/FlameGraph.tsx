@@ -45,7 +45,6 @@ type Props = {
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
-  setQuery: (query: string) => void;
 };
 
 const FlameGraph = ({
@@ -57,7 +56,6 @@ const FlameGraph = ({
   setTopLevelIndex,
   setRangeMin,
   setRangeMax,
-  setQuery,
 }: Props) => {
   const styles = useStyles2(getStyles);
 
@@ -263,7 +261,6 @@ const FlameGraph = ({
     setTopLevelIndex,
     setRangeMin,
     setRangeMax,
-    setQuery
   ]);
 
   return (
