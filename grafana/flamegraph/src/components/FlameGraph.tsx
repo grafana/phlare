@@ -211,63 +211,63 @@ const FlameGraph = ({
   }, [getBarX, levels, names, query, rangeMax, rangeMin, topLevelIndex, totalTicks]);
 
   const getTooltipData = useCallback((samples: number): Omit<TooltipData, 'name' | 'percentValue' | 'samples'> => {
-    const sampleUnit = profileTypeId.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+    const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+    let unitValue = '';
 
     switch (sampleUnit) {
-      // memory:alloc_space:bytes:space:bytes
-      // memory:inuse_space:bytes:space:bytes
       case SampleUnit.Bytes:
-        return getTooltipDataForUnit(
+        unitValue = getUnitValue(
           samples, 
           [
             { divider: 1024, suffix: 'KB'},
             { divider: 1024, suffix: 'MB'},
             { divider: 1024, suffix: 'GB'},
             { divider: 1024, suffix: 'PT'},
-          ], 
-          '% of total RAM', 
-          'RAM'
+          ],
         );
 
-      // block:contentions:count:contentions:count
-      // goroutine:goroutine:count:goroutine:count
-      // memory:alloc_objects:count:space:bytes
-      // memory:inuse_objects:count:space:bytes
-      // mutex:contentions:count:contentions:count
-      // process_cpu:samples:count:cpu:nanoseconds
+        return {
+          percentTitle: '% of total RAM',
+          unitTitle: 'RAM',
+          unitValue: unitValue
+        }
+
       case SampleUnit.Count:
-        return getTooltipDataForUnit(
+        unitValue = getUnitValue(
           samples, 
           [
             { divider: 1000, suffix: 'K'},
             { divider: 1000, suffix: 'M'},
             { divider: 1000, suffix: 'G'},
             { divider: 1000, suffix: 'T'},
-          ], 
-          '% of total objects', 
-          'Allocated objects'
+          ],
         );
 
-      // block:delay:nanoseconds:contentions:count
-      // mutex:delay:nanoseconds:contentions:count
-      // process_cpu:cpu:nanoseconds:cpu:nanoseconds
+        return {
+          percentTitle: '% of total objects',
+          unitTitle: 'Allocated objects',
+          unitValue: unitValue
+        }
+
       case SampleUnit.Nanoseconds:
         // convert nanoseconds to seconds
         samples = samples / 1000000000;
         
-        return getTooltipDataForUnit(
+        unitValue = getUnitValue(
           samples, 
           [
             { divider: 60, suffix: 'minutes'},
             { divider: 60, suffix: 'hours'},
             { divider: 24, suffix: 'days'},
-          ], 
-          '% of total time', 
-          'Time', 
-          // seconds not above in units array so we can show fraction of a second 
-          // e.g. 0.45 seconds instead of samples if below 1 second
+          ],
           'seconds'
         );
+
+        return {
+          percentTitle: '% of total time',
+          unitTitle: 'Time',
+          unitValue: unitValue
+        }
 
       default: 
         return {
@@ -278,8 +278,8 @@ const FlameGraph = ({
     }
   }, [profileTypeId]);
 
-  const getTooltipDataForUnit = (samples: number, units: any, title: string, subtitle: string, baseSuffix = ''): Omit<TooltipData, 'name' | 'percentValue' | 'samples'> => {
-    let value: number | string;
+  const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
+    let unitValue: string;
     let suffix = '';
 
     for (let unit of units) {
@@ -291,14 +291,10 @@ const FlameGraph = ({
       }
     }
 
-    value = suffix ? samples.toFixed(2) : samples + ' ' + baseSuffix;
-    value += ' ' + suffix;
+    unitValue = samples.toString().length > 4 ? samples.toFixed(2) : samples.toString();
+    unitValue += ' ' + (suffix !== '' ? suffix : fallbackSuffix);
 
-    return {
-      percentTitle: title,
-      unitTitle: subtitle,
-      unitValue: value
-    }
+    return unitValue;
   }
 
   useEffect(() => {
