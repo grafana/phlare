@@ -70,7 +70,7 @@ const FlameGraph = ({
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipData, setTooltipData] = useState<TooltipData>();
-  const [showTooltip, setShowTooltip] = useState(false) // can prob remove this and just show based on there being content in tooltip
+  const [showTooltip, setShowTooltip] = useState(false);
 
   // get the x coordinate of the bar i.e. where it starts on the vertical plane
   const getBarX = useCallback(
@@ -210,93 +210,6 @@ const FlameGraph = ({
     }
   }, [getBarX, levels, names, query, rangeMax, rangeMin, topLevelIndex, totalTicks]);
 
-  const getTooltipData = useCallback((samples: number): Omit<TooltipData, 'name' | 'percentValue' | 'samples'> => {
-    const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
-    let unitValue = '';
-
-    switch (sampleUnit) {
-      case SampleUnit.Bytes:
-        unitValue = getUnitValue(
-          samples, 
-          [
-            { divider: 1024, suffix: 'KB'},
-            { divider: 1024, suffix: 'MB'},
-            { divider: 1024, suffix: 'GB'},
-            { divider: 1024, suffix: 'PT'},
-          ],
-        );
-
-        return {
-          percentTitle: '% of total RAM',
-          unitTitle: 'RAM',
-          unitValue: unitValue
-        }
-
-      case SampleUnit.Count:
-        unitValue = getUnitValue(
-          samples, 
-          [
-            { divider: 1000, suffix: 'K'},
-            { divider: 1000, suffix: 'M'},
-            { divider: 1000, suffix: 'G'},
-            { divider: 1000, suffix: 'T'},
-          ],
-        );
-
-        return {
-          percentTitle: '% of total objects',
-          unitTitle: 'Allocated objects',
-          unitValue: unitValue
-        }
-
-      case SampleUnit.Nanoseconds:
-        // convert nanoseconds to seconds
-        samples = samples / 1000000000;
-        
-        unitValue = getUnitValue(
-          samples, 
-          [
-            { divider: 60, suffix: 'minutes'},
-            { divider: 60, suffix: 'hours'},
-            { divider: 24, suffix: 'days'},
-          ],
-          'seconds'
-        );
-
-        return {
-          percentTitle: '% of total time',
-          unitTitle: 'Time',
-          unitValue: unitValue
-        }
-
-      default: 
-        return {
-          percentTitle: '',
-          unitTitle: '',
-          unitValue: ''
-        }
-    }
-  }, [profileTypeId]);
-
-  const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
-    let unitValue: string;
-    let suffix = '';
-
-    for (let unit of units) {
-      if (samples >= unit.divider) {
-        suffix = unit.suffix;
-        samples = samples / unit.divider;
-      } else {
-        break;
-      }
-    }
-
-    unitValue = samples.toString().length > 4 ? samples.toFixed(2) : samples.toString();
-    unitValue += ' ' + (suffix !== '' ? suffix : fallbackSuffix);
-
-    return unitValue;
-  }
-
   useEffect(() => {
     if (graphRef.current) {
       const pixelsPerTick = graphRef.current.clientWidth / totalTicks / (rangeMax - rangeMin);
@@ -321,20 +234,11 @@ const FlameGraph = ({
 
           if (!isNaN(levelIndex) && !isNaN(barIndex)) {
             if (barIndex !== -1) {
-              const name = `${names[levels[levelIndex][barIndex + NAME_OFFSET]]}`;
-              const total = levels[levelIndex][barIndex + 1];
-              const percent = Math.round(10000 * (total / totalTicks)) / 100;
-              const tooltipData = getTooltipData(total); 
-
               tooltipRef.current.style.left = (e.clientX + 10) + "px";
               tooltipRef.current.style.top = (e.clientY + 40) + "px";
               
-              setTooltipData({
-                ...tooltipData,
-                name: name,
-                percentValue: percent,
-                samples: total.toLocaleString()
-              });
+              const tooltipData = getTooltipData(profileTypeId, names, levels, levelIndex, barIndex, totalTicks); 
+              setTooltipData(tooltipData);
               setShowTooltip(true);
             }
           }
@@ -348,7 +252,7 @@ const FlameGraph = ({
   }, [
     render,
     convertPixelCoordinatesToBarCoordinates,
-    getTooltipData,
+    profileTypeId,
     levels,
     names,
     rangeMin,
@@ -374,6 +278,89 @@ const FlameGraph = ({
     </>
   );
 };
+
+export const getTooltipData = (profileTypeId: string, names: any, levels: any, levelIndex: any, barIndex: any, totalTicks: number): TooltipData => {
+  let samples = levels[levelIndex][barIndex + 1];
+  let percentTitle = '';
+  let unitTitle = '';
+  let unitValue = '';
+
+  const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+  const name = `${names[levels[levelIndex][barIndex + NAME_OFFSET]]}`;
+  const percent = Math.round(10000 * (samples / totalTicks)) / 100;
+
+  switch (sampleUnit) {
+    case SampleUnit.Bytes:
+      unitValue = getUnitValue(
+        samples, 
+        [
+          { divider: 1024, suffix: 'KB'},
+          { divider: 1024, suffix: 'MB'},
+          { divider: 1024, suffix: 'GB'},
+          { divider: 1024, suffix: 'PT'},
+        ],
+      );
+      percentTitle = '% of total RAM';
+      unitTitle = 'RAM';
+      break;
+
+    case SampleUnit.Count:
+      unitValue = getUnitValue(
+        samples, 
+        [
+          { divider: 1000, suffix: 'K'},
+          { divider: 1000, suffix: 'M'},
+          { divider: 1000, suffix: 'G'},
+          { divider: 1000, suffix: 'T'},
+        ],
+      );
+      percentTitle = '% of total objects';
+      unitTitle = 'Allocated objects';
+      break;
+
+    case SampleUnit.Nanoseconds:      
+      unitValue = getUnitValue(
+        // convert nanoseconds to seconds
+        samples / 1000000000, 
+        [
+          { divider: 60, suffix: 'minutes'},
+          { divider: 60, suffix: 'hours'},
+          { divider: 24, suffix: 'days'},
+        ],
+        'seconds'
+      );
+      percentTitle = '% of total time';
+      unitTitle = 'Time';
+  }
+
+  return {
+    name: name,
+    percentTitle: percentTitle,
+    percentValue: percent,
+    unitTitle: unitTitle,
+    unitValue: unitValue,
+    samples: samples.toLocaleString()
+  }
+};
+
+const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
+  let unitValue: string;
+  let suffix = '';
+
+  for (let unit of units) {
+    if (samples >= unit.divider) {
+      suffix = unit.suffix;
+      samples = samples / unit.divider;
+    } else {
+      break;
+    }
+  }
+
+  unitValue = samples.toString().length > 4 ? samples.toFixed(2) : samples.toString();
+  unitValue += ' ' + (suffix !== '' ? suffix : fallbackSuffix);
+
+  return unitValue;
+}
 
 function useLevels(frame: DataFrame) {
   return useMemo(() => {
