@@ -13,8 +13,8 @@ import (
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
 	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	parcastorev1 "github.com/parca-dev/parca/gen/proto/go/parca/profilestore/v1alpha1"
 	"github.com/pkg/errors"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -107,7 +107,12 @@ func (f *Fire) initDistributor() (services.Service, error) {
 	// initialise direct pusher, this overwrites the default HTTP client
 	f.pusherClient = d
 
+	// register pusher
 	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d)
+
+	// register parca compatible profile store
+	parcastorev1.RegisterProfileStoreServiceServer(f.Server.GRPC, d.ParcaProfileStore())
+
 	return d, nil
 }
 

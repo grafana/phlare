@@ -12,11 +12,13 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/google/uuid"
 	"github.com/grafana/dskit/ring"
 	ring_client "github.com/grafana/dskit/ring/client"
 	"github.com/grafana/dskit/services"
 	"github.com/opentracing/opentracing-go"
+	parcastorev1 "github.com/parca-dev/parca/gen/proto/go/parca/profilestore/v1alpha1"
 	"github.com/parca-dev/parca/pkg/scrape"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -146,6 +148,8 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 			d.metrics.receivedSamples.WithLabelValues(profName).Observe(float64(len(p.Sample)))
 
 			p.Normalize()
+
+			level.Warn(d.logger).Log("msg", "received sample", "labels", firemodel.LabelPairsString(series.Labels), "type", p.StringTable[p.SampleType[0].Type])
 
 			// reuse the data buffer if possible
 			size := p.SizeVT()
@@ -308,4 +312,45 @@ func TokenFor(tenantID, labels string) uint32 {
 	_, _ = h.Write([]byte(tenantID))
 	_, _ = h.Write([]byte(labels))
 	return h.Sum32()
+}
+
+func (d *Distributor) ParcaProfileStore() parcastorev1.ProfileStoreServiceServer {
+	return &ParcaProfileStore{
+		distributor: d,
+	}
+}
+
+type ParcaProfileStore struct {
+	parcastorev1.UnimplementedProfileStoreServiceServer
+	distributor *Distributor
+}
+
+func (s *ParcaProfileStore) WriteRaw(ctx context.Context, req *parcastorev1.WriteRawRequest) (*parcastorev1.WriteRawResponse, error) {
+	nReq := &pushv1.PushRequest{
+		Series: make([]*pushv1.RawProfileSeries, len(req.Series)),
+	}
+	for idxSeries, series := range req.Series {
+		nReq.Series[idxSeries] = &pushv1.RawProfileSeries{
+			Samples: make([]*pushv1.RawSample, len(series.Samples)),
+			Labels:  make([]*commonv1.LabelPair, len(series.Labels.Labels)),
+		}
+		for idx, l := range series.Labels.Labels {
+			nReq.Series[idxSeries].Labels[idx] = &commonv1.LabelPair{
+				Name:  l.Name,
+				Value: l.Value,
+			}
+		}
+		for idx, s := range series.Samples {
+			nReq.Series[idxSeries].Samples[idx] = &pushv1.RawSample{
+				RawProfile: s.RawProfile,
+			}
+		}
+		level.Warn(s.distributor.logger).Log("msg", "converted parca sample", "labels", firemodel.LabelPairsString(nReq.Series[idxSeries].Labels))
+	}
+
+	if _, err := s.distributor.Push(ctx, connect.NewRequest(nReq)); err != nil {
+		return nil, err
+	}
+
+	return &parcastorev1.WriteRawResponse{}, nil
 }
