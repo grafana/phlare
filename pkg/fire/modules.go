@@ -13,6 +13,7 @@ import (
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
 	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	parcadebuginfov1 "github.com/parca-dev/parca/gen/proto/go/parca/debuginfo/v1alpha1"
 	parcastorev1 "github.com/parca-dev/parca/gen/proto/go/parca/profilestore/v1alpha1"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,6 +25,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/grafana/fire/pkg/agent"
+	"github.com/grafana/fire/pkg/debuginfo"
 	"github.com/grafana/fire/pkg/distributor"
 	"github.com/grafana/fire/pkg/firedb"
 	agentv1 "github.com/grafana/fire/pkg/gen/agent/v1"
@@ -112,6 +114,7 @@ func (f *Fire) initDistributor() (services.Service, error) {
 
 	// register parca compatible profile store
 	parcastorev1.RegisterProfileStoreServiceServer(f.Server.GRPC, d.ParcaProfileStore())
+	parcadebuginfov1.RegisterDebugInfoServiceServer(f.Server.GRPC, debuginfo.New(f.logger))
 
 	return d, nil
 }
