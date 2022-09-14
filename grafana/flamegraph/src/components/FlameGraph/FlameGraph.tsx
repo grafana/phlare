@@ -27,6 +27,7 @@ import { COLLAPSE_THRESHOLD, PIXELS_PER_LEVEL } from '../../constants';
 import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
 import { Item, ItemWithStart, nestedSetToLevels } from './dataTransform';
 import FlameGraphTooltip, { getTooltipData } from './FlameGraphTooltip';
+import FlameGraphTopTable from './FlameGraphTopTable';
 import { TooltipData } from '../types';
 
 type Props = {
@@ -170,7 +171,8 @@ const FlameGraph = ({
   ]);
 
   return (
-    <>
+    <> 
+      <FlameGraphTopTable levels={levels} />
       <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
     </>
@@ -180,7 +182,8 @@ const FlameGraph = ({
 const getStyles = () => ({
   graph: css`
     cursor: pointer;
-    width: 100%;
+    float: left;
+    width: 50%;
   `,
 });
 

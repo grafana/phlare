@@ -104,7 +104,7 @@ export const getTooltipData = (
   };
 };
 
-const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
+export const getUnitValue = (samples: number, units: any, fallbackSuffix = '') => {
   let unitValue: string;
   let suffix = '';
 

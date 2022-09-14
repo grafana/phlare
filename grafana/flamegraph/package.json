@@ -20,6 +20,8 @@
     "@testing-library/react": "12.1.4",
     "@testing-library/user-event": "14.2.0",
     "@types/lodash": "4.14.181",
+    "@types/react": "17.0.42",
+    "@types/react-virtualized-auto-sizer": "1.0.1",
     "@typescript-eslint/eslint-plugin": "^5.36.2",
     "jest-canvas-mock": "2.4.0",
     "prettier": "2.6.0",
@@ -35,7 +37,8 @@
     "@grafana/ui": "9.1.0",
     "react": "17.0.2",
     "react-dom": "17.0.2",
-    "react-use": "^17.4.0"
+    "react-use": "^17.4.0",
+    "react-virtualized-auto-sizer": "1.0.6"
   },
   "packageManager": "yarn@3.2.2"
 }
