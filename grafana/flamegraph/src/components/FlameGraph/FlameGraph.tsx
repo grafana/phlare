@@ -170,9 +170,13 @@ const FlameGraph = ({
     profileTypeId,
   ]);
 
+  const renderTopTable = useCallback(() => {
+    return (<FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} />);
+  }, [levels, profileTypeId]);
+
   return (
     <> 
-      <FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} />
+      {renderTopTable()}
       <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
     </>
