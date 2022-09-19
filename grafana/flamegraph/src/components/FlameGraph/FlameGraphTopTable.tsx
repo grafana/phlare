@@ -5,41 +5,38 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { useStyles2, Table } from '@grafana/ui';
 
 import { PIXELS_PER_LEVEL } from '../../constants';
-import { ItemWithStart } from './dataTransform';
+import { Item } from './dataTransform';
 import { getUnitValue } from './FlameGraphTooltip';
+import { BYTE_UNITS, COUNT_UNITS, NANOSECOND_UNITS, SampleUnit } from '../types';
 import { ArrayVector, DataFrame, DisplayProcessor, FieldType, getRawDisplayProcessor } from '@grafana/data';
 
 type Props = {
-  levels: ItemWithStart[][];
+  levels: Item[][];
+  profileTypeId: string;
 };
 
-const FlameGraphTopTable = ({ levels }: Props) => {
+const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
   const styles = useStyles2(getStyles);
-  const [df, setDf] = useState<any>({ fields: [] });
+  const [df, setDf] = useState<DataFrame>({ fields: [], length: 0 });
 
   useEffect(() => {
     let label, self, value;
+    let unitValues: Array<{ divider: number; suffix: string; }>;
     let topTable: { [key: string]: any } = [];
-    let itemWithStart: any;
+    let item: Item;
 
     for (let i = 0; i < levels.length; i++) {
       for (var j = 0; j < Object.values(levels[i]).length; j++) {
-        itemWithStart = Object.values(levels[i])[j];
-        label = itemWithStart.label;
-        self = itemWithStart.self;
-        value = itemWithStart.value;
+        item = Object.values(levels[i])[j];
+        label = item.label;
+        self = item.self;
+        value = item.value;
         topTable[label] = topTable[label] || {};
         topTable[label].self = topTable[label].self ? topTable[label].self + self : self;
         topTable[label].value = topTable[label].value ? topTable[label].value + value : value;
       }
     }
 
-    const unitValues = [
-      { divider: 1000, suffix: 'K' },
-      { divider: 1000, suffix: 'M' },
-      { divider: 1000, suffix: 'G' },
-      { divider: 1000, suffix: 'T' },
-    ];
     const labelValues = new ArrayVector(Object.keys(topTable));
     const selfValues = new ArrayVector(
       Object.values(topTable).map((x) => {
@@ -51,6 +48,20 @@ const FlameGraphTopTable = ({ levels }: Props) => {
         return parseInt(x.value, 10);
       })
     );
+
+    const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+    switch (sampleUnit) {
+      case SampleUnit.Bytes:
+        unitValues = BYTE_UNITS;
+        break;
+
+      case SampleUnit.Count:
+        unitValues = COUNT_UNITS;
+        break;
+
+      case SampleUnit.Nanoseconds:
+        unitValues = NANOSECOND_UNITS;
+    }
     const display: DisplayProcessor = (v) => ({ numeric: v, text: getUnitValue(parseInt(v, 10), unitValues) });
 
     let df: DataFrame = { fields: [], length: labelValues.length };
@@ -84,7 +95,7 @@ const FlameGraphTopTable = ({ levels }: Props) => {
       display: display,
     });
     setDf(df);
-  }, [levels]);
+  }, [levels, profileTypeId]);
 
   return (
     <>

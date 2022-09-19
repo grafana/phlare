@@ -172,7 +172,7 @@ const FlameGraph = ({
 
   return (
     <> 
-      <FlameGraphTopTable levels={levels} />
+      <FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} />
       <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
     </>

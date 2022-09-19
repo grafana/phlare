@@ -3,7 +3,7 @@ import React, { LegacyRef } from 'react';
 
 import { useStyles, Tooltip } from '@grafana/ui';
 
-import { TooltipData, SampleUnit } from '../types';
+import { BYTE_UNITS, COUNT_UNITS, NANOSECOND_UNITS, TooltipData, SampleUnit } from '../types';
 
 type Props = {
   tooltipRef: LegacyRef<HTMLDivElement>;
@@ -58,23 +58,13 @@ export const getTooltipData = (
 
   switch (sampleUnit) {
     case SampleUnit.Bytes:
-      unitValue = getUnitValue(samples, [
-        { divider: 1024, suffix: 'KB' },
-        { divider: 1024, suffix: 'MB' },
-        { divider: 1024, suffix: 'GB' },
-        { divider: 1024, suffix: 'PT' },
-      ]);
+      unitValue = getUnitValue(samples, BYTE_UNITS);
       percentTitle = '% of total RAM';
       unitTitle = 'RAM';
       break;
 
     case SampleUnit.Count:
-      unitValue = getUnitValue(samples, [
-        { divider: 1000, suffix: 'K' },
-        { divider: 1000, suffix: 'M' },
-        { divider: 1000, suffix: 'G' },
-        { divider: 1000, suffix: 'T' },
-      ]);
+      unitValue = getUnitValue(samples, COUNT_UNITS);
       percentTitle = '% of total objects';
       unitTitle = 'Allocated objects';
       break;
@@ -83,11 +73,7 @@ export const getTooltipData = (
       unitValue = getUnitValue(
         // convert nanoseconds to seconds
         samples / 1000000000,
-        [
-          { divider: 60, suffix: 'minutes' },
-          { divider: 60, suffix: 'hours' },
-          { divider: 24, suffix: 'days' },
-        ],
+        NANOSECOND_UNITS,
         'seconds'
       );
       percentTitle = '% of total time';
