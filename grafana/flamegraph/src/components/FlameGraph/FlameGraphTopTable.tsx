@@ -90,7 +90,7 @@ const FlameGraphTopTable = ({ levels }: Props) => {
         <div className={styles.topTable}>
            <AutoSizer style={{ width: '100%', height: '700px' }}>
             {({ width, height }) => (
-              <Table width={width} height={height} data={df} />
+              <Table width={width} height={height} data={df} initialSortBy={[{displayName: 'Self', desc: true}]} />
             )}
           </AutoSizer>
         </div>
