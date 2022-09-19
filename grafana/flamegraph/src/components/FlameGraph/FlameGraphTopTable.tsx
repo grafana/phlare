@@ -130,7 +130,8 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
 const getStyles = () => ({
   topTable: css`
     float: left;
-    width: 50%;
+    margin-right: 20px;
+    width: calc(50% - 20px);
   `,
 });
 
