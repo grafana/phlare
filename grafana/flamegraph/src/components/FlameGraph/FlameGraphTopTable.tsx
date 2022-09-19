@@ -4,6 +4,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 
 import { useStyles2, Table } from '@grafana/ui';
 
+import { PIXELS_PER_LEVEL } from '../../constants';
 import { ItemWithStart } from './dataTransform';
 import { getUnitValue } from './FlameGraphTooltip';
 import { ArrayVector, DataFrame, DisplayProcessor, FieldType, getRawDisplayProcessor } from '@grafana/data';
@@ -88,7 +89,7 @@ const FlameGraphTopTable = ({ levels }: Props) => {
     <>
       {df.fields &&
         <div className={styles.topTable}>
-           <AutoSizer style={{ width: '100%', height: '700px' }}>
+           <AutoSizer style={{ width: '100%', height: PIXELS_PER_LEVEL * levels.length + 'px' }}>
             {({ width, height }) => (
               <Table width={width} height={height} data={df} initialSortBy={[{displayName: 'Self', desc: true}]} />
             )}
