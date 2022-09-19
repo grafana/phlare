@@ -57,11 +57,16 @@ const FlameGraphTopTable = ({ levels }: Props) => {
       config: {},
       display: getRawDisplayProcessor()
     });
+
     df.fields.push({
       values: selfValues,
       name: 'Self',
       type: FieldType.number,
-      config: {},
+      config: {
+        custom: {
+          width: 80
+        }
+      },
       display: display
     });
 
@@ -69,7 +74,11 @@ const FlameGraphTopTable = ({ levels }: Props) => {
       values: totalValues,
       name: 'Total',
       type: FieldType.number,
-      config: {},
+      config: {
+        custom: {
+          width: 80
+        }
+      },
       display: display
     });
     setDf(df);
