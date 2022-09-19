@@ -8,7 +8,7 @@ import { PIXELS_PER_LEVEL } from '../../constants';
 import { Item } from './dataTransform';
 import { getUnitValue } from './FlameGraphTooltip';
 import { BYTE_UNITS, COUNT_UNITS, NANOSECOND_UNITS, SampleUnit } from '../types';
-import { ArrayVector, DataFrame, DisplayProcessor, FieldType, getRawDisplayProcessor } from '@grafana/data';
+import { ArrayVector, DataFrame, FieldType, getRawDisplayProcessor } from '@grafana/data';
 
 type Props = {
   levels: Item[][];
@@ -20,8 +20,7 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
   const [df, setDf] = useState<DataFrame>({ fields: [], length: 0 });
 
   useEffect(() => {
-    let label, self, value;
-    let unitValues: Array<{ divider: number; suffix: string; }>;
+    let label, self, value, display;
     let topTable: { [key: string]: any } = [];
     let item: Item;
 
@@ -52,17 +51,16 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
     const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
     switch (sampleUnit) {
       case SampleUnit.Bytes:
-        unitValues = BYTE_UNITS;
+        display = (v: number) => ({ numeric: v, text: getUnitValue(v, BYTE_UNITS) });
         break;
 
       case SampleUnit.Count:
-        unitValues = COUNT_UNITS;
+        display = (v: number) => ({ numeric: v, text: getUnitValue(v, COUNT_UNITS) });
         break;
 
       case SampleUnit.Nanoseconds:
-        unitValues = NANOSECOND_UNITS;
+        display = (v: number) => ({ numeric: v, text: getUnitValue(v / 1000000000, NANOSECOND_UNITS, 'seconds') });
     }
-    const display: DisplayProcessor = (v) => ({ numeric: v, text: getUnitValue(parseInt(v, 10), unitValues) });
 
     let df: DataFrame = { fields: [], length: labelValues.length };
     df.fields.push({
@@ -78,7 +76,7 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
       type: FieldType.number,
       config: {
         custom: {
-          width: 80,
+          width: 120,
         },
       },
       display: display,
@@ -89,7 +87,7 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
       type: FieldType.number,
       config: {
         custom: {
-          width: 80,
+          width: 120,
         },
       },
       display: display,
