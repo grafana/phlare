@@ -6,3 +6,4 @@ export const BAR_BORDER_WIDTH = 0.5;
 export const BAR_TEXT_PADDING_LEFT = 4;
 export const STEP_OFFSET = 4;
 export const NAME_OFFSET = 3;
+export const MIN_WIDTH_TO_SHOW_TOP_TABLE = 900;

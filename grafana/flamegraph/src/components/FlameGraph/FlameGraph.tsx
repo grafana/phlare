@@ -21,9 +21,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useWindowSize } from 'react-use';
 
 import { DataFrame, DataFrameView } from '@grafana/data';
-import { useStyles2 } from '@grafana/ui';
 
-import { COLLAPSE_THRESHOLD, PIXELS_PER_LEVEL } from '../../constants';
+import { COLLAPSE_THRESHOLD, PIXELS_PER_LEVEL, MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../../constants';
 import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
 import { Item, ItemWithStart, nestedSetToLevels } from './dataTransform';
 import FlameGraphTooltip, { getTooltipData } from './FlameGraphTooltip';
@@ -51,7 +50,8 @@ const FlameGraph = ({
   setRangeMin,
   setRangeMax,
 }: Props) => {
-  const styles = useStyles2(getStyles);
+  const { width: windowWidth } = useWindowSize();
+  const styles = getStyles(windowWidth);
   const totalTicks = data.fields[1].values.get(0);
   const profileTypeId = data.meta!.custom!.ProfileTypeID;
 
@@ -66,7 +66,6 @@ const FlameGraph = ({
     return nestedSetToLevels(dataView);
   }, [data]);
 
-  const { width: windowWidth } = useWindowSize();
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipData, setTooltipData] = useState<TooltipData>();
@@ -176,18 +175,18 @@ const FlameGraph = ({
 
   return (
     <> 
-      {renderTopTable()}
+      {windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable() : null}
       <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
     </>
   );
 };
 
-const getStyles = () => ({
+const getStyles = (windowWidth: number) => ({
   graph: css`
     cursor: pointer;
     float: left;
-    width: 50%;
+    width: ${windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? '50%' : '100%'};
   `,
 });
 
