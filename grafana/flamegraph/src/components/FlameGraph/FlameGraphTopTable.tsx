@@ -15,7 +15,6 @@ type Props = {
 
 const FlameGraphTopTable = ({ levels }: Props) => {
   const styles = useStyles2(getStyles);
-  const [_, setTopTable] = useState<any>([])
   const [df, setDf] = useState<any>({fields: []})
 
 
@@ -23,7 +22,6 @@ const FlameGraphTopTable = ({ levels }: Props) => {
     let label, self, value;
     let topTable: { [key: string]: any; } = [];
     let itemWithStart: any;
-    setTopTable([]);
     
     for (let i = 0; i < levels.length; i++) {
       for (var j = 0; j < Object.values(levels[i]).length; j++) {
@@ -36,8 +34,6 @@ const FlameGraphTopTable = ({ levels }: Props) => {
         topTable[label].value = topTable[label].value ? topTable[label].value + value : value;
       }
     }
-    
-    setTopTable(Object.entries(topTable).sort(([,a],[,b]) => a-b).reverse().slice(0, 10));
 
     const unitValues = [
       { divider: 1000, suffix: 'K' },
@@ -58,7 +54,6 @@ const FlameGraphTopTable = ({ levels }: Props) => {
       config: {},
       display: getRawDisplayProcessor()
     });
-
     df.fields.push({
       values: selfValues,
       name: 'Self',
@@ -70,7 +65,6 @@ const FlameGraphTopTable = ({ levels }: Props) => {
       },
       display: display
     });
-
     df.fields.push({
       values: totalValues,
       name: 'Total',
