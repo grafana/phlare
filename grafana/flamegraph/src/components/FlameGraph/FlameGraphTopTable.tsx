@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
 import { useStyles2, Table } from '@grafana/ui';
@@ -19,10 +19,10 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
   const styles = useStyles2(getStyles);
   const [df, setDf] = useState<DataFrame>({ fields: [], length: 0 });
 
-  useEffect(() => {
-    let label, self, value, display;
-    let topTable: { [key: string]: any } = [];
+  const sortLevelsIntoTable = useCallback(() => {
+    let label, self, value;
     let item: Item;
+    let topTable: { [key: string]: any } = [];
 
     for (let i = 0; i < levels.length; i++) {
       for (var j = 0; j < Object.values(levels[i]).length; j++) {
@@ -36,17 +36,11 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
       }
     }
 
-    const labelValues = new ArrayVector(Object.keys(topTable));
-    const selfValues = new ArrayVector(
-      Object.values(topTable).map((x) => {
-        return parseInt(x.self, 10);
-      })
-    );
-    const totalValues = new ArrayVector(
-      Object.values(topTable).map((x) => {
-        return parseInt(x.value, 10);
-      })
-    );
+    return topTable;
+  }, [levels]);
+
+  const getDisplay = useCallback(() => {
+    let display; 
 
     const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
     switch (sampleUnit) {
@@ -61,6 +55,25 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
       case SampleUnit.Nanoseconds:
         display = (v: number) => ({ numeric: v, text: getUnitValue(v / 1000000000, NANOSECOND_UNITS, 'seconds') });
     }
+
+    return display;
+  }, [profileTypeId]);
+
+  const createFrameFromTable = useCallback(() => {
+    const topTable = sortLevelsIntoTable();
+    const display = getDisplay();
+
+    const labelValues = new ArrayVector(Object.keys(topTable));
+    const selfValues = new ArrayVector(
+      Object.values(topTable).map((x) => {
+        return parseInt(x.self, 10);
+      })
+    );
+    const totalValues = new ArrayVector(
+      Object.values(topTable).map((x) => {
+        return parseInt(x.value, 10);
+      })
+    );
 
     let df: DataFrame = { fields: [], length: labelValues.length };
     df.fields.push({
@@ -93,7 +106,11 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
       display: display,
     });
     setDf(df);
-  }, [levels, profileTypeId]);
+  }, [getDisplay, sortLevelsIntoTable]);
+
+  useEffect(() => {
+    createFrameFromTable();
+  }, [sortLevelsIntoTable, levels, profileTypeId, createFrameFromTable]);
 
   return (
     <>
