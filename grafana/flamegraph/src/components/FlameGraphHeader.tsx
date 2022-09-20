@@ -1,6 +1,5 @@
 import { css } from '@emotion/css';
 import React from 'react';
-import { useWindowSize } from 'react-use';
 
 import { Button, Input, useStyles, RadioButtonGroup } from '@grafana/ui';
 
@@ -15,6 +14,7 @@ type Props = {
   setQuery: (query: string) => void;
   selectedView: SelectedView;
   setSelectedView: (view: SelectedView) => void;
+  windowWidth: number;
 };
 
 const viewOptions: Array<{ value: string; label: string; description: string }> = [
@@ -23,9 +23,8 @@ const viewOptions: Array<{ value: string; label: string; description: string }> 
   { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' },
 ];
 
-const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery, selectedView, setSelectedView }: Props) => {
+const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery, selectedView, setSelectedView, windowWidth }: Props) => {
   const styles = useStyles(getStyles);
-  const { width: windowWidth } = useWindowSize();
 
   return (
     <div className={styles.header}>

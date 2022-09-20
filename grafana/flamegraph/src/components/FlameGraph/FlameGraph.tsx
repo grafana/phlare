@@ -17,20 +17,19 @@
 // TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 // THIS SOFTWARE.
 import { css } from '@emotion/css';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useWindowSize } from 'react-use';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DataFrame, DataFrameView } from '@grafana/data';
+import { DataFrame } from '@grafana/data';
 
 import { COLLAPSE_THRESHOLD, PIXELS_PER_LEVEL, MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../../constants';
 import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
-import { Item, ItemWithStart, nestedSetToLevels } from './dataTransform';
+import { ItemWithStart } from './dataTransform';
 import FlameGraphTooltip, { getTooltipData } from './FlameGraphTooltip';
-import FlameGraphTopTable from './FlameGraphTopTable';
 import { TooltipData, SelectedView } from '../types';
 
 type Props = {
   data: DataFrame;
+  levels: ItemWithStart[][];
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
@@ -40,10 +39,12 @@ type Props = {
   setRangeMax: (range: number) => void;
   selectedView: SelectedView;
   setSelectedView: (view: SelectedView) => void;
+  windowWidth: number;
 };
 
 const FlameGraph = ({
   data,
+  levels,
   topLevelIndex,
   rangeMin,
   rangeMax,
@@ -53,22 +54,11 @@ const FlameGraph = ({
   setRangeMax,
   selectedView,
   setSelectedView,
+  windowWidth,
 }: Props) => {
-  const { width: windowWidth } = useWindowSize();
   const styles = getStyles(selectedView, windowWidth);
   const totalTicks = data.fields[1].values.get(0);
   const profileTypeId = data.meta!.custom!.ProfileTypeID;
-
-  // Transform dataFrame with nested set format to array of levels. Each level contains all the bars for a particular
-  // level of the flame graph. We do this temporary as in the end we should be able to render directly by iterating
-  // over the dataFrame rows.
-  const levels = useMemo(() => {
-    if (!data) {
-      return [];
-    }
-    const dataView = new DataFrameView<Item>(data);
-    return nestedSetToLevels(dataView);
-  }, [data]);
 
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -181,13 +171,8 @@ const FlameGraph = ({
     }
   }, [selectedView, setSelectedView, windowWidth]);
 
-  const renderTopTable = useCallback(() => {
-    return (<FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} />);
-  }, [levels, profileTypeId, selectedView]);
-
   return (
     <> 
-      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable() : null}
       {selectedView !== SelectedView.TopTable && (
         <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
       )}
