@@ -2,21 +2,22 @@ import { css } from '@emotion/css';
 import React, { useCallback, useEffect, useState } from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
-import { useStyles2, Table } from '@grafana/ui';
+import { Table } from '@grafana/ui';
+import { ArrayVector, DataFrame, FieldType, getRawDisplayProcessor } from '@grafana/data';
 
 import { PIXELS_PER_LEVEL } from '../../constants';
 import { Item } from './dataTransform';
 import { getUnitValue } from './FlameGraphTooltip';
-import { BYTE_UNITS, COUNT_UNITS, NANOSECOND_UNITS, SampleUnit } from '../types';
-import { ArrayVector, DataFrame, FieldType, getRawDisplayProcessor } from '@grafana/data';
+import { BYTE_UNITS, COUNT_UNITS, NANOSECOND_UNITS, SampleUnit, SelectedView } from '../types';
 
 type Props = {
   levels: Item[][];
   profileTypeId: string;
+  selectedView: SelectedView;
 };
 
-const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
-  const styles = useStyles2(getStyles);
+const FlameGraphTopTable = ({ levels, profileTypeId, selectedView }: Props) => {
+  const styles = getStyles(selectedView);
   const [df, setDf] = useState<DataFrame>({ fields: [], length: 0 });
 
   const sortLevelsIntoTable = useCallback(() => {
@@ -127,11 +128,12 @@ const FlameGraphTopTable = ({ levels, profileTypeId }: Props) => {
   );
 };
 
-const getStyles = () => ({
+const getStyles = (selectedView: SelectedView) => ({
   topTable: css`
+    cursor: pointer;
     float: left;
     margin-right: 20px;
-    width: calc(50% - 20px);
+    width: ${selectedView === SelectedView.TopTable ? '100%' : 'calc(50% - 20px)'};
   `,
 });
 

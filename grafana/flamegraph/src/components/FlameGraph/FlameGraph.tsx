@@ -27,7 +27,7 @@ import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
 import { Item, ItemWithStart, nestedSetToLevels } from './dataTransform';
 import FlameGraphTooltip, { getTooltipData } from './FlameGraphTooltip';
 import FlameGraphTopTable from './FlameGraphTopTable';
-import { TooltipData } from '../types';
+import { TooltipData, SelectedView } from '../types';
 
 type Props = {
   data: DataFrame;
@@ -38,6 +38,8 @@ type Props = {
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
+  selectedView: SelectedView;
+  setSelectedView: (view: SelectedView) => void;
 };
 
 const FlameGraph = ({
@@ -49,9 +51,11 @@ const FlameGraph = ({
   setTopLevelIndex,
   setRangeMin,
   setRangeMax,
+  selectedView,
+  setSelectedView,
 }: Props) => {
   const { width: windowWidth } = useWindowSize();
-  const styles = getStyles(windowWidth);
+  const styles = getStyles(selectedView, windowWidth);
   const totalTicks = data.fields[1].values.get(0);
   const profileTypeId = data.meta!.custom!.ProfileTypeID;
 
@@ -167,26 +171,36 @@ const FlameGraph = ({
     setRangeMin,
     setRangeMax,
     profileTypeId,
+    selectedView,
   ]);
 
+  // If user resizes window with top table as the selected view
+  useEffect(() => {
+    if (windowWidth < MIN_WIDTH_TO_SHOW_TOP_TABLE && selectedView === SelectedView.TopTable) {
+      setSelectedView(SelectedView.FlameGraph);
+    }
+  }, [selectedView, setSelectedView, windowWidth]);
+
   const renderTopTable = useCallback(() => {
-    return (<FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} />);
-  }, [levels, profileTypeId]);
+    return (<FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} />);
+  }, [levels, profileTypeId, selectedView]);
 
   return (
     <> 
-      {windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable() : null}
-      <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
+      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable() : null}
+      {selectedView !== SelectedView.TopTable && (
+        <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
+      )}
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
     </>
   );
 };
 
-const getStyles = (windowWidth: number) => ({
+const getStyles = (selectedView: SelectedView, windowWidth: number) => ({
   graph: css`
     cursor: pointer;
     float: left;
-    width: ${windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? '50%' : '100%'};
+    width: ${selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? '50%' : '100%'};
   `,
 });
 

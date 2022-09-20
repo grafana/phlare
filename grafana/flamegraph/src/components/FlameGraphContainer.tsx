@@ -3,6 +3,7 @@ import { DataFrame } from '@grafana/data';
 
 import FlameGraphHeader from './FlameGraphHeader';
 import FlameGraph from './FlameGraph/FlameGraph';
+import { SelectedView } from './types';
 
 type Props = {
   data: DataFrame;
@@ -13,6 +14,7 @@ const FlameGraphContainer = (props: Props) => {
   const [rangeMin, setRangeMin] = useState(0);
   const [rangeMax, setRangeMax] = useState(1);
   const [query, setQuery] = useState('');
+  const [selectedView, setSelectedView] = useState(SelectedView.Both);
 
   return (
     <>
@@ -22,6 +24,8 @@ const FlameGraphContainer = (props: Props) => {
         setRangeMax={setRangeMax}
         query={query}
         setQuery={setQuery}
+        selectedView={selectedView}
+        setSelectedView={setSelectedView}
       />
 
       <FlameGraph
@@ -33,6 +37,8 @@ const FlameGraphContainer = (props: Props) => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
+        selectedView={selectedView}
+        setSelectedView={setSelectedView}
       />
     </>
   );

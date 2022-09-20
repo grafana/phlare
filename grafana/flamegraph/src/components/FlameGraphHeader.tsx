@@ -1,7 +1,11 @@
 import { css } from '@emotion/css';
 import React from 'react';
+import { useWindowSize } from 'react-use';
 
-import { Button, Input, useStyles } from '@grafana/ui';
+import { Button, Input, useStyles, RadioButtonGroup } from '@grafana/ui';
+
+import { SelectedView } from './types'
+import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
 
 type Props = {
   query: string;
@@ -9,24 +13,33 @@ type Props = {
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
   setQuery: (query: string) => void;
+  selectedView: SelectedView;
+  setSelectedView: (view: SelectedView) => void;
 };
 
-const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery }: Props) => {
+const viewOptions: Array<{ value: string; label: string; description: string }> = [
+  { value: SelectedView.TopTable, label: 'Top Table', description: 'Only show top table' },
+  { value: SelectedView.FlameGraph, label: 'Flame Graph', description: 'Only show flame graph' },
+  { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' },
+];
+
+const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery, selectedView, setSelectedView }: Props) => {
   const styles = useStyles(getStyles);
+  const { width: windowWidth } = useWindowSize();
 
   return (
     <div className={styles.header}>
-      <div className={styles.search}>
-        <Input
-          value={query || ''}
-          onChange={(v) => {
-            setQuery(v.currentTarget.value);
-          }}
-          placeholder={'Search..'}
-          width={24}
-        />
-      </div>
-      <div className={styles.reset}>
+      <div className={styles.leftContainer}>
+        <div className={styles.inputContainer}>
+          <Input
+            value={query || ''}
+            onChange={(v) => {
+              setQuery(v.currentTarget.value);
+            }}
+            placeholder={'Search..'}
+            width={24}
+          />
+        </div>
         <Button
           type={'button'}
           variant={'secondary'}
@@ -38,9 +51,15 @@ const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, s
             setQuery('');
           }}
         >
-          Reset
+          Reset View
         </Button>
       </div>
+      
+      {windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE && (
+        <div className={styles.rightContainer}>
+          <RadioButtonGroup options={viewOptions} value={selectedView} onChange={(view) => { setSelectedView(view as SelectedView) }} />
+        </div>
+      )}
     </div>
   );
 };
@@ -51,10 +70,14 @@ const getStyles = () => ({
     padding: 20px 0;
     width: 100%;
   `,
-  search: css`
+  inputContainer: css`
+    float: left;
+    margin-right: 20px;
+  `,
+  leftContainer: css`
     float: left;
   `,
-  reset: css`
+  rightContainer: css`
     float: right;
   `,
 });

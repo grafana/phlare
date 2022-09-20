@@ -13,6 +13,12 @@ export enum SampleUnit {
   Nanoseconds = 'nanoseconds'
 }
 
+export enum SelectedView {
+  TopTable = 'topTable',
+  FlameGraph = 'flameGraph',
+  Both = 'both'
+}
+
 export const BYTE_UNITS = [
   { divider: 1024, suffix: 'KB' },
   { divider: 1024, suffix: 'MB' },
