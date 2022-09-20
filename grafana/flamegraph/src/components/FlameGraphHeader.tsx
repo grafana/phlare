@@ -3,7 +3,7 @@ import React from 'react';
 
 import { Button, Input, useStyles, RadioButtonGroup } from '@grafana/ui';
 
-import { SelectedView } from './types'
+import { SelectedView } from './types';
 import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
 
 type Props = {
@@ -23,7 +23,16 @@ const viewOptions: Array<{ value: string; label: string; description: string }> 
   { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' },
 ];
 
-const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, setQuery, selectedView, setSelectedView, windowWidth }: Props) => {
+const FlameGraphHeader = ({
+  query,
+  setTopLevelIndex,
+  setRangeMin,
+  setRangeMax,
+  setQuery,
+  selectedView,
+  setSelectedView,
+  windowWidth,
+}: Props) => {
   const styles = useStyles(getStyles);
 
   return (
@@ -53,10 +62,16 @@ const FlameGraphHeader = ({ query, setTopLevelIndex, setRangeMin, setRangeMax, s
           Reset View
         </Button>
       </div>
-      
+
       {windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE && (
         <div className={styles.rightContainer}>
-          <RadioButtonGroup options={viewOptions} value={selectedView} onChange={(view) => { setSelectedView(view as SelectedView) }} />
+          <RadioButtonGroup
+            options={viewOptions}
+            value={selectedView}
+            onChange={(view) => {
+              setSelectedView(view as SelectedView);
+            }}
+          />
         </div>
       )}
     </div>

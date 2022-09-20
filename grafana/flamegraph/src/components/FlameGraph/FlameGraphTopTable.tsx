@@ -41,7 +41,7 @@ const FlameGraphTopTable = ({ levels, profileTypeId, selectedView }: Props) => {
   }, [levels]);
 
   const getDisplay = useCallback(() => {
-    let display; 
+    let display;
 
     const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
     switch (sampleUnit) {

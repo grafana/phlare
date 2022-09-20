@@ -129,7 +129,7 @@ const FlameGraph = ({
           setShowTooltip(false);
           const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
           const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
-          const bar = levels[levelIndex][barIndex]
+          const bar = levels[levelIndex][barIndex];
 
           if (!isNaN(levelIndex) && !isNaN(barIndex)) {
             if (barIndex !== -1) {
@@ -172,7 +172,7 @@ const FlameGraph = ({
   }, [selectedView, setSelectedView, windowWidth]);
 
   return (
-    <> 
+    <>
       {selectedView !== SelectedView.TopTable && (
         <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
       )}

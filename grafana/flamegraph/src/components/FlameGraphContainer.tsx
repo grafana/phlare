@@ -34,7 +34,7 @@ const FlameGraphContainer = (props: Props) => {
   }, [props.data]);
 
   const renderTopTable = useCallback(() => {
-    return (<FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} />);
+    return <FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} />;
   }, [levels, profileTypeId, selectedView]);
 
   return (
