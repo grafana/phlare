@@ -114,10 +114,8 @@ const FlameGraph = ({
       graphRef.current.onclick = (e) => {
         const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
         const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
-        if (barIndex === -1) {
-          return;
-        }
-        if (!isNaN(levelIndex) && !isNaN(barIndex)) {
+        
+        if (barIndex !== -1 && !isNaN(levelIndex) && !isNaN(barIndex)) {
           setTopLevelIndex(levelIndex);
           setRangeMin(levels[levelIndex][barIndex].start / totalTicks);
           setRangeMax((levels[levelIndex][barIndex].start + levels[levelIndex][barIndex].value) / totalTicks);
@@ -129,17 +127,15 @@ const FlameGraph = ({
           setShowTooltip(false);
           const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
           const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
-          const bar = levels[levelIndex][barIndex];
+        
+          if (barIndex !== -1 && !isNaN(levelIndex) && !isNaN(barIndex)) {
+            tooltipRef.current.style.left = e.clientX + 10 + 'px';
+            tooltipRef.current.style.top = e.clientY + 40 + 'px';
 
-          if (!isNaN(levelIndex) && !isNaN(barIndex)) {
-            if (barIndex !== -1) {
-              tooltipRef.current.style.left = e.clientX + 10 + 'px';
-              tooltipRef.current.style.top = e.clientY + 40 + 'px';
-
-              const tooltipData = getTooltipData(profileTypeId, bar.label, bar.value, totalTicks);
-              setTooltipData(tooltipData);
-              setShowTooltip(true);
-            }
+            const bar = levels[levelIndex][barIndex];
+            const tooltipData = getTooltipData(profileTypeId, bar.label, bar.value, totalTicks);
+            setTooltipData(tooltipData);
+            setShowTooltip(true);
           }
         }
       };
