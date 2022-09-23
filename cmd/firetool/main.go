@@ -18,6 +18,9 @@ var cfg struct {
 		path               string
 		restoreMissingMeta bool
 	}
+	query struct {
+		config string
+	}
 }
 
 var (
@@ -38,6 +41,13 @@ func main() {
 	blocksListCmd := blocksCmd.Command("list", "List blocks.")
 	blocksListCmd.Flag("restore-missing-meta", "").Default("false").BoolVar(&cfg.blocks.restoreMissingMeta)
 
+	queryCmd := app.Command("query", "Query Grafana Fire.")
+	queryCmd.Flag("config", "path to the object store config file").Default("./config.yaml").StringVar(&cfg.query.config)
+
+	pprofCmd := queryCmd.Command("pprof", "query pprof data")
+	since := pprofCmd.Flag("since", "query from now up to").Default("1h").Duration()
+	query := pprofCmd.Arg("query", "label selector").Default("{}").String()
+
 	parsedCmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	if !cfg.verbose {
@@ -47,6 +57,8 @@ func main() {
 	switch parsedCmd {
 	case blocksListCmd.FullCommand():
 		os.Exit(checkError(blocksList(ctx)))
+	case pprofCmd.FullCommand():
+		os.Exit(checkError(pprof(ctx, *since, *query)))
 	}
 }
 

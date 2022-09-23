@@ -1,0 +1,5 @@
+storage:
+  bucketConfig: |
+    type: GCS
+    config:
+      bucket: dev-us-central-0-profiles-dev-001-data
