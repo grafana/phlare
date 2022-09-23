@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -353,7 +354,17 @@ func (f *FireDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiSt
 	return nil
 }
 
-type BidiServerMerge[Res any, Req any] interface {
+type bidiRequests interface {
+	*ingestv1.MergeProfilesStacktracesRequest | *ingestv1.MergeProfilesLabelsRequest
+	GetProfiles() []bool
+}
+
+type bidiResponses interface {
+	*ingestv1.MergeProfilesStacktracesResponse | *ingestv1.MergeProfilesLabelsResponse
+	SetSelectedProfiles(*ingestv1.ProfileSets)
+}
+
+type BidiServerMerge[Res bidiResponses, Req bidiRequests] interface {
 	Send(Res) error
 	Receive() (Req, error)
 }
@@ -363,10 +374,19 @@ type labelWithIndex struct {
 	index int
 }
 
+func makeNew[T any](v T) T {
+	if typ := reflect.TypeOf(v); typ.Kind() == reflect.Ptr {
+		elem := typ.Elem()
+		return reflect.New(elem).Interface().(T) // must use reflect
+	}
+
+	var res T
+	return res
+}
+
 // filterProfiles sends profiles to the client and filters them via the bidi stream.
 func filterProfiles[B BidiServerMerge[Res, Req],
-	Res *ingestv1.MergeProfilesStacktracesResponse | *ingestv1.MergeProfilesLabelsResponse,
-	Req *ingestv1.MergeProfilesStacktracesRequest | *ingestv1.MergeProfilesLabelsRequest](
+	Res bidiResponses, Req bidiRequests](
 	ctx context.Context, profiles iter.Iterator[Profile], batchProfileSize int, stream B,
 ) ([]Profile, error) {
 	selection := []Profile{}
@@ -405,20 +425,10 @@ func filterProfiles[B BidiServerMerge[Res, Req],
 
 		}
 		sp.LogFields(otlog.String("msg", "sending batch to client"))
-		var err error
-		switch s := BidiServerMerge[Res, Req](stream).(type) {
-		case BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest]:
-			err = s.Send(&ingestv1.MergeProfilesStacktracesResponse{
-				SelectedProfiles: selectProfileResult,
-			})
-		case BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest]:
-			err = s.Send(&ingestv1.MergeProfilesLabelsResponse{
-				SelectedProfiles: selectProfileResult,
-			})
-		}
-		// read a batch of profiles and sends it.
-
-		if err != nil {
+		var res Res
+		res = makeNew(res)
+		res.SetSelectedProfiles(selectProfileResult)
+		if err := stream.Send(res); err != nil {
 			if errors.Is(err, io.EOF) {
 				return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
 			}
@@ -428,28 +438,16 @@ func filterProfiles[B BidiServerMerge[Res, Req],
 
 		sp.LogFields(otlog.String("msg", "reading selection from client"))
 
-		// handle response for the batch.
-		var selected []bool
-		switch s := BidiServerMerge[Res, Req](stream).(type) {
-		case BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest]:
-			selectionResponse, err := s.Receive()
-			if err == nil {
-				selected = selectionResponse.Profiles
-			}
-		case BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest]:
-			selectionResponse, err := s.Receive()
-			if err == nil {
-				selected = selectionResponse.Profiles
-			}
-		}
+		selectionResponse, err := stream.Receive()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
 			}
 			return err
 		}
+
 		sp.LogFields(otlog.String("msg", "selection received"))
-		for i, k := range selected {
+		for i, k := range selectionResponse.GetProfiles() {
 			if k {
 				selection = append(selection, batch[i])
 			}
