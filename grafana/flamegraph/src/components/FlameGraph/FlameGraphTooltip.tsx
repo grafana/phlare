@@ -53,7 +53,7 @@ export const getTooltipData = (
   let unitTitle = '';
   let unitValue = '';
 
-  const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
+  const sampleUnit = profileTypeId?.split(':').find((part) => Object.values(SampleUnit).includes(part as SampleUnit));
   const percent = Math.round(10000 * (samples / totalTicks)) / 100;
 
   switch (sampleUnit) {
@@ -75,8 +75,8 @@ export const getTooltipData = (
         { divider: 1000, suffix: 'G' },
         { divider: 1000, suffix: 'T' },
       ]);
-      percentTitle = '% of total objects';
-      unitTitle = 'Allocated objects';
+      percentTitle = '% of total count';
+      unitTitle = 'Count';
       break;
 
     case SampleUnit.Nanoseconds:
