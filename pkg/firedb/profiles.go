@@ -364,7 +364,6 @@ func (*profilesHelper) key(s *schemav1.Profile) noKey {
 }
 
 func (*profilesHelper) addToRewriter(r *rewriter, elemRewriter idConversionTable) {
-	r.locations = elemRewriter
 }
 
 func (*profilesHelper) rewrite(r *rewriter, s *schemav1.Profile) error {

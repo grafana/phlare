@@ -281,6 +281,7 @@ func TestHeadIngestRealProfiles(t *testing.T) {
 	profilePaths := []string{
 		"testdata/heap",
 		"testdata/profile",
+		"testdata/parca-agent",
 	}
 
 	head := newTestHead(t)
