@@ -19,7 +19,7 @@ type Props = {
 };
 
 const FlameGraphTopTableContainer = ({ levels, profileTypeId, selectedView, query, setQuery }: Props) => {
-  const styles = useStyles2((theme) => getStyles(selectedView));
+  const styles = useStyles2(() => getStyles(selectedView));
   const [topTable, setTopTable] = useState<TopTableData[]>();
 
   const sortLevelsIntoTable = useCallback(() => {

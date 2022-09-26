@@ -92,6 +92,9 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
         <div {...row.getRowProps({ style })} className={classNames} onClick={() => { rowClicked(rowValue) }}>
           {row.cells.map((cell) => {
             const { key, ...cellProps } = cell.getCellProps();
+            if (cellProps.style) {
+              cellProps.style.minWidth = cellProps.style.width;
+            }
             return (
               <div key={key} className={styles.cell} {...cellProps}>
                 {cell.render('cell')}
@@ -132,7 +135,7 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
           <FixedSizeList
             height={height}
             itemCount={rows.length}
-            itemSize={35}
+            itemSize={38}
             width={'100%'}
             style={{ overflow: 'hidden auto' }}
           >
@@ -149,17 +152,17 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
 }
 
 const SymbolCell = ({cell: { value }}: CellProps<TopTableValue, TopTableValue>) => { 
-  return <span>{value}</span>
+  return <div>{value}</div>
 }
 
 const UnitCell = ({cell: { value }}: CellProps<TopTableValue, TopTableValue>) => {
-  return <span>{value.unitValue}</span>
+  return <div>{value.unitValue}</div>
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({
   table: (height: number) => {
     return css`
-      label: joey-table;
+      background-color: ${theme.colors.background.primary};
       height: ${height}px;
       overflow: scroll;
       display: flex;
@@ -168,41 +171,49 @@ const getStyles = (theme: GrafanaTheme2) => ({
     `;
   },
   header: css`
-    label: joey-header;
     height: 38px;
+
+    & > :nth-child(2), & > :nth-child(3) {
+      text-align: right;
+    }
   `,
   headerCell: css`
-    label: joey-header-cell;
     background-color: ${theme.colors.background.secondary};
+    color: ${theme.colors.primary.text};
     padding: ${theme.spacing(1)};
   `,
   matchedRow: css`
-    label: joey-matched-row;
-    display: block;
-
     & > :nth-child(1), & > :nth-child(2), & > :nth-child(3) {
-      background-color: ${theme.colors.background.secondary} !important;
+      background-color: ${theme.colors.emphasize(theme.colors.background.primary, 0.03)} !important;
     }
   `,
   row: css`
-    label: joey-row;
+    border-top: 1px solid ${theme.colors.border.weak};
 
     &:hover {
       background-color: ${theme.colors.emphasize(theme.colors.background.primary, 0.03)};
     }
+    & > :nth-child(2), & > :nth-child(3) {
+      text-align: right;
+    }
+    & > :nth-child(3) {
+      border-right: none;
+    }
   `,
   cell: css`
-    label: joey-cell;
+    border-right: 1px solid ${theme.colors.border.weak};
     padding: ${theme.spacing(1)};
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
+    
+    div {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     &:hover {
       overflow: visible;
       width: auto !important;
       box-shadow: 0 0 2px ${theme.colors.primary.main};
-      background-color: ${theme.colors.background.primary};
+      background-color: ${theme.colors.emphasize(theme.colors.background.primary, 0.03)};
       z-index: 1;
     }
   `,

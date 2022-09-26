@@ -81,7 +81,7 @@ const FlameGraphHeader = ({
 const getStyles = () => ({
   header: css`
     display: flow-root;
-    padding: 20px 0;
+    padding: 0 0 20px 0;
     width: 100%;
   `,
   inputContainer: css`

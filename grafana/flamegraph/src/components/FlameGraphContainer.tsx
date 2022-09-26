@@ -8,6 +8,7 @@ import { SelectedView } from './types';
 import FlameGraphTopTableContainer from './TopTable/FlameGraphTopTableContainer';
 import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
 import { Item, nestedSetToLevels } from './FlameGraph/dataTransform';
+import { Collapse } from '@grafana/ui';
 
 type Props = {
   data: DataFrame;
@@ -38,7 +39,7 @@ const FlameGraphContainer = (props: Props) => {
   }, [levels, profileTypeId, selectedView]);
 
   return (
-    <>
+    <Collapse label='' isOpen>
       <FlameGraphHeader
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
@@ -66,7 +67,7 @@ const FlameGraphContainer = (props: Props) => {
         setSelectedView={setSelectedView}
         windowWidth={windowWidth}
       />
-    </>
+    </Collapse>
   );
 };
 
