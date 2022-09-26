@@ -171,7 +171,7 @@ const FlameGraph = ({
   return (
     <>
       {selectedView !== SelectedView.TopTable && (
-        <canvas className={styles.graph} ref={graphRef} data-testid="flamegraph" />
+        <canvas className={styles.graph} ref={graphRef} data-testid="flameGraph" />
       )}
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
     </>

@@ -8,6 +8,11 @@ import { MutableDataFrame } from '@grafana/data';
 import FlameGraphContainer from './FlameGraphContainer';
 
 describe('FlameGraphContainer', () => {
+  Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { value: 1600 });
+  // Needed for AutoSizer to work in test
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 500 });
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 500 });
+
   const FlameGraphContainerWithProps = () => {
     const flameGraphData = new MutableDataFrame(data);
     flameGraphData.meta = {
@@ -28,11 +33,6 @@ describe('FlameGraphContainer', () => {
   });
 
   it('should update search when row selected in top table', async () => {
-    Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { value: 1600 });
-    // Needed for AutoSizer to work in test
-    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 500 });
-    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 500 });
-
     render(<FlameGraphContainerWithProps />);
     await userEvent.click(screen.getAllByRole('row')[1]);
     expect(screen.getByDisplayValue('net/http.HandlerFunc.ServeHTTP')).toBeInTheDocument();
@@ -40,5 +40,31 @@ describe('FlameGraphContainer', () => {
     expect(screen.getByDisplayValue('total')).toBeInTheDocument();
     await userEvent.click(screen.getAllByRole('row')[2]);
     expect(screen.queryByDisplayValue('total')).not.toBeInTheDocument();
+  });
+
+  it('should render options', async () => {
+    render(<FlameGraphContainerWithProps />);
+    expect(screen.getByText(/Top Table/)).toBeDefined();
+    expect(screen.getByText(/Flame Graph/)).toBeDefined();
+    expect(screen.getByText(/Both/)).toBeDefined();
+  });
+
+  it('should update selected view', async () => {
+    render(<FlameGraphContainerWithProps />);
+
+    expect(screen.getByTestId('flameGraph')).toBeDefined();
+    expect(screen.getByTestId('topTable')).toBeDefined();
+
+    screen.getByText(/Top Table/).click();
+    expect(screen.queryByTestId('flameGraph')).toBeNull();
+    expect(screen.getByTestId('topTable')).toBeDefined();
+
+    screen.getByText(/Flame Graph/).click();
+    expect(screen.getByTestId('flameGraph')).toBeDefined();
+    expect(screen.queryByTestId('topTable')).toBeNull();
+
+    screen.getByText(/Both/).click();
+    expect(screen.getByTestId('flameGraph')).toBeDefined();
+    expect(screen.getByTestId('topTable')).toBeDefined();
   });
 });

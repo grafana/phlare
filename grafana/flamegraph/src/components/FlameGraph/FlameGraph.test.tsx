@@ -48,7 +48,7 @@ describe('FlameGraph', () => {
     Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { value: 1600 });
     render(<FlameGraphWithProps />);
 
-    const canvas = screen.getByTestId('flamegraph') as HTMLCanvasElement;
+    const canvas = screen.getByTestId('flameGraph') as HTMLCanvasElement;
     const ctx = canvas!.getContext('2d');
     const calls = ctx!.__getDrawCalls();
     expect(calls).toMatchSnapshot();

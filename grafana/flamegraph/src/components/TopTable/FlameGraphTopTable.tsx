@@ -108,7 +108,7 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
   );
 
   return (
-    <div className={styles.table(height)}>
+    <div className={styles.table(height)} data-testid="topTable">
       {headerGroups.map((headerGroup) => {
         const { key, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
 
