@@ -4097,6 +4097,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/react-table@npm:7.7.12":
+  version: 7.7.12
+  resolution: "@types/react-table@npm:7.7.12"
+  dependencies:
+    "@types/react": "*"
+  checksum: 287ea68e75b56c2e70e6d6491cd172348c7302b032789047eb2dca1b25b240684e48a60f58140575828b790f95724b9f3ec4d3adce82fc1c05d994def1449009
+  languageName: node
+  linkType: hard
+
 "@types/react-transition-group@npm:^4.4.0":
   version: 4.4.5
   resolution: "@types/react-transition-group@npm:4.4.5"
@@ -4112,6 +4121,15 @@ __metadata:
   dependencies:
     "@types/react": "*"
   checksum: 67eff0670a1991c2b16992274ada5f0b3f9d5c2d6209ef38e8f8ae2c0218211a3292882f5b7dd6f09519000dc20847629f049c9acc267e000626b7141e5927a6
+  languageName: node
+  linkType: hard
+
+"@types/react-window@npm:1.8.5":
+  version: 1.8.5
+  resolution: "@types/react-window@npm:1.8.5"
+  dependencies:
+    "@types/react": "*"
+  checksum: 5f519e1402300d11b6e6595223feb6499f3227e38da166cbc565773cd7f71862abcf855b7835d391b5119fcfacdfba79d73a965b45f60a293fc1ff25986319ed
   languageName: node
   linkType: hard
 
@@ -8031,14 +8049,18 @@ __metadata:
     "@testing-library/user-event": 14.2.0
     "@types/lodash": 4.14.181
     "@types/react": 17.0.42
+    "@types/react-table": 7.7.12
     "@types/react-virtualized-auto-sizer": 1.0.1
+    "@types/react-window": 1.8.5
     "@typescript-eslint/eslint-plugin": ^5.36.2
     jest-canvas-mock: 2.4.0
     prettier: 2.6.0
     react: 17.0.2
     react-dom: 17.0.2
+    react-table: 7.8.0
     react-use: ^17.4.0
     react-virtualized-auto-sizer: 1.0.6
+    react-window: 1.8.7
     ts-node: 9.1.1
     typescript: ^4.7.4
   languageName: unknown

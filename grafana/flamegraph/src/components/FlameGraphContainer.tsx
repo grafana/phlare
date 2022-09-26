@@ -5,7 +5,7 @@ import { useWindowSize } from 'react-use';
 import FlameGraphHeader from './FlameGraphHeader';
 import FlameGraph from './FlameGraph/FlameGraph';
 import { SelectedView } from './types';
-import FlameGraphTopTable from './FlameGraph/FlameGraphTopTable';
+import FlameGraphTopTableContainer from './TopTable/FlameGraphTopTableContainer';
 import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
 import { Item, nestedSetToLevels } from './FlameGraph/dataTransform';
 
@@ -33,8 +33,8 @@ const FlameGraphContainer = (props: Props) => {
     return nestedSetToLevels(dataView);
   }, [props.data]);
 
-  const renderTopTable = useCallback(() => {
-    return <FlameGraphTopTable levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} />;
+  const renderTopTable = useCallback((query, setQuery) => {
+    return <FlameGraphTopTableContainer levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} query={query} setQuery={setQuery} />;
   }, [levels, profileTypeId, selectedView]);
 
   return (
@@ -50,7 +50,7 @@ const FlameGraphContainer = (props: Props) => {
         windowWidth={windowWidth}
       />
 
-      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable() : null}
+      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable(query, setQuery) : null}
 
       <FlameGraph
         data={props.data}

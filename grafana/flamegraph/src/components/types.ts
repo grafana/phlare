@@ -38,3 +38,23 @@ export const NANOSECOND_UNITS = [
   { divider: 60, suffix: 'hours' },
   { divider: 24, suffix: 'days' },
 ];
+export interface TableData {
+  self: number;
+  total: number;
+}
+export interface TopTableData {
+  symbol: string;
+  self: TopTableValue;
+  total: TopTableValue;
+}
+
+export type TopTableValue = {
+  value: number,
+  unitValue: string,
+}
+
+export enum ColumnTypes {
+  Symbol = 'Symbol',
+  Self = 'Self',
+  Total = 'Total',
+}
