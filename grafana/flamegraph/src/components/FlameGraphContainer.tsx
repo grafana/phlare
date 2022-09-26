@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DataFrame, DataFrameView } from '@grafana/data';
 import { useWindowSize } from 'react-use';
 
@@ -34,10 +34,6 @@ const FlameGraphContainer = (props: Props) => {
     return nestedSetToLevels(dataView);
   }, [props.data]);
 
-  const renderTopTable = useCallback((query, setQuery) => {
-    return <FlameGraphTopTableContainer levels={levels} profileTypeId={profileTypeId} selectedView={selectedView} query={query} setQuery={setQuery} />;
-  }, [levels, profileTypeId, selectedView]);
-
   return (
     <Collapse label='' isOpen>
       <FlameGraphHeader
@@ -51,11 +47,20 @@ const FlameGraphContainer = (props: Props) => {
         windowWidth={windowWidth}
       />
 
-      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? renderTopTable(query, setQuery) : null}
+      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE && (
+        <FlameGraphTopTableContainer 
+          levels={levels} 
+          profileTypeId={profileTypeId} 
+          selectedView={selectedView} 
+          query={query} 
+          setQuery={setQuery} 
+        />
+      )}
 
       <FlameGraph
         data={props.data}
         levels={levels}
+        profileTypeId={profileTypeId}
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
         rangeMax={rangeMax}

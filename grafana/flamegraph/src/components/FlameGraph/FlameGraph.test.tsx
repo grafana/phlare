@@ -3,9 +3,11 @@ import { render } from '@testing-library/react';
 import React, { useState } from 'react';
 
 import FlameGraph from './FlameGraph';
+import { SelectedView } from '../types';
 import { data } from './testData/dataNestedSet';
-import { MutableDataFrame } from '@grafana/data';
+import { DataFrameView, MutableDataFrame } from '@grafana/data';
 import 'jest-canvas-mock';
+import { Item, nestedSetToLevels } from './dataTransform';
 
 describe('FlameGraph', () => {
   const FlameGraphWithProps = () => {
@@ -13,17 +15,17 @@ describe('FlameGraph', () => {
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
     const [query] = useState('');
+    const [selectedView, setSelectedView] = useState(SelectedView.Both);
 
     const flameGraphData = new MutableDataFrame(data);
-    flameGraphData.meta = {
-      custom: {
-        ProfileTypeID: 'cpu:foo:bar',
-      },
-    };
+    const dataView = new DataFrameView<Item>(flameGraphData);
+    const levels = nestedSetToLevels(dataView);
 
     return (
       <FlameGraph
         data={flameGraphData}
+        levels={levels}
+        profileTypeId={'cpu:foo:bar'}
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
         rangeMax={rangeMax}
@@ -31,6 +33,9 @@ describe('FlameGraph', () => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
+        selectedView={selectedView}
+        setSelectedView={setSelectedView}
+        windowWidth={1600}
       />
     );
   };

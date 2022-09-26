@@ -4,10 +4,12 @@ import userEvent from '@testing-library/user-event';
 import React, { useState } from 'react';
 
 import FlameGraphHeader from './FlameGraphHeader';
+import { SelectedView } from './types';
 
 describe('FlameGraphHeader', () => {
   const FlameGraphHeaderWithProps = () => {
     const [query, setQuery] = useState('');
+    const [selectedView, setSelectedView] = useState(SelectedView.Both);
 
     return (
       <FlameGraphHeader
@@ -16,6 +18,9 @@ describe('FlameGraphHeader', () => {
         setTopLevelIndex={jest.fn()}
         setRangeMin={jest.fn()}
         setRangeMax={jest.fn()}
+        selectedView={selectedView}
+        setSelectedView={setSelectedView}
+        windowWidth={1600}
       />
     );
   };

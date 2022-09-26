@@ -30,6 +30,7 @@ import { TooltipData, SelectedView } from '../types';
 type Props = {
   data: DataFrame;
   levels: ItemWithStart[][];
+  profileTypeId: string;
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
@@ -45,6 +46,7 @@ type Props = {
 const FlameGraph = ({
   data,
   levels,
+  profileTypeId,
   topLevelIndex,
   rangeMin,
   rangeMax,
@@ -58,7 +60,6 @@ const FlameGraph = ({
 }: Props) => {
   const styles = getStyles(selectedView, windowWidth);
   const totalTicks = data.fields[1].values.get(0);
-  const profileTypeId = data.meta!.custom!.ProfileTypeID;
 
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
