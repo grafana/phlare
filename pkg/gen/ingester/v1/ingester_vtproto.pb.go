@@ -40,9 +40,8 @@ type IngesterServiceClient interface {
 	ProfileTypes(ctx context.Context, in *ProfileTypesRequest, opts ...grpc.CallOption) (*ProfileTypesResponse, error)
 	Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (*SeriesResponse, error)
 	Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error)
-	// Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
-	// but this requires to ensure we have correct timestamp and labels ordering.
-	SelectProfiles(ctx context.Context, in *SelectProfilesRequest, opts ...grpc.CallOption) (*SelectProfilesResponse, error)
+	MergeProfilesStacktraces(ctx context.Context, opts ...grpc.CallOption) (IngesterService_MergeProfilesStacktracesClient, error)
+	MergeProfilesLabels(ctx context.Context, opts ...grpc.CallOption) (IngesterService_MergeProfilesLabelsClient, error)
 }
 
 type ingesterServiceClient struct {
@@ -107,13 +106,66 @@ func (c *ingesterServiceClient) Flush(ctx context.Context, in *FlushRequest, opt
 	return out, nil
 }
 
-func (c *ingesterServiceClient) SelectProfiles(ctx context.Context, in *SelectProfilesRequest, opts ...grpc.CallOption) (*SelectProfilesResponse, error) {
-	out := new(SelectProfilesResponse)
-	err := c.cc.Invoke(ctx, "/ingester.v1.IngesterService/SelectProfiles", in, out, opts...)
+func (c *ingesterServiceClient) MergeProfilesStacktraces(ctx context.Context, opts ...grpc.CallOption) (IngesterService_MergeProfilesStacktracesClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IngesterService_ServiceDesc.Streams[0], "/ingester.v1.IngesterService/MergeProfilesStacktraces", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &ingesterServiceMergeProfilesStacktracesClient{stream}
+	return x, nil
+}
+
+type IngesterService_MergeProfilesStacktracesClient interface {
+	Send(*MergeProfilesStacktracesRequest) error
+	Recv() (*MergeProfilesStacktracesResponse, error)
+	grpc.ClientStream
+}
+
+type ingesterServiceMergeProfilesStacktracesClient struct {
+	grpc.ClientStream
+}
+
+func (x *ingesterServiceMergeProfilesStacktracesClient) Send(m *MergeProfilesStacktracesRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *ingesterServiceMergeProfilesStacktracesClient) Recv() (*MergeProfilesStacktracesResponse, error) {
+	m := new(MergeProfilesStacktracesResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *ingesterServiceClient) MergeProfilesLabels(ctx context.Context, opts ...grpc.CallOption) (IngesterService_MergeProfilesLabelsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &IngesterService_ServiceDesc.Streams[1], "/ingester.v1.IngesterService/MergeProfilesLabels", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &ingesterServiceMergeProfilesLabelsClient{stream}
+	return x, nil
+}
+
+type IngesterService_MergeProfilesLabelsClient interface {
+	Send(*MergeProfilesLabelsRequest) error
+	Recv() (*MergeProfilesLabelsResponse, error)
+	grpc.ClientStream
+}
+
+type ingesterServiceMergeProfilesLabelsClient struct {
+	grpc.ClientStream
+}
+
+func (x *ingesterServiceMergeProfilesLabelsClient) Send(m *MergeProfilesLabelsRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *ingesterServiceMergeProfilesLabelsClient) Recv() (*MergeProfilesLabelsResponse, error) {
+	m := new(MergeProfilesLabelsResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // IngesterServiceServer is the server API for IngesterService service.
@@ -126,9 +178,8 @@ type IngesterServiceServer interface {
 	ProfileTypes(context.Context, *ProfileTypesRequest) (*ProfileTypesResponse, error)
 	Series(context.Context, *SeriesRequest) (*SeriesResponse, error)
 	Flush(context.Context, *FlushRequest) (*FlushResponse, error)
-	// Todo(ctovena) we might want to batch stream profiles & symbolization instead of sending them all at once.
-	// but this requires to ensure we have correct timestamp and labels ordering.
-	SelectProfiles(context.Context, *SelectProfilesRequest) (*SelectProfilesResponse, error)
+	MergeProfilesStacktraces(IngesterService_MergeProfilesStacktracesServer) error
+	MergeProfilesLabels(IngesterService_MergeProfilesLabelsServer) error
 	mustEmbedUnimplementedIngesterServiceServer()
 }
 
@@ -154,8 +205,11 @@ func (UnimplementedIngesterServiceServer) Series(context.Context, *SeriesRequest
 func (UnimplementedIngesterServiceServer) Flush(context.Context, *FlushRequest) (*FlushResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Flush not implemented")
 }
-func (UnimplementedIngesterServiceServer) SelectProfiles(context.Context, *SelectProfilesRequest) (*SelectProfilesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SelectProfiles not implemented")
+func (UnimplementedIngesterServiceServer) MergeProfilesStacktraces(IngesterService_MergeProfilesStacktracesServer) error {
+	return status.Errorf(codes.Unimplemented, "method MergeProfilesStacktraces not implemented")
+}
+func (UnimplementedIngesterServiceServer) MergeProfilesLabels(IngesterService_MergeProfilesLabelsServer) error {
+	return status.Errorf(codes.Unimplemented, "method MergeProfilesLabels not implemented")
 }
 func (UnimplementedIngesterServiceServer) mustEmbedUnimplementedIngesterServiceServer() {}
 
@@ -278,22 +332,56 @@ func _IngesterService_Flush_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _IngesterService_SelectProfiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SelectProfilesRequest)
-	if err := dec(in); err != nil {
+func _IngesterService_MergeProfilesStacktraces_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IngesterServiceServer).MergeProfilesStacktraces(&ingesterServiceMergeProfilesStacktracesServer{stream})
+}
+
+type IngesterService_MergeProfilesStacktracesServer interface {
+	Send(*MergeProfilesStacktracesResponse) error
+	Recv() (*MergeProfilesStacktracesRequest, error)
+	grpc.ServerStream
+}
+
+type ingesterServiceMergeProfilesStacktracesServer struct {
+	grpc.ServerStream
+}
+
+func (x *ingesterServiceMergeProfilesStacktracesServer) Send(m *MergeProfilesStacktracesResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *ingesterServiceMergeProfilesStacktracesServer) Recv() (*MergeProfilesStacktracesRequest, error) {
+	m := new(MergeProfilesStacktracesRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(IngesterServiceServer).SelectProfiles(ctx, in)
+	return m, nil
+}
+
+func _IngesterService_MergeProfilesLabels_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IngesterServiceServer).MergeProfilesLabels(&ingesterServiceMergeProfilesLabelsServer{stream})
+}
+
+type IngesterService_MergeProfilesLabelsServer interface {
+	Send(*MergeProfilesLabelsResponse) error
+	Recv() (*MergeProfilesLabelsRequest, error)
+	grpc.ServerStream
+}
+
+type ingesterServiceMergeProfilesLabelsServer struct {
+	grpc.ServerStream
+}
+
+func (x *ingesterServiceMergeProfilesLabelsServer) Send(m *MergeProfilesLabelsResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *ingesterServiceMergeProfilesLabelsServer) Recv() (*MergeProfilesLabelsRequest, error) {
+	m := new(MergeProfilesLabelsRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/ingester.v1.IngesterService/SelectProfiles",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IngesterServiceServer).SelectProfiles(ctx, req.(*SelectProfilesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // IngesterService_ServiceDesc is the grpc.ServiceDesc for IngesterService service.
@@ -327,12 +415,21 @@ var IngesterService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Flush",
 			Handler:    _IngesterService_Flush_Handler,
 		},
+	},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "SelectProfiles",
-			Handler:    _IngesterService_SelectProfiles_Handler,
+			StreamName:    "MergeProfilesStacktraces",
+			Handler:       _IngesterService_MergeProfilesStacktraces_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "MergeProfilesLabels",
+			Handler:       _IngesterService_MergeProfilesLabels_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "ingester/v1/ingester.proto",
 }
 
@@ -820,7 +917,7 @@ func (m *SelectProfilesRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
-func (m *SelectProfilesResponse) MarshalVT() (dAtA []byte, err error) {
+func (m *MergeProfilesStacktracesRequest) MarshalVT() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
 	}
@@ -833,12 +930,68 @@ func (m *SelectProfilesResponse) MarshalVT() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SelectProfilesResponse) MarshalToVT(dAtA []byte) (int, error) {
+func (m *MergeProfilesStacktracesRequest) MarshalToVT(dAtA []byte) (int, error) {
 	size := m.SizeVT()
 	return m.MarshalToSizedBufferVT(dAtA[:size])
 }
 
-func (m *SelectProfilesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+func (m *MergeProfilesStacktracesRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Profiles) > 0 {
+		for iNdEx := len(m.Profiles) - 1; iNdEx >= 0; iNdEx-- {
+			i--
+			if m.Profiles[iNdEx] {
+				dAtA[i] = 1
+			} else {
+				dAtA[i] = 0
+			}
+		}
+		i = encodeVarint(dAtA, i, uint64(len(m.Profiles)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Request != nil {
+		size, err := m.Request.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MergeProfilesStacktracesResult) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MergeProfilesStacktracesResult) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *MergeProfilesStacktracesResult) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	if m == nil {
 		return 0, nil
 	}
@@ -859,6 +1012,104 @@ func (m *SelectProfilesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error
 			dAtA[i] = 0x12
 		}
 	}
+	if len(m.Stacktraces) > 0 {
+		for iNdEx := len(m.Stacktraces) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.Stacktraces[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarint(dAtA, i, uint64(size))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MergeProfilesStacktracesResponse) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MergeProfilesStacktracesResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *MergeProfilesStacktracesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.Result != nil {
+		size, err := m.Result.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.SelectedProfiles != nil {
+		size, err := m.SelectedProfiles.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ProfileSets) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ProfileSets) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *ProfileSets) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
 	if len(m.Profiles) > 0 {
 		for iNdEx := len(m.Profiles) - 1; iNdEx >= 0; iNdEx-- {
 			size, err := m.Profiles[iNdEx].MarshalToSizedBufferVT(dAtA[:i])
@@ -868,8 +1119,75 @@ func (m *SelectProfilesResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error
 			i -= size
 			i = encodeVarint(dAtA, i, uint64(size))
 			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.LabelsSets) > 0 {
+		for iNdEx := len(m.LabelsSets) - 1; iNdEx >= 0; iNdEx-- {
+			if marshalto, ok := interface{}(m.LabelsSets[iNdEx]).(interface {
+				MarshalToSizedBufferVT([]byte) (int, error)
+			}); ok {
+				size, err := marshalto.MarshalToSizedBufferVT(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarint(dAtA, i, uint64(size))
+			} else {
+				encoded, err := proto.Marshal(m.LabelsSets[iNdEx])
+				if err != nil {
+					return 0, err
+				}
+				i -= len(encoded)
+				copy(dAtA[i:], encoded)
+				i = encodeVarint(dAtA, i, uint64(len(encoded)))
+			}
+			i--
 			dAtA[i] = 0xa
 		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SeriesProfile) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SeriesProfile) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *SeriesProfile) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.Timestamp != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.Timestamp))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.LabelIndex != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.LabelIndex))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -1030,6 +1348,138 @@ func (m *StacktraceSample) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 			j1++
 		}
 		i = encodeVarint(dAtA, i, uint64(pksize2))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MergeProfilesLabelsRequest) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MergeProfilesLabelsRequest) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *MergeProfilesLabelsRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Profiles) > 0 {
+		for iNdEx := len(m.Profiles) - 1; iNdEx >= 0; iNdEx-- {
+			i--
+			if m.Profiles[iNdEx] {
+				dAtA[i] = 1
+			} else {
+				dAtA[i] = 0
+			}
+		}
+		i = encodeVarint(dAtA, i, uint64(len(m.Profiles)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.By) > 0 {
+		for iNdEx := len(m.By) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.By[iNdEx])
+			copy(dAtA[i:], m.By[iNdEx])
+			i = encodeVarint(dAtA, i, uint64(len(m.By[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.Request != nil {
+		size, err := m.Request.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *MergeProfilesLabelsResponse) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MergeProfilesLabelsResponse) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *MergeProfilesLabelsResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Series) > 0 {
+		for iNdEx := len(m.Series) - 1; iNdEx >= 0; iNdEx-- {
+			if marshalto, ok := interface{}(m.Series[iNdEx]).(interface {
+				MarshalToSizedBufferVT([]byte) (int, error)
+			}); ok {
+				size, err := marshalto.MarshalToSizedBufferVT(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarint(dAtA, i, uint64(size))
+			} else {
+				encoded, err := proto.Marshal(m.Series[iNdEx])
+				if err != nil {
+					return 0, err
+				}
+				i -= len(encoded)
+				copy(dAtA[i:], encoded)
+				i = encodeVarint(dAtA, i, uint64(len(encoded)))
+			}
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.SelectedProfiles != nil {
+		size, err := m.SelectedProfiles.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarint(dAtA, i, uint64(size))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1245,14 +1695,33 @@ func (m *SelectProfilesRequest) SizeVT() (n int) {
 	return n
 }
 
-func (m *SelectProfilesResponse) SizeVT() (n int) {
+func (m *MergeProfilesStacktracesRequest) SizeVT() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if m.Request != nil {
+		l = m.Request.SizeVT()
+		n += 1 + l + sov(uint64(l))
+	}
 	if len(m.Profiles) > 0 {
-		for _, e := range m.Profiles {
+		n += 1 + sov(uint64(len(m.Profiles))) + len(m.Profiles)*1
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *MergeProfilesStacktracesResult) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Stacktraces) > 0 {
+		for _, e := range m.Stacktraces {
 			l = e.SizeVT()
 			n += 1 + l + sov(uint64(l))
 		}
@@ -1262,6 +1731,74 @@ func (m *SelectProfilesResponse) SizeVT() (n int) {
 			l = len(s)
 			n += 1 + l + sov(uint64(l))
 		}
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *MergeProfilesStacktracesResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SelectedProfiles != nil {
+		l = m.SelectedProfiles.SizeVT()
+		n += 1 + l + sov(uint64(l))
+	}
+	if m.Result != nil {
+		l = m.Result.SizeVT()
+		n += 1 + l + sov(uint64(l))
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *ProfileSets) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.LabelsSets) > 0 {
+		for _, e := range m.LabelsSets {
+			if size, ok := interface{}(e).(interface {
+				SizeVT() int
+			}); ok {
+				l = size.SizeVT()
+			} else {
+				l = proto.Size(e)
+			}
+			n += 1 + l + sov(uint64(l))
+		}
+	}
+	if len(m.Profiles) > 0 {
+		for _, e := range m.Profiles {
+			l = e.SizeVT()
+			n += 1 + l + sov(uint64(l))
+		}
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *SeriesProfile) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.LabelIndex != 0 {
+		n += 1 + sov(uint64(m.LabelIndex))
+	}
+	if m.Timestamp != 0 {
+		n += 1 + sov(uint64(m.Timestamp))
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -1331,6 +1868,59 @@ func (m *StacktraceSample) SizeVT() (n int) {
 	}
 	if m.Value != 0 {
 		n += 1 + sov(uint64(m.Value))
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *MergeProfilesLabelsRequest) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Request != nil {
+		l = m.Request.SizeVT()
+		n += 1 + l + sov(uint64(l))
+	}
+	if len(m.By) > 0 {
+		for _, s := range m.By {
+			l = len(s)
+			n += 1 + l + sov(uint64(l))
+		}
+	}
+	if len(m.Profiles) > 0 {
+		n += 1 + sov(uint64(len(m.Profiles))) + len(m.Profiles)*1
+	}
+	if m.unknownFields != nil {
+		n += len(m.unknownFields)
+	}
+	return n
+}
+
+func (m *MergeProfilesLabelsResponse) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SelectedProfiles != nil {
+		l = m.SelectedProfiles.SizeVT()
+		n += 1 + l + sov(uint64(l))
+	}
+	if len(m.Series) > 0 {
+		for _, e := range m.Series {
+			if size, ok := interface{}(e).(interface {
+				SizeVT() int
+			}); ok {
+				l = size.SizeVT()
+			} else {
+				l = proto.Size(e)
+			}
+			n += 1 + l + sov(uint64(l))
+		}
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -2231,7 +2821,7 @@ func (m *SelectProfilesRequest) UnmarshalVT(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SelectProfilesResponse) UnmarshalVT(dAtA []byte) error {
+func (m *MergeProfilesStacktracesRequest) UnmarshalVT(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2254,15 +2844,15 @@ func (m *SelectProfilesResponse) UnmarshalVT(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SelectProfilesResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: MergeProfilesStacktracesRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SelectProfilesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: MergeProfilesStacktracesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Profiles", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Request", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2289,8 +2879,165 @@ func (m *SelectProfilesResponse) UnmarshalVT(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Profiles = append(m.Profiles, &Profile{})
-			if err := m.Profiles[len(m.Profiles)-1].UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+			if m.Request == nil {
+				m.Request = &SelectProfilesRequest{}
+			}
+			if err := m.Request.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType == 0 {
+				var v int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Profiles = append(m.Profiles, bool(v != 0))
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLength
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLength
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				elementCount = packedLen
+				if elementCount != 0 && len(m.Profiles) == 0 {
+					m.Profiles = make([]bool, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflow
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Profiles = append(m.Profiles, bool(v != 0))
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Profiles", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MergeProfilesStacktracesResult) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MergeProfilesStacktracesResult: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MergeProfilesStacktracesResult: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Stacktraces", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Stacktraces = append(m.Stacktraces, &StacktraceSample{})
+			if err := m.Stacktraces[len(m.Stacktraces)-1].UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2326,6 +3073,345 @@ func (m *SelectProfilesResponse) UnmarshalVT(dAtA []byte) error {
 			}
 			m.FunctionNames = append(m.FunctionNames, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MergeProfilesStacktracesResponse) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MergeProfilesStacktracesResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MergeProfilesStacktracesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SelectedProfiles", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SelectedProfiles == nil {
+				m.SelectedProfiles = &ProfileSets{}
+			}
+			if err := m.SelectedProfiles.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Result", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Result == nil {
+				m.Result = &MergeProfilesStacktracesResult{}
+			}
+			if err := m.Result.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ProfileSets) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ProfileSets: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ProfileSets: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LabelsSets", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.LabelsSets = append(m.LabelsSets, &v11.Labels{})
+			if unmarshal, ok := interface{}(m.LabelsSets[len(m.LabelsSets)-1]).(interface {
+				UnmarshalVT([]byte) error
+			}); ok {
+				if err := unmarshal.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				if err := proto.Unmarshal(dAtA[iNdEx:postIndex], m.LabelsSets[len(m.LabelsSets)-1]); err != nil {
+					return err
+				}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Profiles", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Profiles = append(m.Profiles, &SeriesProfile{})
+			if err := m.Profiles[len(m.Profiles)-1].UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SeriesProfile) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SeriesProfile: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SeriesProfile: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LabelIndex", wireType)
+			}
+			m.LabelIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LabelIndex |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			m.Timestamp = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Timestamp |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])
@@ -2694,6 +3780,324 @@ func (m *StacktraceSample) UnmarshalVT(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MergeProfilesLabelsRequest) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MergeProfilesLabelsRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MergeProfilesLabelsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Request", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Request == nil {
+				m.Request = &SelectProfilesRequest{}
+			}
+			if err := m.Request.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field By", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.By = append(m.By, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 3:
+			if wireType == 0 {
+				var v int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Profiles = append(m.Profiles, bool(v != 0))
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflow
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLength
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLength
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				elementCount = packedLen
+				if elementCount != 0 && len(m.Profiles) == 0 {
+					m.Profiles = make([]bool, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflow
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Profiles = append(m.Profiles, bool(v != 0))
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Profiles", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *MergeProfilesLabelsResponse) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MergeProfilesLabelsResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MergeProfilesLabelsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SelectedProfiles", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SelectedProfiles == nil {
+				m.SelectedProfiles = &ProfileSets{}
+			}
+			if err := m.SelectedProfiles.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Series", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Series = append(m.Series, &v11.Series{})
+			if unmarshal, ok := interface{}(m.Series[len(m.Series)-1]).(interface {
+				UnmarshalVT([]byte) error
+			}); ok {
+				if err := unmarshal.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+					return err
+				}
+			} else {
+				if err := proto.Unmarshal(dAtA[iNdEx:postIndex], m.Series[len(m.Series)-1]); err != nil {
+					return err
+				}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])

@@ -2,10 +2,14 @@ package firedb
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,44 +18,58 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/services"
+	"github.com/opentracing/opentracing-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/grafana/fire/pkg/firedb/block"
+	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/iter"
+	firemodel "github.com/grafana/fire/pkg/model"
 	"github.com/grafana/fire/pkg/objstore/client"
 	"github.com/grafana/fire/pkg/objstore/providers/filesystem"
 )
 
 type Config struct {
-	DataPath      string
-	BlockDuration time.Duration
+	DataPath         string
+	MaxBlockDuration time.Duration // Blocks are generally cut once they reach 1000M of memory size, this will setup an upper limit to the duration of data that a block has that is cut by the ingester.
+
+	Parquet *ParquetConfig `yaml:"-"` // Those configs should not be exposed to the user, rather they should be determiend by fire itself. Currently they are solely used for test cases
+}
+
+type ParquetConfig struct {
+	MaxBufferRowCount int
+	MaxRowGroupBytes  uint64 // This is the maximum row group size in bytes that the raw data uses in memory.
+	MaxBlockBytes     uint64 // This is the size of all parquet tables in memory after which a new block is cut
 }
 
 func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&cfg.DataPath, "firedb.data-path", "./data", "Directory used for local storage.")
-	f.DurationVar(&cfg.BlockDuration, "firedb.block-duration", 30*time.Minute, "Block duration.")
+	f.DurationVar(&cfg.MaxBlockDuration, "firedb.max-block-duration", 3*time.Hour, "Upper limit to the duration of a Fire block.")
 }
 
 type FireDB struct {
 	services.Service
 
-	cfg    *Config
+	cfg    Config
 	reg    prometheus.Registerer
 	logger log.Logger
 	stopCh chan struct{}
 
-	headLock      sync.RWMutex
-	head          *Head
-	headMetrics   *headMetrics
-	headFlushTime time.Time
+	headLock    sync.RWMutex
+	head        *Head
+	headMetrics *headMetrics
+
+	headFlushTimer time.Timer
 
 	blockQuerier *BlockQuerier
 }
 
-func New(cfg *Config, logger log.Logger, reg prometheus.Registerer) (*FireDB, error) {
+func New(cfg Config, logger log.Logger, reg prometheus.Registerer) (*FireDB, error) {
 	headMetrics := newHeadMetrics(reg)
 	f := &FireDB{
 		cfg:         cfg,
@@ -98,31 +116,23 @@ func (f *FireDB) BlockMetas(ctx context.Context) ([]*block.Meta, error) {
 
 func (f *FireDB) runBlockQuerierSync(ctx context.Context) {
 	if err := f.blockQuerier.Sync(ctx); err != nil {
-		level.Error(f.logger).Log("msg", "sync blocks failed", "err", err)
+		level.Error(f.logger).Log("msg", "sync of blocks failed", "err", err)
 	}
 }
 
 func (f *FireDB) loop() {
-	var (
-		blockScanTicker = time.NewTicker(5 * time.Minute)
-		blockScanManual = make(chan struct{}, 1)
-	)
+	blockScanTicker := time.NewTicker(5 * time.Minute)
 	defer func() {
-		close(blockScanManual)
 		blockScanTicker.Stop()
 	}()
 
 	for {
 		ctx := context.Background()
 
-		f.headLock.RLock()
-		timeToFlush := f.headFlushTime.Sub(time.Now())
-		f.headLock.RUnlock()
-
 		select {
 		case <-f.stopCh:
 			return
-		case <-time.After(timeToFlush):
+		case <-f.Head().flushCh:
 			if err := f.Flush(ctx); err != nil {
 				level.Error(f.logger).Log("msg", "flushing head block failed", "err", err)
 				continue
@@ -166,131 +176,302 @@ func (f *FireDB) Head() *Head {
 	return f.head
 }
 
-type profileSelecter interface {
-	SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error)
-	InRange(start, end model.Time) bool
+type Queriers []Querier
+
+func (f *FireDB) querierFor(start, end model.Time) Queriers {
+	blocks := f.blockQuerier.queriersFor(start, end)
+	if f.Head().InRange(start, end) {
+		res := make(Queriers, 0, len(blocks)+1)
+		res = append(res, f.Head())
+		res = append(res, blocks...)
+		return res
+	}
+	return blocks
 }
 
-type profileSelecters []profileSelecter
+func (f *FireDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesStacktraces")
+	defer sp.Finish()
 
-func (ps profileSelecters) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-	// first check which profileSelecters are in range before executing
-	ps = lo.Filter(ps, func(e profileSelecter, _ int) bool {
-		return e.InRange(
-			model.Time(req.Msg.Start),
-			model.Time(req.Msg.End),
-		)
-	})
+	r, err := stream.Receive()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
+		}
+		return err
+	}
 
-	results := make([]*ingestv1.SelectProfilesResponse, len(ps))
+	if r.Request == nil {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("missing initial select request"))
+	}
+	request := r.Request
+	sp.LogFields(
+		otlog.String("start", model.Time(request.Start).Time().String()),
+		otlog.String("end", model.Time(request.End).Time().String()),
+		otlog.String("selector", request.LabelSelector),
+		otlog.String("profile_id", request.Type.ID),
+	)
 
+	queriers := f.querierFor(model.Time(request.Start), model.Time(request.End))
+
+	result := make([]*ingestv1.MergeProfilesStacktracesResult, 0, len(queriers))
+	var lock sync.Mutex
 	g, ctx := errgroup.WithContext(ctx)
-	// todo not sure this help on disk IO
-	g.SetLimit(16)
 
-	query := func(ctx context.Context, pos int) {
+	// Start streaming profiles from all stores in order.
+	// This allows the client to dedupe in order.
+	for _, q := range queriers {
+		q := q
+		profiles, err := q.SelectMatchingProfiles(ctx, request)
+		if err != nil {
+			return err
+		}
+		// send batches of profiles to client and filter via bidi stream.
+		selectedProfiles, err := filterProfiles[
+			BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest],
+			*ingestv1.MergeProfilesStacktracesResponse,
+			*ingestv1.MergeProfilesStacktracesRequest](ctx, profiles, 2048, stream)
+		if err != nil {
+			return err
+		}
+		// Sort profiles for better read locality.
+		selectedProfiles = q.Sort(selectedProfiles)
+		// Merge async the result so we can continue streaming profiles.
 		g.Go(func() error {
-			resp, err := ps[pos].SelectProfiles(ctx, req)
+			merge, err := q.MergeByStacktraces(ctx, iter.NewSliceIterator(selectedProfiles))
 			if err != nil {
 				return err
 			}
-
-			results[pos] = resp.Msg
+			lock.Lock()
+			defer lock.Unlock()
+			result = append(result, merge)
 			return nil
 		})
 	}
 
-	for pos := range ps {
-		query(ctx, pos)
+	// Signals the end of the profile streaming by sending an empty response.
+	// This allows the client to not block other streaming ingesters.
+	if err := stream.Send(&ingestv1.MergeProfilesStacktracesResponse{}); err != nil {
+		return err
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return err
 	}
 
-	return connect.NewResponse(mergeSelectProfilesResponse(results...)), nil
+	// sends the final result to the client.
+	err = stream.Send(&ingestv1.MergeProfilesStacktracesResponse{
+		Result: firemodel.MergeBatchMergeStacktraces(result...),
+	})
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
+		}
+		return err
+	}
+
+	return nil
 }
 
-func mergeSelectProfilesResponse(responses ...*ingestv1.SelectProfilesResponse) *ingestv1.SelectProfilesResponse {
-	var (
-		result    *ingestv1.SelectProfilesResponse
-		posByName map[string]int32
+func (f *FireDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesLabels")
+	defer sp.Finish()
+
+	r, err := stream.Receive()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
+		}
+		return err
+	}
+
+	if r.Request == nil {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("missing initial select request"))
+	}
+	request := r.Request
+	by := r.By
+	sort.Strings(by)
+	sp.LogFields(
+		otlog.String("start", model.Time(request.Start).Time().String()),
+		otlog.String("end", model.Time(request.End).Time().String()),
+		otlog.String("selector", request.LabelSelector),
+		otlog.String("profile_id", request.Type.ID),
+		otlog.String("by", strings.Join(by, ",")),
 	)
 
-	for _, resp := range responses {
-		// skip empty results
-		if resp == nil || len(resp.Profiles) == 0 {
-			continue
+	queriers := f.querierFor(model.Time(request.Start), model.Time(request.End))
+	result := make([][]*commonv1.Series, 0, len(queriers))
+	g, ctx := errgroup.WithContext(ctx)
+	s := lo.Synchronize()
+	// Start streaming profiles from all stores in order.
+	// This allows the client to dedupe in order.
+	for _, q := range queriers {
+		q := q
+		profiles, err := q.SelectMatchingProfiles(ctx, request)
+		if err != nil {
+			return err
 		}
-
-		// first non-empty result result
-		if result == nil {
-			result = resp
-			continue
+		// send batches of profiles to client and filter via bidi stream.
+		selectedProfiles, err := filterProfiles[
+			BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest],
+			*ingestv1.MergeProfilesLabelsResponse,
+			*ingestv1.MergeProfilesLabelsRequest](ctx, profiles, 2048, stream)
+		if err != nil {
+			return err
 		}
-
-		// build up the lookup map the first time
-		if posByName == nil {
-			posByName = make(map[string]int32)
-			for idx, n := range result.FunctionNames {
-				posByName[n] = int32(idx)
+		// Sort profiles for better read locality.
+		selectedProfiles = q.Sort(selectedProfiles)
+		// Merge async the result so we can continue streaming profiles.
+		g.Go(func() error {
+			merge, err := q.MergeByLabels(ctx, iter.NewSliceIterator(selectedProfiles), by...)
+			if err != nil {
+				return err
 			}
-		}
+			s.Do(func() {
+				result = append(result, merge)
+			})
 
-		// lookup and add missing functionNames
-		var (
-			rewrite = make([]int32, len(resp.FunctionNames))
-			ok      bool
-		)
-		for idx, n := range resp.FunctionNames {
-			rewrite[idx], ok = posByName[n]
-			if ok {
-				continue
-			}
-
-			// need to add functionName to list
-			rewrite[idx] = int32(len(result.FunctionNames))
-			result.FunctionNames = append(result.FunctionNames, n)
-		}
-
-		// rewrite existing function ids, by building a list of unique slices
-		functionIDsUniq := make(map[*int32][]int32)
-		for _, profile := range resp.Profiles {
-			for _, sample := range profile.Stacktraces {
-				if len(sample.FunctionIds) == 0 {
-					continue
-				}
-				functionIDsUniq[&sample.FunctionIds[0]] = sample.FunctionIds
-			}
-		}
-		// now rewrite those ids in slices
-		for _, slice := range functionIDsUniq {
-			for idx, functionID := range slice {
-				slice[idx] = rewrite[functionID]
-			}
-		}
-		result.Profiles = append(result.Profiles, resp.Profiles...)
+			return nil
+		})
 	}
 
-	// ensure nil will always be the empty response
-	if result == nil {
-		result = &ingestv1.SelectProfilesResponse{}
+	// Signals the end of the profile streaming by sending an empty request.
+	// This allows the client to not block other streaming ingesters.
+	if err := stream.Send(&ingestv1.MergeProfilesLabelsResponse{}); err != nil {
+		return err
 	}
 
-	return result
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// sends the final result to the client.
+	err = stream.Send(&ingestv1.MergeProfilesLabelsResponse{
+		Series: firemodel.MergeSeries(result...),
+	})
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
+		}
+		return err
+	}
+
+	return nil
 }
 
-func (f *FireDB) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-	sources := append(f.blockQuerier.profileSelecters(), f.Head())
-	return sources.SelectProfiles(ctx, req)
+type BidiServerMerge[Res any, Req any] interface {
+	Send(Res) error
+	Receive() (Req, error)
+}
+
+type labelWithIndex struct {
+	firemodel.Labels
+	index int
+}
+
+// filterProfiles sends profiles to the client and filters them via the bidi stream.
+func filterProfiles[B BidiServerMerge[Res, Req],
+	Res *ingestv1.MergeProfilesStacktracesResponse | *ingestv1.MergeProfilesLabelsResponse,
+	Req *ingestv1.MergeProfilesStacktracesRequest | *ingestv1.MergeProfilesLabelsRequest](
+	ctx context.Context, profiles iter.Iterator[Profile], batchProfileSize int, stream B,
+) ([]Profile, error) {
+	selection := []Profile{}
+	selectProfileResult := &ingestv1.ProfileSets{
+		Profiles:   make([]*ingestv1.SeriesProfile, 0, batchProfileSize),
+		LabelsSets: make([]*commonv1.Labels, 0, batchProfileSize),
+	}
+	if err := iter.ReadBatch(ctx, profiles, batchProfileSize, func(ctx context.Context, batch []Profile) error {
+		sp, _ := opentracing.StartSpanFromContext(ctx, "filterProfiles - Filtering batch")
+		sp.LogFields(
+			otlog.Int("batch_len", len(batch)),
+			otlog.Int("batch_requested_size", batchProfileSize),
+		)
+		defer sp.Finish()
+
+		seriesByFP := map[model.Fingerprint]labelWithIndex{}
+		selectProfileResult.LabelsSets = selectProfileResult.LabelsSets[:0]
+		selectProfileResult.Profiles = selectProfileResult.Profiles[:0]
+
+		for _, profile := range batch {
+			var ok bool
+			var lblsIdx labelWithIndex
+			lblsIdx, ok = seriesByFP[profile.Fingerprint()]
+			if !ok {
+				lblsIdx = labelWithIndex{
+					Labels: profile.Labels(),
+					index:  len(selectProfileResult.LabelsSets),
+				}
+				seriesByFP[profile.Fingerprint()] = lblsIdx
+				selectProfileResult.LabelsSets = append(selectProfileResult.LabelsSets, &commonv1.Labels{Labels: profile.Labels()})
+			}
+			selectProfileResult.Profiles = append(selectProfileResult.Profiles, &ingestv1.SeriesProfile{
+				LabelIndex: int32(lblsIdx.index),
+				Timestamp:  int64(profile.Timestamp()),
+			})
+
+		}
+		sp.LogFields(otlog.String("msg", "sending batch to client"))
+		var err error
+		switch s := BidiServerMerge[Res, Req](stream).(type) {
+		case BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest]:
+			err = s.Send(&ingestv1.MergeProfilesStacktracesResponse{
+				SelectedProfiles: selectProfileResult,
+			})
+		case BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest]:
+			err = s.Send(&ingestv1.MergeProfilesLabelsResponse{
+				SelectedProfiles: selectProfileResult,
+			})
+		}
+		// read a batch of profiles and sends it.
+
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
+			}
+			return err
+		}
+		sp.LogFields(otlog.String("msg", "batch sent to client"))
+
+		sp.LogFields(otlog.String("msg", "reading selection from client"))
+
+		// handle response for the batch.
+		var selected []bool
+		switch s := BidiServerMerge[Res, Req](stream).(type) {
+		case BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest]:
+			selectionResponse, err := s.Receive()
+			if err == nil {
+				selected = selectionResponse.Profiles
+			}
+		case BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest]:
+			selectionResponse, err := s.Receive()
+			if err == nil {
+				selected = selectionResponse.Profiles
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return connect.NewError(connect.CodeCanceled, errors.New("client closed stream"))
+			}
+			return err
+		}
+		sp.LogFields(otlog.String("msg", "selection received"))
+		for i, k := range selected {
+			if k {
+				selection = append(selection, batch[i])
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return selection, nil
 }
 
 func (f *FireDB) initHead() (oldHead *Head, err error) {
 	f.headLock.Lock()
 	defer f.headLock.Unlock()
 	oldHead = f.head
-	f.headFlushTime = time.Now().UTC().Truncate(f.cfg.BlockDuration).Add(f.cfg.BlockDuration)
-	f.head, err = NewHead(f.cfg.DataPath, headWithMetrics(f.headMetrics), HeadWithLogger(f.logger))
+	f.head, err = NewHead(f.cfg, headWithMetrics(f.headMetrics), HeadWithLogger(f.logger))
 	if err != nil {
 		return oldHead, err
 	}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DataFrame, DataFrameView } from '@grafana/data';
 import { useWindowSize } from 'react-use';
 
@@ -33,6 +33,13 @@ const FlameGraphContainer = (props: Props) => {
     return nestedSetToLevels(dataView);
   }, [props.data]);
 
+  // If user resizes window with top table as the selected view
+  useEffect(() => {
+    if (windowWidth < MIN_WIDTH_TO_SHOW_TOP_TABLE && selectedView === SelectedView.TopTable) {
+      setSelectedView(SelectedView.FlameGraph);
+    }
+  }, [selectedView, setSelectedView, windowWidth]);
+
   return (
     <>
       <FlameGraphHeader
@@ -56,21 +63,23 @@ const FlameGraphContainer = (props: Props) => {
         />
       )}
 
-      <FlameGraph
-        data={props.data}
-        levels={levels}
-        profileTypeId={profileTypeId}
-        topLevelIndex={topLevelIndex}
-        rangeMin={rangeMin}
-        rangeMax={rangeMax}
-        query={query}
-        setTopLevelIndex={setTopLevelIndex}
-        setRangeMin={setRangeMin}
-        setRangeMax={setRangeMax}
-        selectedView={selectedView}
-        setSelectedView={setSelectedView}
-        windowWidth={windowWidth}
-      />
+      {selectedView !== SelectedView.TopTable && (
+        <FlameGraph
+          data={props.data}
+          levels={levels}
+          profileTypeId={profileTypeId}
+          topLevelIndex={topLevelIndex}
+          rangeMin={rangeMin}
+          rangeMax={rangeMax}
+          query={query}
+          setTopLevelIndex={setTopLevelIndex}
+          setRangeMin={setRangeMin}
+          setRangeMax={setRangeMax}
+          selectedView={selectedView}
+          setSelectedView={setSelectedView}
+          windowWidth={windowWidth}
+        />
+      )}
     </>
   );
 };

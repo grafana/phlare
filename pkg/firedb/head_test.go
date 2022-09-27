@@ -2,16 +2,13 @@ package firedb
 
 import (
 	"context"
-	"encoding/json"
 	"io/ioutil"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/bufbuild/connect-go"
 	"github.com/google/uuid"
 	"github.com/klauspost/compress/gzip"
-	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,6 +17,25 @@ import (
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
 	firemodel "github.com/grafana/fire/pkg/model"
 )
+
+func newTestHead(t testing.TB) *testHead {
+	dataPath := t.TempDir()
+	head, err := NewHead(Config{DataPath: dataPath})
+	require.NoError(t, err)
+	return &testHead{Head: head, t: t}
+}
+
+type testHead struct {
+	*Head
+	t testing.TB
+}
+
+func (t *testHead) Flush(ctx context.Context) error {
+	defer func() {
+		t.t.Logf("flushing head of block %v", t.Head.meta.ULID)
+	}()
+	return t.Head.Flush(ctx)
+}
 
 func parseProfile(t testing.TB, path string) *profilev1.Profile {
 	f, err := os.Open(path)
@@ -94,16 +110,6 @@ func newProfileFoo() *profilev1.Profile {
 	}
 }
 
-func newEmptyProfile() *profilev1.Profile {
-	p := newProfileBar()
-	for _, s := range p.Sample {
-		for i := range s.Value {
-			s.Value[i] = 0
-		}
-	}
-	return p
-}
-
 func newProfileBar() *profilev1.Profile {
 	baseTable := append([]string{""}, valueTypeStrings...)
 	baseTableLen := int64(len(baseTable)) + 0
@@ -164,8 +170,7 @@ func newProfileBaz() *profilev1.Profile {
 }
 
 func TestHeadIngestFunctions(t *testing.T) {
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New()))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New()))
@@ -180,8 +185,7 @@ func TestHeadIngestFunctions(t *testing.T) {
 
 func TestHeadIngestStrings(t *testing.T) {
 	ctx := context.Background()
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 
 	r := &rewriter{}
 	require.NoError(t, head.strings.ingest(ctx, newProfileFoo().StringTable, r))
@@ -201,8 +205,7 @@ func TestHeadIngestStrings(t *testing.T) {
 
 func TestHeadIngestStacktraces(t *testing.T) {
 	ctx := context.Background()
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 
 	require.NoError(t, head.Ingest(ctx, newProfileFoo(), uuid.New()))
 	require.NoError(t, head.Ingest(ctx, newProfileBar(), uuid.New()))
@@ -230,8 +233,7 @@ func TestHeadIngestStacktraces(t *testing.T) {
 }
 
 func TestHeadLabelValues(t *testing.T) {
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), &commonv1.LabelPair{Name: "job", Value: "foo"}, &commonv1.LabelPair{Name: "namespace", Value: "fire"}))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New(), &commonv1.LabelPair{Name: "job", Value: "bar"}, &commonv1.LabelPair{Name: "namespace", Value: "fire"}))
 
@@ -245,8 +247,7 @@ func TestHeadLabelValues(t *testing.T) {
 }
 
 func TestHeadLabelNames(t *testing.T) {
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), &commonv1.LabelPair{Name: "job", Value: "foo"}, &commonv1.LabelPair{Name: "namespace", Value: "fire"}))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New(), &commonv1.LabelPair{Name: "job", Value: "bar"}, &commonv1.LabelPair{Name: "namespace", Value: "fire"}))
 
@@ -256,8 +257,7 @@ func TestHeadLabelNames(t *testing.T) {
 }
 
 func TestHeadSeries(t *testing.T) {
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 	fooLabels := firemodel.NewLabelsBuilder(nil).Set("namespace", "fire").Set("job", "foo").Labels()
 	barLabels := firemodel.NewLabelsBuilder(nil).Set("namespace", "fire").Set("job", "bar").Labels()
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), fooLabels...))
@@ -278,8 +278,7 @@ func TestHeadSeries(t *testing.T) {
 }
 
 func TestHeadProfileTypes(t *testing.T) {
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), &commonv1.LabelPair{Name: "__name__", Value: "foo"}, &commonv1.LabelPair{Name: "job", Value: "foo"}, &commonv1.LabelPair{Name: "namespace", Value: "fire"}))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New(), &commonv1.LabelPair{Name: "__name__", Value: "bar"}, &commonv1.LabelPair{Name: "namespace", Value: "fire"}))
 
@@ -303,8 +302,7 @@ func TestHeadIngestRealProfiles(t *testing.T) {
 		"testdata/profile",
 	}
 
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 	ctx := context.Background()
 
 	for pos := range profilePaths {
@@ -316,97 +314,6 @@ func TestHeadIngestRealProfiles(t *testing.T) {
 	t.Logf("strings=%d samples=%d", len(head.strings.slice), len(head.profiles.slice[0].Samples))
 }
 
-func TestSelectProfiles(t *testing.T) {
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
-
-	// todo write more robust tests.
-	for i := int64(0); i < 4; i++ {
-		pF := newProfileFoo()
-		pB := newProfileBar()
-		pE := newEmptyProfile()
-		pF.TimeNanos = int64(time.Second * time.Duration(i))
-		pE.TimeNanos = int64(time.Second * time.Duration(i))
-		pB.TimeNanos = int64(time.Second * time.Duration(i))
-		err = head.Ingest(context.Background(), pF, uuid.New(), &commonv1.LabelPair{Name: "job", Value: "foo"}, &commonv1.LabelPair{Name: "__name__", Value: "foomemory"})
-		require.NoError(t, err)
-		err = head.Ingest(context.Background(), pB, uuid.New(), &commonv1.LabelPair{Name: "job", Value: "bar"}, &commonv1.LabelPair{Name: "__name__", Value: "memory"})
-		require.NoError(t, err)
-		err = head.Ingest(context.Background(), pE, uuid.New(), &commonv1.LabelPair{Name: "job", Value: "bar"}, &commonv1.LabelPair{Name: "__name__", Value: "memory"})
-		require.NoError(t, err)
-	}
-
-	resp, err := head.SelectProfiles(context.Background(), connect.NewRequest(&ingestv1.SelectProfilesRequest{
-		LabelSelector: `{job="bar"}`,
-		Type: &commonv1.ProfileType{
-			Name:       "memory",
-			SampleType: "type",
-			SampleUnit: "unit",
-			PeriodType: "type",
-			PeriodUnit: "unit",
-		},
-		Start: int64(model.TimeFromUnixNano(1 * int64(time.Second))),
-		End:   int64(model.TimeFromUnixNano(2 * int64(time.Second))),
-	}))
-	require.NoError(t, err)
-	require.Equal(t, 2, len(resp.Msg.Profiles))
-
-	// compare the first profile deep
-	profileJSON, err := json.Marshal(&resp.Msg.Profiles[0])
-	require.NoError(t, err)
-	require.JSONEq(t, `{
-  "type": {
-    "name": "memory",
-    "sample_type": "type",
-    "sample_unit": "unit",
-    "period_type": "type",
-    "period_unit": "unit"
-  },
-  "ID":"`+resp.Msg.Profiles[0].ID+`",
-  "labels": [
-    {
-      "name": "__name__",
-      "value": "memory"
-    },
-    {
-      "name": "__period_type__",
-      "value": "type"
-    },
-    {
-      "name": "__period_unit__",
-      "value": "unit"
-    },
-    {
-      "name": "__profile_type__",
-      "value": "memory:type:unit:type:unit"
-    },
-    {
-      "name": "__type__",
-      "value": "type"
-    },
-    {
-      "name": "__unit__",
-      "value": "unit"
-    },
-    {
-      "name": "job",
-      "value": "bar"
-    }
-  ],
-  "timestamp": 1000,
-  "stacktraces": [
-    {
-      "function_ids": [
-        0
-      ],
-      "value": 2345
-    }
-  ]}`, string(profileJSON))
-
-	// ensure the func name matches
-	require.Equal(t, []string{"func_a"}, resp.Msg.FunctionNames)
-}
-
 func BenchmarkHeadIngestProfiles(t *testing.B) {
 	var (
 		profilePaths = []string{
@@ -416,8 +323,7 @@ func BenchmarkHeadIngestProfiles(t *testing.B) {
 		profileCount = 0
 	)
 
-	head, err := NewHead(t.TempDir())
-	require.NoError(t, err)
+	head := newTestHead(t)
 	ctx := context.Background()
 
 	t.ReportAllocs()
@@ -428,60 +334,5 @@ func BenchmarkHeadIngestProfiles(t *testing.B) {
 			require.NoError(t, head.Ingest(ctx, p, uuid.New()))
 			profileCount++
 		}
-	}
-}
-
-var res *connect.Response[ingestv1.SelectProfilesResponse]
-
-func BenchmarkSelectProfile(b *testing.B) {
-	head, err := NewHead(b.TempDir())
-	require.NoError(b, err)
-	ctx := context.Background()
-
-	p := parseProfile(b, "testdata/heap")
-	for i := 0; i < 10; i++ {
-		p.TimeNanos = int64(time.Second * time.Duration(i))
-		require.NoError(b,
-			head.Ingest(ctx, p, uuid.New(),
-				&commonv1.LabelPair{
-					Name:  "job",
-					Value: "bar",
-				}, &commonv1.LabelPair{
-					Name:  model.MetricNameLabel,
-					Value: "memory",
-				}))
-	}
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		res, err = head.SelectProfiles(context.Background(), connect.NewRequest(&ingestv1.SelectProfilesRequest{
-			LabelSelector: `{job="bar"}`,
-			Type: &commonv1.ProfileType{
-				ID:         "memory:alloc_space:bytes:space:bytes",
-				Name:       "memory",
-				SampleType: "alloc_space",
-				SampleUnit: "bytes",
-				PeriodType: "space",
-				PeriodUnit: "bytes",
-			},
-			Start: int64(model.Earliest),
-			End:   int64(model.Latest),
-		}))
-		require.NoError(b, err)
-		res, err = head.SelectProfiles(context.Background(), connect.NewRequest(&ingestv1.SelectProfilesRequest{
-			LabelSelector: `{job="bar"}`,
-			Type: &commonv1.ProfileType{
-				ID:         "memory:inuse_space:bytes:space:bytes",
-				Name:       "memory",
-				SampleType: "inuse_space",
-				SampleUnit: "bytes",
-				PeriodType: "space",
-				PeriodUnit: "bytes",
-			},
-			Start: int64(model.Earliest),
-			End:   int64(model.Latest),
-		}))
-		require.NoError(b, err)
 	}
 }

@@ -8,20 +8,23 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/dustin/go-humanize"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/status"
 	"github.com/google/uuid"
+	"github.com/grafana/dskit/multierror"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"github.com/samber/lo"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 
@@ -30,6 +33,7 @@ import (
 	commonv1 "github.com/grafana/fire/pkg/gen/common/v1"
 	profilev1 "github.com/grafana/fire/pkg/gen/google/v1"
 	ingestv1 "github.com/grafana/fire/pkg/gen/ingester/v1"
+	"github.com/grafana/fire/pkg/iter"
 	firemodel "github.com/grafana/fire/pkg/model"
 )
 
@@ -60,7 +64,7 @@ func (t idConversionTable) rewriteUint64(idx *uint64) {
 }
 
 type Models interface {
-	*schemav1.Profile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string
+	*schemav1.Profile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
 }
 
 // rewriter contains slices to rewrite the per profile reference into per head references.
@@ -89,7 +93,7 @@ type Helper[M Models, K comparable] interface {
 type Table interface {
 	Name() string
 	Size() uint64
-	Init(path string) error
+	Init(path string, cfg *ParquetConfig) error
 	Flush() (numRows uint64, numRowGroups uint64, err error)
 	Close() error
 }
@@ -117,14 +121,21 @@ type HeadOption func(*Head)
 type Head struct {
 	logger  log.Logger
 	metrics *headMetrics
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 
 	headPath  string // path while block is actively appended to
 	localPath string // path once block has been cut
+
+	flushCh chan struct{} // this channel is closed once the Head should be flushed, should be used externally
+
+	flushForcedTimer *time.Timer // this timer will fire after the maximum
 
 	metaLock sync.RWMutex
 	meta     *block.Meta
 
 	index           *profilesIndex
+	parquetConfig   *ParquetConfig
 	strings         deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
 	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
 	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
@@ -143,13 +154,24 @@ const (
 	defaultFolderMode = 0o755
 )
 
-func NewHead(dataPath string, opts ...HeadOption) (*Head, error) {
+func NewHead(cfg Config, opts ...HeadOption) (*Head, error) {
 	h := &Head{
+		stopCh: make(chan struct{}),
+
 		meta:         block.NewMeta(),
 		totalSamples: atomic.NewUint64(0),
+
+		flushCh:          make(chan struct{}),
+		flushForcedTimer: time.NewTimer(cfg.MaxBlockDuration),
+
+		parquetConfig: defaultParquetConfig,
 	}
-	h.headPath = filepath.Join(dataPath, pathHead, h.meta.ULID.String())
-	h.localPath = filepath.Join(dataPath, pathLocal, h.meta.ULID.String())
+	h.headPath = filepath.Join(cfg.DataPath, pathHead, h.meta.ULID.String())
+	h.localPath = filepath.Join(cfg.DataPath, pathLocal, h.meta.ULID.String())
+
+	if cfg.Parquet != nil {
+		h.parquetConfig = cfg.Parquet
+	}
 
 	// execute options
 	for _, o := range opts {
@@ -177,7 +199,7 @@ func NewHead(dataPath string, opts ...HeadOption) (*Head, error) {
 		&h.profiles,
 	}
 	for _, t := range h.tables {
-		if err := t.Init(h.headPath); err != nil {
+		if err := t.Init(h.headPath, h.parquetConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -190,7 +212,52 @@ func NewHead(dataPath string, opts ...HeadOption) (*Head, error) {
 	h.delta = newDeltaProfiles()
 
 	h.pprofLabelCache.init()
+
+	h.wg.Add(1)
+	go h.loop()
+
 	return h, nil
+}
+
+func (h *Head) Size() uint64 {
+	var size uint64
+	// TODO: Estimate size of TSDB index
+	for _, t := range h.tables {
+		size += t.Size()
+	}
+
+	return size
+}
+
+func (h *Head) loop() {
+	defer h.wg.Done()
+
+	tick := time.NewTicker(5 * time.Second)
+	defer func() {
+		tick.Stop()
+		h.flushForcedTimer.Stop()
+	}()
+
+	for {
+		select {
+		case <-h.flushForcedTimer.C:
+			level.Debug(h.logger).Log("msg", "max block duration reached, flush to disk")
+			close(h.flushCh)
+			return
+		case <-tick.C:
+			if currentSize := h.Size(); currentSize > h.parquetConfig.MaxBlockBytes {
+				level.Debug(h.logger).Log(
+					"msg", "max block bytes reached, flush to disk",
+					"max_size", humanize.Bytes(h.parquetConfig.MaxBlockBytes),
+					"current_head_size", humanize.Bytes(currentSize),
+				)
+				close(h.flushCh)
+				return
+			}
+		case <-h.stopCh:
+			return
+		}
+	}
 }
 
 func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
@@ -419,34 +486,26 @@ func (h *Head) InRange(start, end model.Time) bool {
 	return b.InRange(start, end)
 }
 
-func (h *Head) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1.SelectProfilesRequest]) (*connect.Response[ingestv1.SelectProfilesResponse], error) {
-	var (
-		totalSamples   int64
-		totalLocations int64
-		totalProfiles  int64
-	)
-	// nolint:ineffassign
-	// we might use ctx later.
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "Head - SelectProfiles")
-	defer func() {
-		sp.LogFields(
-			otlog.Int64("total_samples", totalSamples),
-			otlog.Int64("total_locations", totalLocations),
-			otlog.Int64("total_profiles", totalProfiles),
-		)
-		sp.Finish()
-	}()
-
-	selectors, err := parser.ParseMetricSelector(req.Msg.LabelSelector)
+func (h *Head) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
+	sp, _ := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Head")
+	defer sp.Finish()
+	selectors, err := parser.ParseMetricSelector(params.LabelSelector)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "failed to parse label selectors: "+err.Error())
 	}
-	selectors = append(selectors, firemodel.SelectorFromProfileType(req.Msg.Type))
+	selectors = append(selectors, firemodel.SelectorFromProfileType(params.Type))
+	return h.index.SelectProfiles(selectors, model.Time(params.Start), model.Time(params.End))
+}
 
-	result := []*ingestv1.Profile{}
+func (h *Head) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
+	sp, _ := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Head")
+	defer sp.Finish()
+
+	stacktraceSamples := map[uint64]*ingestv1.StacktraceSample{}
 	names := []string{}
-	stackTraces := map[uint64][]int32{}
 	functions := map[int64]int{}
+
+	defer rows.Close()
 
 	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
@@ -459,64 +518,159 @@ func (h *Head) SelectProfiles(ctx context.Context, req *connect.Request[ingestv1
 		h.strings.lock.RUnlock()
 	}()
 
-	err = h.index.forMatchingProfiles(selectors, func(lbs firemodel.Labels, _ model.Fingerprint, profile *schemav1.Profile) error {
-		ts := int64(model.TimeFromUnixNano(profile.TimeNanos))
-		// if the timestamp is not matching we skip this profile.
-		if req.Msg.Start > ts || ts > req.Msg.End {
-			return nil
+	for rows.Next() {
+		p, ok := rows.At().(ProfileWithLabels)
+		if !ok {
+			return nil, errors.New("expected ProfileWithLabels")
 		}
-		totalProfiles++
-		p := &ingestv1.Profile{
-			ID:          profile.ID.String(),
-			Type:        req.Msg.Type,
-			Labels:      lbs,
-			Timestamp:   ts,
-			Stacktraces: make([]*ingestv1.StacktraceSample, 0, len(profile.Samples)),
-		}
-		totalSamples += int64(len(profile.Samples))
-		for _, s := range profile.Samples {
+		for _, s := range p.Samples {
 			if s.Value == 0 {
-				totalSamples--
 				continue
 			}
-			stackTracesIds, ok := stackTraces[s.StacktraceID]
-			if !ok {
-				locs := h.stacktraces.slice[s.StacktraceID].LocationIDs
-				totalLocations += int64(len(locs))
-				stackTracesIds = make([]int32, 0, 2*len(locs))
-				for _, loc := range locs {
-					for _, line := range h.locations.slice[loc].Line {
-						fnNameID := h.functions.slice[line.FunctionId].Name
-						pos, ok := functions[fnNameID]
-						if !ok {
-							functions[fnNameID] = len(names)
-							stackTracesIds = append(stackTracesIds, int32(len(names)))
-							names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
-							continue
-						}
-						stackTracesIds = append(stackTracesIds, int32(pos))
-					}
-				}
-				stackTraces[s.StacktraceID] = stackTracesIds
+			existing, ok := stacktraceSamples[s.StacktraceID]
+			if ok {
+				existing.Value += s.Value
+				continue
 			}
-
-			p.Stacktraces = append(p.Stacktraces, &ingestv1.StacktraceSample{
+			locs := h.stacktraces.slice[s.StacktraceID].LocationIDs
+			fnIds := make([]int32, 0, 2*len(locs))
+			for _, loc := range locs {
+				for _, line := range h.locations.slice[loc].Line {
+					fnNameID := h.functions.slice[line.FunctionId].Name
+					pos, ok := functions[fnNameID]
+					if !ok {
+						functions[fnNameID] = len(names)
+						fnIds = append(fnIds, int32(len(names)))
+						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
+						continue
+					}
+					fnIds = append(fnIds, int32(pos))
+				}
+			}
+			stacktraceSamples[s.StacktraceID] = &ingestv1.StacktraceSample{
+				FunctionIds: fnIds,
 				Value:       s.Value,
-				FunctionIds: stackTracesIds,
-			})
+			}
 		}
-		if len(p.Stacktraces) > 0 {
-			result = append(result, p)
-		}
-		return nil
-	})
-	sort.Slice(result, func(i, j int) bool {
-		return firemodel.CompareProfile(result[i], result[j]) < 0
-	})
-	return connect.NewResponse(&ingestv1.SelectProfilesResponse{
-		Profiles:      result,
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return &ingestv1.MergeProfilesStacktracesResult{
+		Stacktraces:   lo.Values(stacktraceSamples),
 		FunctionNames: names,
-	}), err
+	}, nil
+}
+
+func (h *Head) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*commonv1.Series, error) {
+	sp, _ := opentracing.StartSpanFromContext(ctx, "MergeByLabels - Head")
+	defer sp.Finish()
+
+	labelsByFingerprint := map[model.Fingerprint]string{}
+	seriesByLabels := map[string]*commonv1.Series{}
+	labelBuf := make([]byte, 0, 1024)
+	defer rows.Close()
+
+	for rows.Next() {
+		p, ok := rows.At().(ProfileWithLabels)
+		if !ok {
+			return nil, errors.New("expected ProfileWithLabels")
+		}
+		labelsByString, ok := labelsByFingerprint[p.fp]
+		if !ok {
+			labelBuf = p.Labels().BytesWithLabels(labelBuf, by...)
+			labelsByString = string(labelBuf)
+			labelsByFingerprint[p.fp] = labelsByString
+			if _, ok := seriesByLabels[labelsByString]; !ok {
+				seriesByLabels[labelsByString] = &commonv1.Series{
+					Labels: p.Labels().WithLabels(by...),
+					Points: []*commonv1.Point{
+						{
+							Timestamp: int64(p.Timestamp()),
+							Value:     float64(p.Total()),
+						},
+					},
+				}
+				continue
+			}
+		}
+		series := seriesByLabels[labelsByString]
+		series.Points = append(series.Points, &commonv1.Point{
+			Timestamp: int64(p.Timestamp()),
+			Value:     float64(p.Total()),
+		})
+
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	result := lo.Values(seriesByLabels)
+	sort.Slice(result, func(i, j int) bool {
+		return firemodel.CompareLabelPairs(result[i].Labels, result[j].Labels) < 0
+	})
+	// we have to sort the points in each series because labels reduction may have changed the order
+	for _, s := range result {
+		sort.Slice(s.Points, func(i, j int) bool {
+			return s.Points[i].Timestamp < s.Points[j].Timestamp
+		})
+	}
+	return result, nil
+}
+
+func (h *Head) Sort(in []Profile) []Profile {
+	return in
+}
+
+type ProfileSelectorIterator struct {
+	batch   chan []Profile
+	current iter.Iterator[Profile]
+	once    sync.Once
+}
+
+func NewProfileSelectorIterator() *ProfileSelectorIterator {
+	return &ProfileSelectorIterator{
+		batch: make(chan []Profile, 1),
+	}
+}
+
+func (it *ProfileSelectorIterator) Push(batch []Profile) {
+	if len(batch) == 0 {
+		return
+	}
+	it.batch <- batch
+}
+
+func (it *ProfileSelectorIterator) Next() bool {
+	if it.current == nil {
+		batch, ok := <-it.batch
+		if !ok {
+			return false
+		}
+		it.current = iter.NewSliceIterator(batch)
+	}
+	if !it.current.Next() {
+		it.current = nil
+		return it.Next()
+	}
+	return true
+}
+
+func (it *ProfileSelectorIterator) At() Profile {
+	if it.current == nil {
+		return ProfileWithLabels{}
+	}
+	return it.current.At()
+}
+
+func (it *ProfileSelectorIterator) Close() error {
+	it.once.Do(func() {
+		close(it.batch)
+	})
+	return nil
+}
+
+func (it *ProfileSelectorIterator) Err() error {
+	return nil
 }
 
 func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
@@ -548,6 +702,20 @@ func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesR
 	return connect.NewResponse(response), nil
 }
 
+// Flush closes the head and writes data to disk
+func (h *Head) Close() error {
+	close(h.stopCh)
+
+	var merr multierror.MultiError
+	for _, t := range h.tables {
+		merr.Add(t.Close())
+	}
+
+	h.wg.Wait()
+	return merr.Err()
+}
+
+// Flush closes the head and writes data to disk
 func (h *Head) Flush(ctx context.Context) error {
 	if len(h.profiles.slice) == 0 {
 		level.Info(h.logger).Log("msg", "head empty - no block written")

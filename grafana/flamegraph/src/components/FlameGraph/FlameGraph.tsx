@@ -18,10 +18,11 @@
 // THIS SOFTWARE.
 import { css } from '@emotion/css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useMeasure } from 'react-use';
 
 import { DataFrame } from '@grafana/data';
 
-import { COLLAPSE_THRESHOLD, PIXELS_PER_LEVEL, MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../../constants';
+import { PIXELS_PER_LEVEL, MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../../constants';
 import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
 import { ItemWithStart } from './dataTransform';
 import FlameGraphTooltip, { getTooltipData } from './FlameGraphTooltip';
@@ -41,6 +42,7 @@ type Props = {
   selectedView: SelectedView;
   setSelectedView: (view: SelectedView) => void;
   windowWidth: number;
+  style?: React.CSSProperties;
 };
 
 const FlameGraph = ({
@@ -60,7 +62,7 @@ const FlameGraph = ({
 }: Props) => {
   const styles = getStyles(selectedView, windowWidth);
   const totalTicks = data.fields[1].values.get(0);
-
+  const [sizeRef, { width: wrapperWidth }] = useMeasure<HTMLDivElement>();
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipData, setTooltipData] = useState<TooltipData>();
@@ -70,7 +72,7 @@ const FlameGraph = ({
   // the canvas.
   const convertPixelCoordinatesToBarCoordinates = useCallback(
     (x: number, y: number, pixelsPerTick: number) => {
-      const levelIndex = Math.floor(y / PIXELS_PER_LEVEL);
+      const levelIndex = Math.floor(y / (PIXELS_PER_LEVEL / window.devicePixelRatio));
       const barIndex = getBarIndex(x, levels[levelIndex], pixelsPerTick, totalTicks, rangeMin);
       return { levelIndex, barIndex };
     },
@@ -85,10 +87,15 @@ const FlameGraph = ({
       const ctx = graphRef.current?.getContext('2d')!;
       const graph = graphRef.current!;
 
-      graph.height = PIXELS_PER_LEVEL * levels.length;
-      graph.width = graph.clientWidth;
+      const width = graph.clientWidth;
+      const height = PIXELS_PER_LEVEL * levels.length;
+      graph.width = Math.round(width * window.devicePixelRatio);
+      graph.height = Math.round(height * window.devicePixelRatio);
+      graph.style.width = `${width}px`;
+      graph.style.height = `${height}px`;
+
       ctx.textBaseline = 'middle';
-      ctx.font = '13.5px Roboto Mono, monospace';
+      ctx.font = (12 * window.devicePixelRatio) + 'px monospace';
       ctx.strokeStyle = 'white';
 
       for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
@@ -107,13 +114,15 @@ const FlameGraph = ({
 
   useEffect(() => {
     if (graphRef.current) {
-      const pixelsPerTick = graphRef.current.clientWidth / totalTicks / (rangeMax - rangeMin);
+      graphRef.current.style.width = wrapperWidth + 'px';
+      const pixelsPerTick = (wrapperWidth * window.devicePixelRatio) / totalTicks / (rangeMax - rangeMin);
       render(pixelsPerTick);
 
       // Clicking allows user to "zoom" into the flamegraph. Zooming means the x axis gets smaller so that the clicked
       // bar takes 100% of the x axis.
       graphRef.current.onclick = (e) => {
-        const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
+        const pixelsPerTick =
+          (graphRef.current!.clientWidth) / totalTicks / (rangeMax - rangeMin);
         const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
         
         if (barIndex !== -1 && !isNaN(levelIndex) && !isNaN(barIndex)) {
@@ -153,7 +162,7 @@ const FlameGraph = ({
     rangeMax,
     topLevelIndex,
     totalTicks,
-    windowWidth,
+    wrapperWidth,
     setTopLevelIndex,
     setRangeMin,
     setRangeMax,
@@ -161,20 +170,11 @@ const FlameGraph = ({
     selectedView,
   ]);
 
-  // If user resizes window with top table as the selected view
-  useEffect(() => {
-    if (windowWidth < MIN_WIDTH_TO_SHOW_TOP_TABLE && selectedView === SelectedView.TopTable) {
-      setSelectedView(SelectedView.FlameGraph);
-    }
-  }, [selectedView, setSelectedView, windowWidth]);
-
   return (
-    <>
-      {selectedView !== SelectedView.TopTable && (
-        <canvas className={styles.graph} ref={graphRef} data-testid="flameGraph" />
-      )}
+    <div className={styles.graph} ref={sizeRef}>
+      <canvas ref={graphRef} data-testid="flameGraph" />
       <FlameGraphTooltip tooltipRef={tooltipRef} tooltipData={tooltipData!} showTooltip={showTooltip} />
-    </>
+    </div>
   );
 };
 
@@ -212,7 +212,7 @@ const getBarIndex = (
       );
 
       if (startOfBar <= x && startOfNextBar >= x) {
-        return startOfNextBar - startOfBar > COLLAPSE_THRESHOLD ? midIndex : -1;
+        return midIndex;
       }
 
       if (startOfBar > x) {

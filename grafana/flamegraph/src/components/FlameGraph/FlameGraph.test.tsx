@@ -9,6 +9,13 @@ import { DataFrameView, MutableDataFrame } from '@grafana/data';
 import 'jest-canvas-mock';
 import { Item, nestedSetToLevels } from './dataTransform';
 
+jest.mock('react-use', () => ({
+  useMeasure: () => {
+    const ref = React.useRef();
+    return [ref, { width: 1600 }];
+  },
+}));
+
 describe('FlameGraph', () => {
   const FlameGraphWithProps = () => {
     const [topLevelIndex, setTopLevelIndex] = useState(0);
@@ -45,7 +52,6 @@ describe('FlameGraph', () => {
   });
 
   it('should render correctly', async () => {
-    Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { value: 1600 });
     render(<FlameGraphWithProps />);
 
     const canvas = screen.getByTestId('flameGraph') as HTMLCanvasElement;

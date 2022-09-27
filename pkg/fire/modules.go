@@ -18,14 +18,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/weaveworks/common/middleware"
 	"github.com/weaveworks/common/server"
-	"github.com/weaveworks/common/user"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/grafana/fire/pkg/agent"
 	"github.com/grafana/fire/pkg/distributor"
-	"github.com/grafana/fire/pkg/firedb"
 	agentv1 "github.com/grafana/fire/pkg/gen/agent/v1"
 	"github.com/grafana/fire/pkg/gen/agent/v1/agentv1connect"
 	"github.com/grafana/fire/pkg/gen/ingester/v1/ingesterv1connect"
@@ -49,7 +48,6 @@ const (
 	MemberlistKV string = "memberlist-kv"
 	Querier      string = "querier"
 	GRPCGateway  string = "grpc-gateway"
-	FireDB       string = "firedb"
 	Storage      string = "storage"
 
 	// RuntimeConfig            string = "runtime-config"
@@ -70,19 +68,14 @@ const (
 )
 
 func (f *Fire) initQuerier() (services.Service, error) {
-	q, err := querier.New(f.Cfg.Querier, f.ring, nil, f.logger)
+	q, err := querier.New(f.Cfg.Querier, f.ring, nil, f.logger, f.auth)
 	if err != nil {
 		return nil, err
 	}
 	// Those API are not meant to stay but allows us for testing through Grafana.
 	f.Server.HTTP.Handle("/pyroscope/render", http.HandlerFunc(q.RenderHandler))
 	f.Server.HTTP.Handle("/pyroscope/label-values", http.HandlerFunc(q.LabelValuesHandler))
-	f.Server.HTTP.Handle("/prometheus/api/v1/query_range", http.HandlerFunc(q.PrometheusQueryRangeHandler))
-	f.Server.HTTP.Handle("/prometheus/api/v1/query", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// just return empty instant query result to make grafana explore display something in "both" mode
-		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
-	}))
-	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, q)
+	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, q, f.auth)
 
 	return q, nil
 }
@@ -99,7 +92,7 @@ func (f *Fire) initGRPCGateway() (services.Service, error) {
 }
 
 func (f *Fire) initDistributor() (services.Service, error) {
-	d, err := distributor.New(f.Cfg.Distributor, f.ring, nil, f.reg, f.logger)
+	d, err := distributor.New(f.Cfg.Distributor, f.ring, nil, f.reg, f.logger, f.auth)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +100,7 @@ func (f *Fire) initDistributor() (services.Service, error) {
 	// initialise direct pusher, this overwrites the default HTTP client
 	f.pusherClient = d
 
-	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d)
+	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d, f.auth)
 	return d, nil
 }
 
@@ -158,15 +151,6 @@ func (f *Fire) initRing() (_ services.Service, err error) {
 	return f.ring, nil
 }
 
-func (f *Fire) initFireDB() (_ services.Service, err error) {
-	f.fireDB, err = firedb.New(&f.Cfg.FireDB, f.logger, f.reg)
-	if err != nil {
-		return nil, err
-	}
-
-	return f.fireDB, nil
-}
-
 func (f *Fire) initStorage() (_ services.Service, err error) {
 	if cfg := f.Cfg.Storage.BucketConfig; len(cfg) > 0 {
 		b, err := objstoreclient.NewBucket(
@@ -187,13 +171,13 @@ func (f *Fire) initStorage() (_ services.Service, err error) {
 func (f *Fire) initIngester() (_ services.Service, err error) {
 	f.Cfg.Ingester.LifecyclerConfig.ListenPort = f.Cfg.Server.HTTPListenPort
 
-	ingester, err := ingester.New(f.Cfg.Ingester, f.logger, f.reg, f.fireDB, f.storageBucket)
+	ingester, err := ingester.New(f.Cfg.Ingester, f.Cfg.FireDB, f.logger, f.reg, f.storageBucket)
 	if err != nil {
 		return nil, err
 	}
 	prefix, handler := grpchealth.NewHandler(grpchealth.NewStaticChecker(ingesterv1connect.IngesterServiceName))
 	f.Server.HTTP.NewRoute().PathPrefix(prefix).Handler(handler)
-	ingesterv1connect.RegisterIngesterServiceHandler(f.Server.HTTP, ingester)
+	ingesterv1connect.RegisterIngesterServiceHandler(f.Server.HTTP, ingester, f.auth)
 	return ingester, nil
 }
 
@@ -201,6 +185,9 @@ func (f *Fire) initServer() (services.Service, error) {
 	prometheus.MustRegister(version.NewCollector("fire"))
 	DisableSignalHandling(&f.Cfg.Server)
 	f.Cfg.Server.Registerer = prometheus.WrapRegistererWithPrefix("fire_", f.reg)
+	// TODO(cyril) figure why this is locking the bidi stream see https://github.com/grafana/fire/issues/231
+	f.Cfg.Server.DoNotAddDefaultHTTPMiddleware = true
+
 	serv, err := server.New(f.Cfg.Server)
 	if err != nil {
 		return nil, err
@@ -219,19 +206,26 @@ func (f *Fire) initServer() (services.Service, error) {
 		return svs
 	}
 
+	// sounds like logging is the problem. see https://github.com/grafana/fire/issues/231
+	defaultHTTPMiddleware := []middleware.Interface{
+		middleware.Tracer{
+			RouteMatcher: f.Server.HTTP,
+		},
+		// middleware.Log{
+		// 	Log:                   f.Server.Log,
+		// 	LogRequestAtInfoLevel: f.Cfg.Server.LogRequestAtInfoLevel,
+		// },
+		// middleware.Instrument{
+		// 	RouteMatcher:     router,
+		// 	Duration:         requestDuration,
+		// 	RequestBodySize:  receivedMessageSize,
+		// 	ResponseBodySize: sentMessageSize,
+		// 	InflightRequests: inflightRequests,
+		// },
+	}
+	f.Server.HTTPServer.Handler = middleware.Merge(defaultHTTPMiddleware...).Wrap(f.Server.HTTP)
+
 	s := NewServerService(f.Server, servicesToWaitFor, f.logger)
-	// Best effort to propagate the org ID from the start.
-	f.Server.HTTPServer.Handler = func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !f.Cfg.AuthEnabled {
-				// todo change to configurable tenant ID
-				next.ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), "fake")))
-				return
-			}
-			_, ctx, _ := user.ExtractOrgIDFromHTTPRequest(r)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}(f.Server.HTTPServer.Handler)
 	// todo configure http2
 	f.Server.HTTPServer.Handler = h2c.NewHandler(f.Server.HTTPServer.Handler, &http2.Server{})
 	f.Server.HTTPServer.Handler = util.RecoveryHTTPMiddleware.Wrap(f.Server.HTTPServer.Handler)

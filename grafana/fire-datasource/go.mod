@@ -3,7 +3,7 @@ module github.com/grafana/fire/grafana/fire-datasource
 go 1.18
 
 require (
-	github.com/bufbuild/connect-go v0.3.0
+	github.com/bufbuild/connect-go v0.4.1-0.20220914044445-cce7065d23ae
 	github.com/grafana/fire v0.0.0-00010101000000-000000000000
 	github.com/grafana/grafana-plugin-sdk-go v0.139.0
 	github.com/stretchr/testify v1.8.0
@@ -63,8 +63,10 @@ require (
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/prometheus/prometheus v1.8.2-0.20220315145411-881111fec433 // indirect
 	github.com/rivo/uniseg v0.3.4 // indirect
+	github.com/samber/lo v1.25.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/goleak v1.1.12 // indirect
+	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect
 	golang.org/x/net v0.0.0-20220812174116-3211cb980234 // indirect
 	golang.org/x/sys v0.0.0-20220818161305-2296e01440c6 // indirect
 	golang.org/x/text v0.3.7 // indirect

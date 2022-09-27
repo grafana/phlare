@@ -3,8 +3,7 @@ module github.com/grafana/fire
 go 1.18
 
 require (
-	github.com/apache/arrow/go/v8 v8.0.1
-	github.com/bufbuild/connect-go v0.1.0
+	github.com/bufbuild/connect-go v0.4.1-0.20220914044445-cce7065d23ae
 	github.com/bufbuild/connect-grpchealth-go v0.1.0
 	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/drone/envsubst v1.0.3
@@ -29,7 +28,7 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20220315145411-881111fec433
 	github.com/pyroscope-io/pyroscope v0.18.0
 	github.com/samber/lo v1.25.0
-	github.com/segmentio/parquet-go v0.0.0-20220831210521-f812768dfa62
+	github.com/segmentio/parquet-go v0.0.0-20220914222423-67dbe8d21ca5
 	github.com/stretchr/testify v1.8.0
 	github.com/thanos-io/objstore v0.0.0-20220809103346-8ef1f215e2bf
 	github.com/thanos-io/thanos v0.27.0
@@ -46,6 +45,7 @@ require (
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.4.0
+	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -77,7 +77,6 @@ require (
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.2+incompatible // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
-	github.com/apache/thrift v0.16.0 // indirect
 	github.com/armon/go-metrics v0.3.9 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go v1.44.45 // indirect
@@ -130,7 +129,6 @@ require (
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0 // indirect
 	github.com/go-resty/resty/v2 v2.1.1-0.20191201195748-d7b97669fe48 // indirect
 	github.com/go-zookeeper/zk v1.0.2 // indirect
-	github.com/goccy/go-json v0.9.10 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -167,9 +165,7 @@ require (
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
-	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
-	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
 	github.com/kolo/xmlrpc v0.0.0-20201022064351-38db28db192b // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -180,8 +176,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
-	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
-	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/minio/md5-simd v1.1.0 // indirect
 	github.com/minio/minio-go/v7 v7.0.23 // indirect
 	github.com/minio/sha256-simd v0.1.1 // indirect
@@ -221,7 +215,6 @@ require (
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/weaveworks/promrus v1.2.0 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.etcd.io/etcd v3.3.25+incompatible // indirect
 	go.etcd.io/etcd/api/v3 v3.5.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0 // indirect
@@ -255,7 +248,6 @@ require (
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
 replace (
