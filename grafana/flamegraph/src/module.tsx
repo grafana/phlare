@@ -2,13 +2,18 @@ import React from 'react';
 // @ts-ignore
 import { ExplorePanelProps, PanelPlugin, PanelProps } from '@grafana/data';
 import FlameGraphContainer from './components/FlameGraphContainer';
+import { Collapse } from '@grafana/ui';
 
 export const FlameGraphPanel: React.FunctionComponent<PanelProps> = (props) => {
   return <FlameGraphContainer data={props.data.series[0]} />;
 };
 
 export const FlameExploreGraphPanel: React.FunctionComponent<ExplorePanelProps> = (props) => {
-  return <FlameGraphContainer data={props.data[0]} />;
+  return (
+    <Collapse label='' isOpen>
+      <FlameGraphContainer data={props.data[0]} />
+    </Collapse>
+  )
 };
 
 // We use ts-ignore here because setExplorePanel and ExplorePanelProps are part of a draft PR that isn't yet merged.
