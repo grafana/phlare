@@ -188,7 +188,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   row: css`
-    border-top: 1px solid ${theme.colors.border.weak};
+    border-top: 1px solid ${theme.components.panel.borderColor};
 
     &:hover {
       background-color: ${theme.colors.emphasize(theme.colors.background.primary, 0.03)};
@@ -201,7 +201,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   cell: css`
-    border-right: 1px solid ${theme.colors.border.weak};
+    border-right: 1px solid ${theme.components.panel.borderColor};
     padding: ${theme.spacing(1)};
     
     div {
