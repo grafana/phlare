@@ -184,7 +184,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   matchedRow: css`
     & > :nth-child(1), & > :nth-child(2), & > :nth-child(3) {
-      background-color: ${theme.colors.emphasize(theme.colors.background.primary, 0.03)} !important;
+      background-color: ${theme.colors.background.secondary} !important;
     }
   `,
   row: css`
