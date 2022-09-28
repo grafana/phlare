@@ -30,7 +30,7 @@ func Test_query(t *testing.T) {
 			From: time.UnixMilli(10000),
 			To:   time.UnixMilli(20000),
 		},
-		JSON: []byte(`{"profileTypeId":"foo:bar","labelSelector":"{app=\\\"baz\\\"}"}`),
+		JSON: []byte(`{"profileTypeId":"memory:alloc_objects:count:space:bytes","labelSelector":"{app=\\\"baz\\\"}"}`),
 	}
 
 	t.Run("query both", func(t *testing.T) {
@@ -76,10 +76,9 @@ func Test_profileToDataFrame(t *testing.T) {
 	frame := responseToDataFrames(resp, "memory:alloc_objects:count:space:bytes")
 	require.Equal(t, 4, len(frame.Fields))
 	require.Equal(t, data.NewField("level", nil, []int64{0, 1, 1}), frame.Fields[0])
-	require.Equal(t, data.NewField("value", nil, []int64{20, 10, 5}), frame.Fields[1])
-	require.Equal(t, data.NewField("self", nil, []int64{1, 3, 5}), frame.Fields[2])
+	require.Equal(t, data.NewField("value", nil, []int64{20, 10, 5}).SetConfig(&data.FieldConfig{Unit: "short"}), frame.Fields[1])
+	require.Equal(t, data.NewField("self", nil, []int64{1, 3, 5}).SetConfig(&data.FieldConfig{Unit: "short"}), frame.Fields[2])
 	require.Equal(t, data.NewField("label", nil, []string{"func1", "func2", "func3"}), frame.Fields[3])
-	require.Equal(t, "memory:alloc_objects:count:space:bytes", frame.Meta.Custom.(CustomMeta).ProfileTypeID)
 }
 
 // This is where the tests for the datasource backend live.
@@ -146,11 +145,10 @@ func Test_treeToNestedDataFrame(t *testing.T) {
 	require.Equal(t,
 		[]*data.Field{
 			data.NewField("level", nil, []int64{0, 1, 1, 2}),
-			data.NewField("value", nil, []int64{100, 40, 30, 15}),
-			data.NewField("self", nil, []int64{1, 2, 3, 4}),
+			data.NewField("value", nil, []int64{100, 40, 30, 15}).SetConfig(&data.FieldConfig{Unit: "short"}),
+			data.NewField("self", nil, []int64{1, 2, 3, 4}).SetConfig(&data.FieldConfig{Unit: "short"}),
 			data.NewField("label", nil, []string{"root", "func1", "func2", "func1:func3"}),
 		}, frame.Fields)
-	require.Equal(t, "memory:alloc_objects:count:space:bytes", frame.Meta.Custom.(CustomMeta).ProfileTypeID)
 }
 
 func Test_seriesToDataFrame(t *testing.T) {
@@ -164,7 +162,7 @@ func Test_seriesToDataFrame(t *testing.T) {
 	frame := seriesToDataFrame(resp, "process_cpu:samples:count:cpu:nanoseconds")
 	require.Equal(t, 2, len(frame.Fields))
 	require.Equal(t, data.NewField("time", nil, []time.Time{time.UnixMilli(1000), time.UnixMilli(2000)}), frame.Fields[0])
-	require.Equal(t, data.NewField("samples", nil, []float64{30, 10}), frame.Fields[1])
+	require.Equal(t, data.NewField("samples", nil, []float64{30, 10}).SetConfig(&data.FieldConfig{Unit: "short"}), frame.Fields[1])
 
 	// with a label pair, the value field should name itself with a label pair name and not the profile type
 	resp = &connect.Response[querierv1.SelectSeriesResponse]{
@@ -175,7 +173,7 @@ func Test_seriesToDataFrame(t *testing.T) {
 		},
 	}
 	frame = seriesToDataFrame(resp, "process_cpu:samples:count:cpu:nanoseconds")
-	require.Equal(t, data.NewField("app", nil, []float64{30, 10}), frame.Fields[1])
+	require.Equal(t, data.NewField("app", nil, []float64{30, 10}).SetConfig(&data.FieldConfig{Unit: ""}), frame.Fields[1])
 }
 
 type FakeClient struct {
