@@ -65,8 +65,8 @@ func Test_profileToDataFrame(t *testing.T) {
 			Flamegraph: &querierv1.FlameGraph{
 				Names: []string{"func1", "func2", "func3"},
 				Levels: []*querierv1.Level{
-					{Values: []int64{0, 20, 0, 0}},
-					{Values: []int64{0, 10, 0, 1, 0, 5, 0, 2}},
+					{Values: []int64{0, 20, 1, 2}},
+					{Values: []int64{0, 10, 3, 1, 4, 5, 5, 2}},
 				},
 				Total:   987,
 				MaxSelf: 123,
@@ -74,10 +74,11 @@ func Test_profileToDataFrame(t *testing.T) {
 		},
 	}
 	frame := responseToDataFrames(resp, "memory:alloc_objects:count:space:bytes")
-	require.Equal(t, 3, len(frame.Fields))
+	require.Equal(t, 4, len(frame.Fields))
 	require.Equal(t, data.NewField("level", nil, []int64{0, 1, 1}), frame.Fields[0])
 	require.Equal(t, data.NewField("value", nil, []int64{20, 10, 5}), frame.Fields[1])
-	require.Equal(t, data.NewField("label", nil, []string{"func1", "func2", "func3"}), frame.Fields[2])
+	require.Equal(t, data.NewField("self", nil, []int64{1, 3, 5}), frame.Fields[2])
+	require.Equal(t, data.NewField("label", nil, []string{"func1", "func2", "func3"}), frame.Fields[3])
 	require.Equal(t, "memory:alloc_objects:count:space:bytes", frame.Meta.Custom.(CustomMeta).ProfileTypeID)
 }
 
@@ -131,12 +132,12 @@ func Test_levelsToTree(t *testing.T) {
 
 func Test_treeToNestedDataFrame(t *testing.T) {
 	tree := &ProfileTree{
-		Start: 0, Value: 100, Level: 0, Name: "root", Nodes: []*ProfileTree{
+		Start: 0, Value: 100, Level: 0, Self: 1, Name: "root", Nodes: []*ProfileTree{
 			{
-				Start: 10, Value: 40, Level: 1, Name: "func1",
+				Start: 10, Value: 40, Level: 1, Self: 2, Name: "func1",
 			},
-			{Start: 60, Value: 30, Level: 1, Name: "func2", Nodes: []*ProfileTree{
-				{Start: 61, Value: 15, Level: 2, Name: "func1:func3"},
+			{Start: 60, Value: 30, Level: 1, Self: 3, Name: "func2", Nodes: []*ProfileTree{
+				{Start: 61, Value: 15, Level: 2, Self: 4, Name: "func1:func3"},
 			}},
 		},
 	}
@@ -146,6 +147,7 @@ func Test_treeToNestedDataFrame(t *testing.T) {
 		[]*data.Field{
 			data.NewField("level", nil, []int64{0, 1, 1, 2}),
 			data.NewField("value", nil, []int64{100, 40, 30, 15}),
+			data.NewField("self", nil, []int64{1, 2, 3, 4}),
 			data.NewField("label", nil, []string{"root", "func1", "func2", "func1:func3"}),
 		}, frame.Fields)
 	require.Equal(t, "memory:alloc_objects:count:space:bytes", frame.Meta.Custom.(CustomMeta).ProfileTypeID)

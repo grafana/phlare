@@ -11,8 +11,8 @@ import { FixedSizeList } from 'react-window';
 
 import { Icon, useStyles2, CustomScrollbar } from '@grafana/ui';
 import { GrafanaTheme2 } from '@grafana/data';
-
 import { ColumnTypes, TopTableData, TopTableValue } from '../types';
+import { TOP_TABLE_COLUMN_WIDTH } from '../../constants';
 
 type Props = {
   width: number;
@@ -24,7 +24,6 @@ type Props = {
 
 const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => {
   const styles = useStyles2((theme) => getStyles(theme));
-  const COLUMN_WIDTH = 120;
 
   const sortSymbols: SortByFn<object> = (a, b, column) => {
     return a.values[column].localeCompare(b.values[column]);
@@ -41,21 +40,21 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
         header: ColumnTypes.Symbol,
         cell: SymbolCell,
         sortType: sortSymbols,
-        width: width - (COLUMN_WIDTH * 2),
+        width: width - (TOP_TABLE_COLUMN_WIDTH * 2),
       },
       {
         accessor: ColumnTypes.Self.toLowerCase(),
         header: ColumnTypes.Self,
         cell: UnitCell,
         sortType: sortUnits,
-        width: COLUMN_WIDTH,
+        width: TOP_TABLE_COLUMN_WIDTH,
       },
       {
         accessor: ColumnTypes.Total.toLowerCase(),
         header: ColumnTypes.Total,
         cell: UnitCell,
         sortType: sortUnits,
-        width: COLUMN_WIDTH,
+        width: TOP_TABLE_COLUMN_WIDTH,
       },
     ],
     [width]

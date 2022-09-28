@@ -86,13 +86,17 @@ const FlameGraphTopTableContainer = ({ levels, profileTypeId, selectedView, quer
   );
 };
 
-const getStyles = (selectedView: SelectedView) => ({
-  topTableContainer: css`
-    cursor: pointer;
-    float: left;
-    margin-right: 20px;
-    width: ${selectedView === SelectedView.TopTable ? '100%' : 'calc(50% - 20px)'};
-  `,
-});
+const getStyles = (selectedView: SelectedView) => {
+  const marginRight = '20px';
+
+  return {
+    topTableContainer: css`
+      cursor: pointer;
+      float: left;
+      margin-right: ${marginRight};
+      width: ${selectedView === SelectedView.TopTable ? '100%' : `calc(50% - ${marginRight})`};
+    `,
+  }
+};
 
 export default FlameGraphTopTableContainer;
