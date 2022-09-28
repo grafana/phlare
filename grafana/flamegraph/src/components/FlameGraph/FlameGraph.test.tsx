@@ -22,7 +22,7 @@ describe('FlameGraph', () => {
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
     const [query] = useState('');
-    const [selectedView, setSelectedView] = useState(SelectedView.Both);
+    const [selectedView, _] = useState(SelectedView.Both);
 
     const flameGraphData = new MutableDataFrame(data);
     const dataView = new DataFrameView<Item>(flameGraphData);
@@ -32,7 +32,6 @@ describe('FlameGraph', () => {
       <FlameGraph
         data={flameGraphData}
         levels={levels}
-        profileTypeId={'cpu:foo:bar'}
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
         rangeMax={rangeMax}
@@ -41,7 +40,6 @@ describe('FlameGraph', () => {
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
         selectedView={selectedView}
-        setSelectedView={setSelectedView}
         windowWidth={1600}
       />
     );

@@ -6,20 +6,25 @@ import { useStyles2 } from '@grafana/ui';
 
 import { PIXELS_PER_LEVEL } from '../../constants';
 import { Item } from '../FlameGraph/dataTransform';
-import { SelectedView, TableData, TopTableData } from '../types';
+import { SampleUnit, SelectedView, TableData, TopTableData } from '../types';
 import FlameGraphTopTable from './FlameGraphTopTable';
+import { createTheme, DataFrame, Field, FieldType, getDisplayProcessor } from '@grafana/data';
 
 type Props = {
+  data: DataFrame;
   levels: Item[][];
-  profileTypeId: string;
   selectedView: SelectedView;
   query: string;
   setQuery: (query: string) => void;
 };
 
-const FlameGraphTopTableContainer = ({ levels, profileTypeId, selectedView, query, setQuery }: Props) => {
+const FlameGraphTopTableContainer = ({ data, levels, selectedView, query, setQuery }: Props) => {
   const styles = useStyles2(() => getStyles(selectedView));
   const [topTable, setTopTable] = useState<TopTableData[]>();
+  const valueField =
+    data.fields.find((f) => f.name === 'value') ?? data.fields.find((f) => f.type === FieldType.number);
+  const selfField =
+    data.fields.find((f) => f.name === 'self') ?? data.fields.find((f) => f.type === FieldType.number);
 
   const sortLevelsIntoTable = useCallback(() => {
     let label, self, value;
@@ -41,22 +46,44 @@ const FlameGraphTopTableContainer = ({ levels, profileTypeId, selectedView, quer
     return table;
   }, [levels]);
 
+  const getTopTableData = (field: Field, value: number) => {
+    const processor = getDisplayProcessor({ field, theme: createTheme() /* theme does not matter for us here */ });
+    const displayValue = processor(value);
+    let unitValue = displayValue.text + displayValue.suffix;
+  
+    switch (field.config.unit) {
+      case SampleUnit.Bytes:
+        break;
+      case SampleUnit.Nanoseconds:
+        break;
+      default:
+        if (!displayValue.suffix) {
+          // Makes sure we don't show 123undefined or something like that if suffix isn't defined
+          unitValue = displayValue.text
+        }
+        break;
+    }
+  
+    return unitValue;
+  };
+
   useEffect(() => {
     const table = sortLevelsIntoTable();
 
     let topTable: TopTableData[] = [];
     for (let key in table) {
+      const selfUnit = getTopTableData(selfField!, table[key].self);
+      const valueUnit = getTopTableData(valueField!, table[key].total);
+
       topTable.push({
         symbol: key,
-        // self: { value: table[key].self, unitValue: getUnitValue(table[key].self / divisor, unit, fallback) },
-        // total: { value: table[key].total, unitValue: getUnitValue(table[key].total / divisor, unit, fallback) }
-        self: { value: table[key].self, unitValue: '1010100101' },
-        total: { value: table[key].total, unitValue: '1010100101' }
+        self: { value: table[key].self, unitValue: selfUnit },
+        total: { value: table[key].total, unitValue: valueUnit }
       });
     }
 
     setTopTable(topTable);
-  }, [sortLevelsIntoTable]);
+  }, [data.fields, selfField, sortLevelsIntoTable, valueField]);
 
 
   return (

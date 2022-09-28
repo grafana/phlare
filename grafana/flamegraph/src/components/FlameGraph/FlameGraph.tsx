@@ -31,7 +31,6 @@ import { TooltipData, SelectedView } from '../types';
 type Props = {
   data: DataFrame;
   levels: ItemWithStart[][];
-  profileTypeId: string;
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
@@ -40,7 +39,6 @@ type Props = {
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
   selectedView: SelectedView;
-  setSelectedView: (view: SelectedView) => void;
   windowWidth: number;
   style?: React.CSSProperties;
 };
@@ -48,7 +46,6 @@ type Props = {
 const FlameGraph = ({
   data,
   levels,
-  profileTypeId,
   topLevelIndex,
   rangeMin,
   rangeMax,
@@ -57,7 +54,6 @@ const FlameGraph = ({
   setRangeMin,
   setRangeMax,
   selectedView,
-  setSelectedView,
   windowWidth,
 }: Props) => {
   const styles = getStyles(selectedView, windowWidth);
@@ -168,7 +164,6 @@ const FlameGraph = ({
     setTopLevelIndex,
     setRangeMin,
     setRangeMax,
-    profileTypeId,
     selectedView,
     valueField,
   ]);

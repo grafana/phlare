@@ -18,8 +18,8 @@ describe('FlameGraphTopTableContainer', () => {
 
     return (
       <FlameGraphTopTableContainer
+        data={flameGraphData}
         levels={levels}
-        profileTypeId={'memory:alloc_objects:count:space:bytes'}
         selectedView={selectedView}
         query={query}
         setQuery={setQuery}
@@ -50,10 +50,10 @@ describe('FlameGraphTopTableContainer', () => {
     const cells = screen.getAllByRole('cell');
     expect(cells).toHaveLength(48); // 16 rows
     expect(cells[0].textContent).toEqual('net/http.HandlerFunc.ServeHTTP');
-    expect(cells[1].textContent).toEqual('31.69 K');
-    expect(cells[2].textContent).toEqual('31.69 G');
+    expect(cells[1].textContent).toEqual('31.7 K');
+    expect(cells[2].textContent).toEqual('31.7 Bil');
     expect(cells[24].textContent).toEqual('github.com/grafana/fire/pkg/fire.(*Fire).initServer.func2.1');
     expect(cells[25].textContent).toEqual('5.58 K');
-    expect(cells[26].textContent).toEqual('5.58 G');
+    expect(cells[26].textContent).toEqual('5.58 Bil');
   });
 });

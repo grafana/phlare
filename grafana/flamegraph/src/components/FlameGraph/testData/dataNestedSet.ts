@@ -155,6 +155,9 @@ export const data: DataFrameDTO = {
         10000000, 10000000, 10000000, 10000000, 10000000, 10000000, 10000000, 10000000, 10000000, 10000000, 10000000,
         10000000, 10000000,
       ],
+      config: {
+        unit: "short"
+      }
     },
     {
       name: 'self',
@@ -263,6 +266,9 @@ export const data: DataFrameDTO = {
         10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
         10, 10,
       ],
+      config: {
+        unit: "short"
+      }
     },
     {
       name: 'label',

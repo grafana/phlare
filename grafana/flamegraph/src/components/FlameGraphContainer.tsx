@@ -20,7 +20,6 @@ const FlameGraphContainer = (props: Props) => {
   const [query, setQuery] = useState('');
   const [selectedView, setSelectedView] = useState(SelectedView.Both);
   const { width: windowWidth } = useWindowSize();
-  const profileTypeId = props.data.meta!.custom!.ProfileTypeID;
 
   // Transform dataFrame with nested set format to array of levels. Each level contains all the bars for a particular
   // level of the flame graph. We do this temporary as in the end we should be able to render directly by iterating
@@ -54,9 +53,9 @@ const FlameGraphContainer = (props: Props) => {
       />
 
       {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE && (
-        <FlameGraphTopTableContainer 
+        <FlameGraphTopTableContainer
+          data={props.data}
           levels={levels} 
-          profileTypeId={profileTypeId} 
           selectedView={selectedView} 
           query={query} 
           setQuery={setQuery} 
@@ -67,7 +66,6 @@ const FlameGraphContainer = (props: Props) => {
         <FlameGraph
           data={props.data}
           levels={levels}
-          profileTypeId={profileTypeId}
           topLevelIndex={topLevelIndex}
           rangeMin={rangeMin}
           rangeMax={rangeMax}
@@ -76,7 +74,6 @@ const FlameGraphContainer = (props: Props) => {
           setRangeMin={setRangeMin}
           setRangeMax={setRangeMax}
           selectedView={selectedView}
-          setSelectedView={setSelectedView}
           windowWidth={windowWidth}
         />
       )}

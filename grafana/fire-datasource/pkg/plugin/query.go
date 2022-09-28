@@ -228,6 +228,7 @@ func treeToNestedSetDataFrame(tree *ProfileTree, profileTypeID string) *data.Fra
 	// profileTypeID should encode the type of the profile with unit being the 3rd part
 	parts := strings.Split(profileTypeID, ":")
 	valueField.Config = &data.FieldConfig{Unit: normalizeUnit(parts[2])}
+	selfField.Config = &data.FieldConfig{Unit: normalizeUnit(parts[2])}
 	labelField := data.NewField("label", nil, []string{})
 	frame.Fields = data.Fields{levelField, valueField, selfField, labelField}
 
