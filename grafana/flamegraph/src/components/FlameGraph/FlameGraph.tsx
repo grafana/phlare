@@ -20,7 +20,7 @@ import { css } from '@emotion/css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMeasure } from 'react-use';
 
-import { DataFrame } from '@grafana/data';
+import { DataFrame, FieldType } from '@grafana/data';
 
 import { PIXELS_PER_LEVEL, MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../../constants';
 import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
@@ -62,6 +62,9 @@ const FlameGraph = ({
 }: Props) => {
   const styles = getStyles(selectedView, windowWidth);
   const totalTicks = data.fields[1].values.get(0);
+  const valueField =
+    data.fields.find((f) => f.name === 'value') ?? data.fields.find((f) => f.type === FieldType.number);
+
   const [sizeRef, { width: wrapperWidth }] = useMeasure<HTMLDivElement>();
   const graphRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -95,7 +98,7 @@ const FlameGraph = ({
       graph.style.height = `${height}px`;
 
       ctx.textBaseline = 'middle';
-      ctx.font = (12 * window.devicePixelRatio) + 'px monospace';
+      ctx.font = 12 * window.devicePixelRatio + 'px monospace';
       ctx.strokeStyle = 'white';
 
       for (let levelIndex = 0; levelIndex < levels.length; levelIndex++) {
@@ -121,8 +124,7 @@ const FlameGraph = ({
       // Clicking allows user to "zoom" into the flamegraph. Zooming means the x axis gets smaller so that the clicked
       // bar takes 100% of the x axis.
       graphRef.current.onclick = (e) => {
-        const pixelsPerTick =
-          (graphRef.current!.clientWidth) / totalTicks / (rangeMax - rangeMin);
+        const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
         const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
         
         if (barIndex !== -1 && !isNaN(levelIndex) && !isNaN(barIndex)) {
@@ -143,7 +145,7 @@ const FlameGraph = ({
             tooltipRef.current.style.top = e.clientY + 40 + 'px';
 
             const bar = levels[levelIndex][barIndex];
-            const tooltipData = getTooltipData(profileTypeId, bar.label, bar.value, totalTicks);
+            const tooltipData = getTooltipData(valueField!, bar.label, bar.value, totalTicks);
             setTooltipData(tooltipData);
             setShowTooltip(true);
           }
@@ -168,6 +170,7 @@ const FlameGraph = ({
     setRangeMax,
     profileTypeId,
     selectedView,
+    valueField,
   ]);
 
   return (

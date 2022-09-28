@@ -6,8 +6,7 @@ import { useStyles2 } from '@grafana/ui';
 
 import { PIXELS_PER_LEVEL } from '../../constants';
 import { Item } from '../FlameGraph/dataTransform';
-import { getUnitValue } from '../FlameGraph/FlameGraphTooltip';
-import { BYTE_UNITS, COUNT_UNITS, NANOSECOND_UNITS, SampleUnit, SelectedView, TableData, TopTableData } from '../types';
+import { SelectedView, TableData, TopTableData } from '../types';
 import FlameGraphTopTable from './FlameGraphTopTable';
 
 type Props = {
@@ -42,33 +41,22 @@ const FlameGraphTopTableContainer = ({ levels, profileTypeId, selectedView, quer
     return table;
   }, [levels]);
 
-  const getUnitMeta = useCallback(() => {
-    const sampleUnit = profileTypeId?.split(':').length === 5 ? profileTypeId.split(':')[2] : '';
-    switch (sampleUnit) {
-      case SampleUnit.Bytes:
-        return { divisor: 1, unit: BYTE_UNITS, fallback: '' }
-      case SampleUnit.Nanoseconds:
-        return { divisor: 1000000000, unit: NANOSECOND_UNITS, fallback: 'seconds' }
-      default:
-        return { divisor: 1, unit: COUNT_UNITS, fallback: '' }
-    }
-  }, [profileTypeId]);
-
   useEffect(() => {
     const table = sortLevelsIntoTable();
-    const { divisor, unit, fallback } = getUnitMeta();
 
     let topTable: TopTableData[] = [];
     for (let key in table) {
       topTable.push({
         symbol: key,
-        self: { value: table[key].self, unitValue: getUnitValue(table[key].self / divisor, unit, fallback) },
-        total: { value: table[key].total, unitValue: getUnitValue(table[key].total / divisor, unit, fallback) }
+        // self: { value: table[key].self, unitValue: getUnitValue(table[key].self / divisor, unit, fallback) },
+        // total: { value: table[key].total, unitValue: getUnitValue(table[key].total / divisor, unit, fallback) }
+        self: { value: table[key].self, unitValue: '1010100101' },
+        total: { value: table[key].total, unitValue: '1010100101' }
       });
     }
 
     setTopTable(topTable);
-  }, [getUnitMeta, sortLevelsIntoTable]);
+  }, [sortLevelsIntoTable]);
 
 
   return (
