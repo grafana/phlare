@@ -32,7 +32,6 @@ describe('FlameGraphTopTableContainer', () => {
   });
 
   it('should render correctly', async () => {
-    Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { value: 1600 });
     // Needed for AutoSizer to work in test
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 500 });
     Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 500 });

@@ -20,7 +20,7 @@ describe('FlameGraphHeader', () => {
         setRangeMax={jest.fn()}
         selectedView={selectedView}
         setSelectedView={setSelectedView}
-        windowWidth={1600}
+        containerWidth={1600}
       />
     );
   };

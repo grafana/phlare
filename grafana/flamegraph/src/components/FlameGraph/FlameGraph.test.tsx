@@ -40,7 +40,6 @@ describe('FlameGraph', () => {
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
         selectedView={selectedView}
-        windowWidth={1600}
       />
     );
   };

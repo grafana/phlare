@@ -22,7 +22,7 @@ import { useMeasure } from 'react-use';
 
 import { DataFrame, FieldType } from '@grafana/data';
 
-import { PIXELS_PER_LEVEL, MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../../constants';
+import { PIXELS_PER_LEVEL } from '../../constants';
 import { getBarX, getRectDimensionsForLevel, renderRect } from './rendering';
 import { ItemWithStart } from './dataTransform';
 import FlameGraphTooltip, { getTooltipData } from './FlameGraphTooltip';
@@ -39,7 +39,6 @@ type Props = {
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
   selectedView: SelectedView;
-  windowWidth: number;
   style?: React.CSSProperties;
 };
 
@@ -54,9 +53,8 @@ const FlameGraph = ({
   setRangeMin,
   setRangeMax,
   selectedView,
-  windowWidth,
 }: Props) => {
-  const styles = getStyles(selectedView, windowWidth);
+  const styles = getStyles(selectedView);
   const totalTicks = data.fields[1].values.get(0);
   const valueField =
     data.fields.find((f) => f.name === 'value') ?? data.fields.find((f) => f.type === FieldType.number);
@@ -176,11 +174,11 @@ const FlameGraph = ({
   );
 };
 
-const getStyles = (selectedView: SelectedView, windowWidth: number) => ({
+const getStyles = (selectedView: SelectedView) => ({
   graph: css`
     cursor: pointer;
     float: left;
-    width: ${selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE ? '50%' : '100%'};
+    width: ${selectedView === SelectedView.FlameGraph ? '100%' : '50%'};
   `,
 });
 

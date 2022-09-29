@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DataFrame, DataFrameView } from '@grafana/data';
-import { useWindowSize } from 'react-use';
+import { useMeasure } from 'react-use';
 
 import FlameGraphHeader from './FlameGraphHeader';
 import FlameGraph from './FlameGraph/FlameGraph';
 import { SelectedView } from './types';
 import FlameGraphTopTableContainer from './TopTable/FlameGraphTopTableContainer';
-import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
+import { MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH } from '../constants';
 import { Item, nestedSetToLevels } from './FlameGraph/dataTransform';
 
 type Props = {
@@ -19,7 +19,7 @@ const FlameGraphContainer = (props: Props) => {
   const [rangeMax, setRangeMax] = useState(1);
   const [query, setQuery] = useState('');
   const [selectedView, setSelectedView] = useState(SelectedView.Both);
-  const { width: windowWidth } = useWindowSize();
+  const [sizeRef, { width: containerWidth }] = useMeasure<HTMLDivElement>();
 
   // Transform dataFrame with nested set format to array of levels. Each level contains all the bars for a particular
   // level of the flame graph. We do this temporary as in the end we should be able to render directly by iterating
@@ -32,15 +32,15 @@ const FlameGraphContainer = (props: Props) => {
     return nestedSetToLevels(dataView);
   }, [props.data]);
 
-  // If user resizes window with top table as the selected view
+  // If user resizes window with both as the selected view
   useEffect(() => {
-    if (windowWidth < MIN_WIDTH_TO_SHOW_TOP_TABLE && selectedView === SelectedView.TopTable) {
+    if (containerWidth < MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH && selectedView === SelectedView.Both) {
       setSelectedView(SelectedView.FlameGraph);
     }
-  }, [selectedView, setSelectedView, windowWidth]);
+  }, [selectedView, setSelectedView, containerWidth]);
 
   return (
-    <>
+    <div ref={sizeRef}>
       <FlameGraphHeader
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
@@ -49,10 +49,10 @@ const FlameGraphContainer = (props: Props) => {
         setQuery={setQuery}
         selectedView={selectedView}
         setSelectedView={setSelectedView}
-        windowWidth={windowWidth}
+        containerWidth={containerWidth}
       />
 
-      {selectedView !== SelectedView.FlameGraph && windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE && (
+      {selectedView !== SelectedView.FlameGraph && (
         <FlameGraphTopTableContainer
           data={props.data}
           levels={levels} 
@@ -74,10 +74,9 @@ const FlameGraphContainer = (props: Props) => {
           setRangeMin={setRangeMin}
           setRangeMax={setRangeMax}
           selectedView={selectedView}
-          windowWidth={windowWidth}
         />
       )}
-    </>
+    </div>
   );
 };
 

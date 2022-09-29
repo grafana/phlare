@@ -4,7 +4,7 @@ import React from 'react';
 import { Button, Input, useStyles, RadioButtonGroup } from '@grafana/ui';
 
 import { SelectedView } from './types';
-import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
+import { MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH } from '../constants';
 
 type Props = {
   query: string;
@@ -14,14 +14,8 @@ type Props = {
   setQuery: (query: string) => void;
   selectedView: SelectedView;
   setSelectedView: (view: SelectedView) => void;
-  windowWidth: number;
+  containerWidth: number;
 };
-
-const viewOptions: Array<{ value: string; label: string; description: string }> = [
-  { value: SelectedView.TopTable, label: 'Top Table', description: 'Only show top table' },
-  { value: SelectedView.FlameGraph, label: 'Flame Graph', description: 'Only show flame graph' },
-  { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' },
-];
 
 const FlameGraphHeader = ({
   query,
@@ -31,9 +25,19 @@ const FlameGraphHeader = ({
   setQuery,
   selectedView,
   setSelectedView,
-  windowWidth,
+  containerWidth,
 }: Props) => {
   const styles = useStyles(getStyles);
+
+  let viewOptions: Array<{ value: string; label: string; description: string }> = [
+    { value: SelectedView.TopTable, label: 'Top Table', description: 'Only show top table' },
+    { value: SelectedView.FlameGraph, label: 'Flame Graph', description: 'Only show flame graph' },
+  ];
+  if (containerWidth >= MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH) {
+    viewOptions.push(
+      { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' }
+    );
+  }
 
   return (
     <div className={styles.header}>
@@ -63,17 +67,15 @@ const FlameGraphHeader = ({
         </Button>
       </div>
 
-      {windowWidth >= MIN_WIDTH_TO_SHOW_TOP_TABLE && (
-        <div className={styles.rightContainer}>
-          <RadioButtonGroup
-            options={viewOptions}
-            value={selectedView}
-            onChange={(view) => {
-              setSelectedView(view as SelectedView);
-            }}
-          />
-        </div>
-      )}
+      <div className={styles.rightContainer}>
+        <RadioButtonGroup
+          options={viewOptions}
+          value={selectedView}
+          onChange={(view) => {
+            setSelectedView(view as SelectedView);
+          }}
+        />
+      </div>
     </div>
   );
 };

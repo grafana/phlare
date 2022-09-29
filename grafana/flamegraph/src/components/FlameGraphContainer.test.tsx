@@ -6,10 +6,16 @@ import React from 'react';
 import { data } from './FlameGraph/testData/dataNestedSet';
 import { MutableDataFrame } from '@grafana/data';
 import FlameGraphContainer from './FlameGraphContainer';
-import { MIN_WIDTH_TO_SHOW_TOP_TABLE } from '../constants';
+import { MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH } from '../constants';
+
+jest.mock('react-use', () => ({
+  useMeasure: () => {
+    const ref = React.useRef();
+    return [ref, { width: 1600 }];
+  },
+}));
 
 describe('FlameGraphContainer', () => {
-  Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { value: 1600 });
   // Needed for AutoSizer to work in test
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { value: 500 });
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { value: 500 });
@@ -69,21 +75,19 @@ describe('FlameGraphContainer', () => {
     expect(screen.getByTestId('topTable')).toBeDefined();
   });
 
-  it('should render top table if screen width >= threshold', async () => {
-    global.innerWidth = MIN_WIDTH_TO_SHOW_TOP_TABLE;
+  it('should render both option if screen width >= threshold', async () => {
+    global.innerWidth = MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH;
     global.dispatchEvent(new Event('resize')); // Trigger the window resize event
     render(<FlameGraphContainerWithProps />);
 
-    expect(screen.getByTestId('flameGraph')).toBeDefined();
-    expect(screen.getByTestId('topTable')).toBeDefined();
+    expect(screen.getByText(/Both/)).toBeDefined();
   });
 
-  it('should not render top table if screen width < threshold', async () => {
-    global.innerWidth = MIN_WIDTH_TO_SHOW_TOP_TABLE - 1;
+  it('should not render both option if screen width < threshold', async () => {
+    global.innerWidth = MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH - 1;
     global.dispatchEvent(new Event('resize'));
     render(<FlameGraphContainerWithProps />);
 
-    expect(screen.getByTestId('flameGraph')).toBeDefined();
-    expect(screen.queryByTestId('topTable')).toBeNull();
+    expect(screen.queryByTestId(/Both/)).toBeNull();
   });
 });
