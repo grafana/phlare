@@ -28,15 +28,17 @@ const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSe
 
   const sortLevelsIntoTable = useCallback(() => {
     let label, self, value;
-    let item: Item;
     let table: { [key: string]: TableData } = {};
 
-    for (let i = 0; i < levels.length; i++) {
-      for (var j = 0; j < Object.values(levels[i]).length; j++) {
-        item = Object.values(levels[i])[j];
-        label = item.label;
-        self = item.self;
-        value = item.value;
+    if(data.fields.length === 4) {
+      const valueValues = data.fields[1].values;
+      const selfValues = data.fields[2].values;
+      const labelValues = data.fields[3].values;
+
+      for (let i = 0; i < valueValues.length; i++) {
+        value = valueValues.get(i);
+        self = selfValues.get(i);
+        label = labelValues.get(i);
         table[label] = table[label] || {};
         table[label].self = table[label].self ? table[label].self + self : self;
         table[label].total = table[label].total ? table[label].total + value : value;
@@ -44,7 +46,7 @@ const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSe
     }
 
     return table;
-  }, [levels]);
+  }, [data.fields]);
 
   const getTopTableData = (field: Field, value: number) => {
     const processor = getDisplayProcessor({ field, theme: createTheme() /* theme does not matter for us here */ });
