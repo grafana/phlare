@@ -540,7 +540,9 @@ func (p BlockProfile) Fingerprint() model.Fingerprint {
 }
 
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block")
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block", opentracing.Tags{
+		"blockULID": b.block.Meta().ULID.String(),
+	})
 	defer sp.Finish()
 	if err := b.open(ctx); err != nil {
 		return nil, err
