@@ -9,7 +9,7 @@ import { Item, nestedSetToLevels } from '../FlameGraph/dataTransform';
 
 describe('FlameGraphTopTableContainer', () => {
   const FlameGraphTopTableContainerWithProps = () => {
-    const [query, setQuery] = useState('');
+    const [search, setSearch] = useState('');
     const [selectedView, _] = useState(SelectedView.Both);
 
     const flameGraphData = new MutableDataFrame(data);
@@ -21,8 +21,8 @@ describe('FlameGraphTopTableContainer', () => {
         data={flameGraphData}
         levels={levels}
         selectedView={selectedView}
-        query={query}
-        setQuery={setQuery}
+        search={search}
+        setSearch={setSearch}
       />
     );
   };

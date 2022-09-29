@@ -7,22 +7,22 @@ import { SelectedView } from './types';
 import { MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH } from '../constants';
 
 type Props = {
-  query: string;
+  search: string;
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
-  setQuery: (query: string) => void;
+  setSearch: (search: string) => void;
   selectedView: SelectedView;
   setSelectedView: (view: SelectedView) => void;
   containerWidth: number;
 };
 
 const FlameGraphHeader = ({
-  query,
+  search,
   setTopLevelIndex,
   setRangeMin,
   setRangeMax,
-  setQuery,
+  setSearch,
   selectedView,
   setSelectedView,
   containerWidth,
@@ -44,9 +44,9 @@ const FlameGraphHeader = ({
       <div className={styles.leftContainer}>
         <div className={styles.inputContainer}>
           <Input
-            value={query || ''}
+            value={search || ''}
             onChange={(v) => {
-              setQuery(v.currentTarget.value);
+              setSearch(v.currentTarget.value);
             }}
             placeholder={'Search..'}
             width={24}
@@ -60,7 +60,7 @@ const FlameGraphHeader = ({
             setTopLevelIndex(0);
             setRangeMin(0);
             setRangeMax(1);
-            setQuery('');
+            setSearch('');
           }}
         >
           Reset View

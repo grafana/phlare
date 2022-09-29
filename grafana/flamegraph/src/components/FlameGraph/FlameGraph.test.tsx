@@ -21,7 +21,7 @@ describe('FlameGraph', () => {
     const [topLevelIndex, setTopLevelIndex] = useState(0);
     const [rangeMin, setRangeMin] = useState(0);
     const [rangeMax, setRangeMax] = useState(1);
-    const [query] = useState('');
+    const [search] = useState('');
     const [selectedView, _] = useState(SelectedView.Both);
 
     const flameGraphData = new MutableDataFrame(data);
@@ -35,7 +35,7 @@ describe('FlameGraph', () => {
         topLevelIndex={topLevelIndex}
         rangeMin={rangeMin}
         rangeMax={rangeMax}
-        query={query}
+        search={search}
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}

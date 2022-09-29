@@ -18,11 +18,11 @@ type Props = {
   width: number;
   height: number;
   data: TopTableData[];
-  query: string;
-  setQuery: (query: string) => void;
+  search: string;
+  setSearch: (search: string) => void;
 };
 
-const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => {
+const FlameGraphTopTable = ({ width, height, data, search, setSearch }: Props) => {
   const styles = useStyles2((theme) => getStyles(theme));
 
   const sortSymbols: SortByFn<object> = (a, b, column) => {
@@ -82,9 +82,9 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
       prepareRow(row);
 
       const rowValue = row.values[ColumnTypes.Symbol.toLowerCase()];
-      const classNames = cx(rowValue === query && styles.matchedRow, styles.row);
+      const classNames = cx(rowValue === search && styles.matchedRow, styles.row);
       const rowClicked = (row: string) => {
-        query === row ? setQuery('') : setQuery(row);
+        search === row ? setSearch('') : setSearch(row);
       };
 
       return (
@@ -103,7 +103,7 @@ const FlameGraphTopTable = ({ width, height, data, query, setQuery }: Props) => 
         </div>
       );
     },
-    [rows, prepareRow, query, styles.matchedRow, styles.row, styles.cell, setQuery]
+    [rows, prepareRow, search, styles.matchedRow, styles.row, styles.cell, setSearch]
   );
 
   return (

@@ -17,7 +17,7 @@ const FlameGraphContainer = (props: Props) => {
   const [topLevelIndex, setTopLevelIndex] = useState(0);
   const [rangeMin, setRangeMin] = useState(0);
   const [rangeMax, setRangeMax] = useState(1);
-  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
   const [selectedView, setSelectedView] = useState(SelectedView.Both);
   const [sizeRef, { width: containerWidth }] = useMeasure<HTMLDivElement>();
 
@@ -45,8 +45,8 @@ const FlameGraphContainer = (props: Props) => {
         setTopLevelIndex={setTopLevelIndex}
         setRangeMin={setRangeMin}
         setRangeMax={setRangeMax}
-        query={query}
-        setQuery={setQuery}
+        search={search}
+        setSearch={setSearch}
         selectedView={selectedView}
         setSelectedView={setSelectedView}
         containerWidth={containerWidth}
@@ -57,8 +57,8 @@ const FlameGraphContainer = (props: Props) => {
           data={props.data}
           levels={levels} 
           selectedView={selectedView} 
-          query={query} 
-          setQuery={setQuery} 
+          search={search} 
+          setSearch={setSearch} 
         />
       )}
 
@@ -69,7 +69,7 @@ const FlameGraphContainer = (props: Props) => {
           topLevelIndex={topLevelIndex}
           rangeMin={rangeMin}
           rangeMax={rangeMax}
-          query={query}
+          search={search}
           setTopLevelIndex={setTopLevelIndex}
           setRangeMin={setRangeMin}
           setRangeMax={setRangeMax}

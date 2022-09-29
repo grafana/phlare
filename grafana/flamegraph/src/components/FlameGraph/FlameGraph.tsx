@@ -34,7 +34,7 @@ type Props = {
   topLevelIndex: number;
   rangeMin: number;
   rangeMax: number;
-  query: string;
+  search: string;
   setTopLevelIndex: (level: number) => void;
   setRangeMin: (range: number) => void;
   setRangeMax: (range: number) => void;
@@ -48,7 +48,7 @@ const FlameGraph = ({
   topLevelIndex,
   rangeMin,
   rangeMax,
-  query,
+  search,
   setTopLevelIndex,
   setRangeMin,
   setRangeMax,
@@ -102,11 +102,11 @@ const FlameGraph = ({
         const dimensions = getRectDimensionsForLevel(level, levelIndex, totalTicks, rangeMin, pixelsPerTick);
         for (const rect of dimensions) {
           // Render each rectangle based on the computed dimensions
-          renderRect(ctx, rect, totalTicks, rangeMin, rangeMax, query, levelIndex, topLevelIndex);
+          renderRect(ctx, rect, totalTicks, rangeMin, rangeMax, search, levelIndex, topLevelIndex);
         }
       }
     },
-    [levels, query, rangeMax, rangeMin, topLevelIndex, totalTicks]
+    [levels, search, rangeMax, rangeMin, topLevelIndex, totalTicks]
   );
 
   useEffect(() => {

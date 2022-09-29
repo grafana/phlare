@@ -14,11 +14,11 @@ type Props = {
   data: DataFrame;
   levels: Item[][];
   selectedView: SelectedView;
-  query: string;
-  setQuery: (query: string) => void;
+  search: string;
+  setSearch: (search: string) => void;
 };
 
-const FlameGraphTopTableContainer = ({ data, levels, selectedView, query, setQuery }: Props) => {
+const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSearch }: Props) => {
   const styles = useStyles2(() => getStyles(selectedView));
   const [topTable, setTopTable] = useState<TopTableData[]>();
   const valueField =
@@ -92,7 +92,7 @@ const FlameGraphTopTableContainer = ({ data, levels, selectedView, query, setQue
         <div className={styles.topTableContainer}>
           <AutoSizer style={{ width: '100%', height: PIXELS_PER_LEVEL * levels.length + 'px' }}>
             {({ width, height }) => (
-              <FlameGraphTopTable width={width} height={height} data={topTable} query={query} setQuery={setQuery} />
+              <FlameGraphTopTable width={width} height={height} data={topTable} search={search} setSearch={setSearch} />
             )}
           </AutoSizer>
         </div>
