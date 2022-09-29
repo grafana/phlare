@@ -23,6 +23,9 @@ describe('FlameGraphTopTableContainer', () => {
         selectedView={selectedView}
         search={search}
         setSearch={setSearch}
+        setTopLevelIndex={jest.fn()}
+        setRangeMin={jest.fn()}
+        setRangeMax={jest.fn()}
       />
     );
   };

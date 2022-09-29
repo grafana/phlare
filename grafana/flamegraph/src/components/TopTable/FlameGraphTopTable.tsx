@@ -1,5 +1,5 @@
 import { css, cx } from '@emotion/css';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   SortByFn,
   useSortBy, 
@@ -20,9 +20,12 @@ type Props = {
   data: TopTableData[];
   search: string;
   setSearch: (search: string) => void;
+  setTopLevelIndex: (level: number) => void;
+  setRangeMin: (range: number) => void;
+  setRangeMax: (range: number) => void;
 };
 
-const FlameGraphTopTable = ({ width, height, data, search, setSearch }: Props) => {
+const FlameGraphTopTable = ({ width, height, data, search, setSearch, setTopLevelIndex, setRangeMin, setRangeMax }: Props) => {
   const styles = useStyles2((theme) => getStyles(theme));
 
   const sortSymbols: SortByFn<object> = (a, b, column) => {
@@ -73,6 +76,18 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch }: Props) =
     }),
     [columns, data]
   );
+  
+  const rowClicked = useCallback((row: string) => {
+    if(search === row) {
+      setSearch('');
+    } else {
+      setSearch(row);
+      // Reset selected level in flamegraph when selecting row in top table
+      setTopLevelIndex(0);
+      setRangeMin(0);
+      setRangeMax(1);
+    }
+  }, [search, setRangeMax, setRangeMin, setSearch, setTopLevelIndex]);
 
   const { headerGroups, rows, prepareRow } = useTable(options, useSortBy, useAbsoluteLayout);
 
@@ -83,9 +98,6 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch }: Props) =
 
       const rowValue = row.values[ColumnTypes.Symbol.toLowerCase()];
       const classNames = cx(rowValue === search && styles.matchedRow, styles.row);
-      const rowClicked = (row: string) => {
-        search === row ? setSearch('') : setSearch(row);
-      };
 
       return (
         <div {...row.getRowProps({ style })} className={classNames} onClick={() => { rowClicked(rowValue) }}>
@@ -103,7 +115,7 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch }: Props) =
         </div>
       );
     },
-    [rows, prepareRow, search, styles.matchedRow, styles.row, styles.cell, setSearch]
+    [rows, prepareRow, search, styles.matchedRow, styles.row, styles.cell, rowClicked]
   );
 
   return (

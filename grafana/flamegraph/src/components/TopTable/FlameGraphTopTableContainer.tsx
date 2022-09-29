@@ -16,9 +16,12 @@ type Props = {
   selectedView: SelectedView;
   search: string;
   setSearch: (search: string) => void;
+  setTopLevelIndex: (level: number) => void;
+  setRangeMin: (range: number) => void;
+  setRangeMax: (range: number) => void;
 };
 
-const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSearch }: Props) => {
+const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSearch, setTopLevelIndex, setRangeMin, setRangeMax }: Props) => {
   const styles = useStyles2(() => getStyles(selectedView));
   const [topTable, setTopTable] = useState<TopTableData[]>();
   const valueField =
@@ -94,7 +97,16 @@ const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSe
         <div className={styles.topTableContainer}>
           <AutoSizer style={{ width: '100%', height: PIXELS_PER_LEVEL * levels.length + 'px' }}>
             {({ width, height }) => (
-              <FlameGraphTopTable width={width} height={height} data={topTable} search={search} setSearch={setSearch} />
+              <FlameGraphTopTable 
+                width={width} 
+                height={height} 
+                data={topTable} 
+                search={search} 
+                setSearch={setSearch}
+                setTopLevelIndex={setTopLevelIndex}
+                setRangeMin={setRangeMin}
+                setRangeMax={setRangeMax}
+              />
             )}
           </AutoSizer>
         </div>

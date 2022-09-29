@@ -59,6 +59,9 @@ const FlameGraphContainer = (props: Props) => {
           selectedView={selectedView} 
           search={search} 
           setSearch={setSearch} 
+          setTopLevelIndex={setTopLevelIndex}
+          setRangeMin={setRangeMin}
+          setRangeMax={setRangeMax}
         />
       )}
 

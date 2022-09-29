@@ -1,5 +1,5 @@
 import { css } from '@emotion/css';
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import { Button, Input, useStyles, RadioButtonGroup } from '@grafana/ui';
 
@@ -38,6 +38,13 @@ const FlameGraphHeader = ({
       { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' }
     );
   }
+
+  useEffect(() => {
+    // Don't want there to be any row selected in the top table i.e. search when moving to flamegraph only view
+    if (selectedView === SelectedView.FlameGraph) {
+      setSearch('');
+    }
+  }, [selectedView, setSearch]);
 
   return (
     <div className={styles.header}>
