@@ -5,14 +5,13 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { useStyles2 } from '@grafana/ui';
 
 import { PIXELS_PER_LEVEL } from '../../constants';
-import { Item } from '../FlameGraph/dataTransform';
 import { SampleUnit, SelectedView, TableData, TopTableData } from '../types';
 import FlameGraphTopTable from './FlameGraphTopTable';
 import { createTheme, DataFrame, Field, FieldType, getDisplayProcessor } from '@grafana/data';
 
 type Props = {
   data: DataFrame;
-  levels: Item[][];
+  totalLevels: number;
   selectedView: SelectedView;
   search: string;
   setSearch: (search: string) => void;
@@ -21,7 +20,7 @@ type Props = {
   setRangeMax: (range: number) => void;
 };
 
-const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSearch, setTopLevelIndex, setRangeMin, setRangeMax }: Props) => {
+const FlameGraphTopTableContainer = ({ data, totalLevels, selectedView, search, setSearch, setTopLevelIndex, setRangeMin, setRangeMax }: Props) => {
   const styles = useStyles2(() => getStyles(selectedView));
   const [topTable, setTopTable] = useState<TopTableData[]>();
   const valueField =
@@ -95,7 +94,7 @@ const FlameGraphTopTableContainer = ({ data, levels, selectedView, search, setSe
     <>
       {topTable && (
         <div className={styles.topTableContainer}>
-          <AutoSizer style={{ width: '100%', height: PIXELS_PER_LEVEL * levels.length + 'px' }}>
+          <AutoSizer style={{ width: '100%', height: PIXELS_PER_LEVEL * totalLevels + 'px' }}>
             {({ width, height }) => (
               <FlameGraphTopTable 
                 width={width} 
