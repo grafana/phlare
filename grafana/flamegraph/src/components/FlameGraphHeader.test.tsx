@@ -32,14 +32,4 @@ describe('FlameGraphHeader', () => {
     screen.getByRole('button', { name: /Reset/i }).click();
     expect(screen.queryByDisplayValue('abc')).not.toBeInTheDocument();
   });
-
-  it('should clear search when flamegraph selected', async () => {
-    render(<FlameGraphHeaderWithProps />);
-
-    // clearing search will also clear the selected item in the top table
-    await userEvent.type(screen.getByPlaceholderText('Search..'), 'abc');
-    expect(screen.getByDisplayValue('abc')).toBeInTheDocument();
-    screen.getByText(/Flame Graph/).click();
-    expect(screen.queryByDisplayValue('abc')).not.toBeInTheDocument();
-  });
 });
