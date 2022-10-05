@@ -98,6 +98,8 @@ func (s *deduplicatingSlice[M, K, H, P]) maxRowsPerRowGroup() int {
 	return int(maxRows)
 }
 
+var rowPool = &sync.Pool{}
+
 func (s *deduplicatingSlice[M, K, H, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -133,21 +135,30 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush() (numRows uint64, numRowGroups u
 		// cap max row size by buffer
 		if rowsToFlush > s.cfg.MaxBufferRowCount {
 			rowsToFlush = s.cfg.MaxBufferRowCount
-
 		}
+		rowsFromPool, ok := rowPool.Get().([]parquet.Row)
+		if !ok {
+			rowsFromPool = make([]parquet.Row, rowsToFlush)
+		}
+		if cap(rowsFromPool) < rowsToFlush {
+			rowsFromPool = make([]parquet.Row, rowsToFlush)
+		}
+		rowsFromPool = rowsFromPool[:rowsToFlush]
 
 		rows := make([]parquet.Row, rowsToFlush)
 		var slicePos int
 		for pos := range rows {
 			slicePos = pos + s.rowsFlushed
+			rows[pos] = rows[pos][:0]
 			rows[pos] = s.persister.Deconstruct(rows[pos], uint64(slicePos), s.slice[slicePos])
 		}
 
 		s.buffer.Reset()
 		if _, err := s.buffer.WriteRows(rows); err != nil {
+			rowPool.Put(rowsFromPool)
 			return 0, 0, err
 		}
-
+		rowPool.Put(rowsFromPool)
 		sort.Sort(s.buffer)
 
 		if _, err := s.writer.WriteRowGroup(s.buffer); err != nil {
