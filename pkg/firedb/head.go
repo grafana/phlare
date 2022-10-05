@@ -307,6 +307,9 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 	return out, nil
 }
 
+func (h *Head) OpenAsync(ctx context.Context) {
+}
+
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*commonv1.LabelPair) error {
 	metricName := firemodel.Labels(externalLabels).Get(model.MetricNameLabel)
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)

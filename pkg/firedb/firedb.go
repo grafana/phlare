@@ -202,6 +202,9 @@ func (f *FireDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.B
 	)
 
 	queriers := f.querierFor(model.Time(request.Start), model.Time(request.End))
+	for _, q := range queriers {
+		q.OpenAsync(ctx)
+	}
 
 	result := make([]*ingestv1.MergeProfilesStacktracesResult, 0, len(queriers))
 	var lock sync.Mutex
@@ -289,6 +292,9 @@ func (f *FireDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiSt
 	)
 
 	queriers := f.querierFor(model.Time(request.Start), model.Time(request.End))
+	for _, q := range queriers {
+		q.OpenAsync(ctx)
+	}
 	result := make([][]*commonv1.Series, 0, len(queriers))
 	g, ctx := errgroup.WithContext(ctx)
 	s := lo.Synchronize()

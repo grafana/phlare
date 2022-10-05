@@ -514,6 +514,7 @@ type Querier interface {
 
 	// Sorts profiles for retrieval.
 	Sort([]Profile) []Profile
+	OpenAsync(ctx context.Context)
 }
 
 type BlockProfile struct {
@@ -537,6 +538,14 @@ func (p BlockProfile) Timestamp() model.Time {
 
 func (p BlockProfile) Fingerprint() model.Fingerprint {
 	return p.fp
+}
+
+func (b *singleBlockQuerier) OpenAsync(ctx context.Context) {
+	go func() {
+		if err := b.open(ctx); err != nil {
+			level.Error(b.logger).Log("msg", "failed to open block", "err", err)
+		}
+	}()
 }
 
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
