@@ -1,0 +1,5 @@
+git-repo: helm-charts
+key: Grafana Phlare
+owner: grafana
+sign: true
+skip-existing: true
