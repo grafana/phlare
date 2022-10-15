@@ -12,7 +12,7 @@ weight: 10
 There are two different options for getting started with Grafana Phlare:
 
 - The written tutorial provides a series of imperative commands to start a single Phlare process.
-- The visual tutorial (in the form of a video) uses `docker-compose` to declaratively deploy Phlare and Grafana.
+- The visual tutorial (in the form of a video) uses [`docker-compose`](https://github.com/grafana/phlare/tree/main/tools/docker-compose) to declaratively deploy Phlare and Grafana.
 
 {{< vimeo todo >}}
 
