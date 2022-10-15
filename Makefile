@@ -99,9 +99,8 @@ go/deps:
 
 .PHONY: go/bin
 go/bin:
-	mkdir -p ./bin
-	CGO_ENABLED=0 $(GO) build $(GO_FLAGS) -o bin/ ./cmd/phlare
-	CGO_ENABLED=0 $(GO) build $(GO_FLAGS) -o bin/ ./cmd/profilecli
+	CGO_ENABLED=0 $(GO) build $(GO_FLAGS) ./cmd/phlare
+	CGO_ENABLED=0 $(GO) build $(GO_FLAGS) ./cmd/profilecli
 
 .PHONY: go/lint
 go/lint: $(BIN)/golangci-lint
@@ -168,7 +167,7 @@ define deploy
 endef
 
 .PHONY: docker-image/phlare/build
-docker-image/phlare/build:
+docker-image/phlare/build: go/bin
 	$(call docker_buildx,--load)
 
 .PHONY: docker-image/phlare/push
