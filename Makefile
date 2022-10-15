@@ -167,7 +167,7 @@ define deploy
 endef
 
 .PHONY: docker-image/phlare/build
-docker-image/phlare/build: go/bin
+docker-image/phlare/build:
 	$(call docker_buildx,--load)
 
 .PHONY: docker-image/phlare/push
