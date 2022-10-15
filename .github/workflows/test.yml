@@ -120,7 +120,7 @@ jobs:
         id: buildx
         uses: docker/setup-buildx-action@v1
       - name: Build image Phlare
-        run: make docker-image/phlare/build "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha"
+        run: make go/mod docker-image/phlare/build "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha"
 
   build-image-grafana:
     if: github.event_name != 'push'
