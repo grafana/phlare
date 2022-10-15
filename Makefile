@@ -37,7 +37,7 @@ help: ## Describe useful make targets
 all: lint test build ## Build, test, and lint (default)
 
 .PHONY: lint
-lint: go/lint helm/lint buf/lint ## Lint Go, Helm and protobuf
+lint: go/lint helm/lint buf/lint goreleaser/lint ## Lint Go, Helm and protobuf
 
 .PHONY: test
 test: go/test ## Run unit tests
@@ -59,6 +59,39 @@ go/test:
 
 .PHONY: build
 build: go/bin plugin/datasource/build ## Build all packages
+
+
+.PHONY: release
+release: ## Create a release
+	GIT_BRANCH=$(GIT_BRANCH) \
+	GIT_REVISION=$(GIT_REVISION) \
+	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
+	IMAGE_TAG=$(IMAGE_TAG) \
+	$(BIN)/goreleaser release -p=16 --rm-dist
+
+.PHONY: release/prepare
+release/prepare: ## Prepare a release
+	GIT_BRANCH=$(GIT_BRANCH) \
+	GIT_REVISION=$(GIT_REVISION) \
+	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
+	IMAGE_TAG=$(IMAGE_TAG) \
+	$(BIN)/goreleaser release -p=16 --rm-dist --snapshot
+
+.PHONY: release/build/all
+release/build/all: $(BIN)/goreleaser ## Build all release binaries
+	GIT_BRANCH=$(GIT_BRANCH) \
+	GIT_REVISION=$(GIT_REVISION) \
+	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
+	IMAGE_TAG=$(IMAGE_TAG) \
+	$(BIN)/goreleaser build -p 16 --snapshot --rm-dist
+
+.PHONY: release/build
+release/build: $(BIN)/goreleaser ## Build current platform release binaries
+	GIT_BRANCH=$(GIT_BRANCH) \
+	GIT_REVISION=$(GIT_REVISION) \
+	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
+	IMAGE_TAG=$(IMAGE_TAG) \
+	$(BIN)/goreleaser build -p 16 --snapshot --rm-dist --single-target
 
 .PHONY: go/deps
 go/deps:
@@ -249,11 +282,19 @@ $(BIN)/updater: Makefile
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) GOPRIVATE=github.com/grafana/deployment_tools $(GO) install github.com/grafana/deployment_tools/drone/plugins/cmd/updater@d64d509
 
+$(BIN)/goreleaser: Makefile go.mod
+	@mkdir -p $(@D)
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/goreleaser/goreleaser@v1.11.5
+
 KIND_CLUSTER = phlare-dev
 
 .PHONY: helm/lint
 helm/lint: $(BIN)/helm
 	$(BIN)/helm lint ./operations/phlare/helm/phlare/
+
+.PHONY: goreleaser/lint
+goreleaser/lint: $(BIN)/goreleaser
+	$(BIN)/goreleaser check
 
 .PHONY: helm/check
 helm/check: $(BIN)/kubeval $(BIN)/helm

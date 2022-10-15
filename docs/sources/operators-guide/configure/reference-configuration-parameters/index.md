@@ -494,6 +494,45 @@ lifecycler:
         # CLI flag: -etcd.tls-insecure-skip-verify
         [tls_insecure_skip_verify: <boolean> | default = false]
 
+        # Override the default cipher suite list (separated by commas). Allowed
+        # values:
+        # 
+        # Secure Ciphers:
+        # - TLS_RSA_WITH_AES_128_CBC_SHA
+        # - TLS_RSA_WITH_AES_256_CBC_SHA
+        # - TLS_RSA_WITH_AES_128_GCM_SHA256
+        # - TLS_RSA_WITH_AES_256_GCM_SHA384
+        # - TLS_AES_128_GCM_SHA256
+        # - TLS_AES_256_GCM_SHA384
+        # - TLS_CHACHA20_POLY1305_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        # - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        # - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        # - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+        # - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        # - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        # - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        # - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        # 
+        # Insecure Ciphers:
+        # - TLS_RSA_WITH_RC4_128_SHA
+        # - TLS_RSA_WITH_3DES_EDE_CBC_SHA
+        # - TLS_RSA_WITH_AES_128_CBC_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
+        # - TLS_ECDHE_RSA_WITH_RC4_128_SHA
+        # - TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+        # - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+        # - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+        # CLI flag: -etcd.tls-cipher-suites
+        [tls_cipher_suites: <string> | default = ""]
+
+        # Override the default minimum TLS version. Allowed values:
+        # VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
+        # CLI flag: -etcd.tls-min-version
+        [tls_min_version: <string> | default = ""]
+
         # Etcd username.
         # CLI flag: -etcd.username
         [username: <string> | default = ""]
@@ -744,7 +783,7 @@ The `memberlist` block configures the Gossip memberlist.
 
 # Timeout for leaving memberlist cluster.
 # CLI flag: -memberlist.leave-timeout
-[leave_timeout: <duration> | default = 5s]
+[leave_timeout: <duration> | default = 20s]
 
 # How much space to use for keeping received and sent messages in memory for
 # troubleshooting (two buffers). 0 to disable.
@@ -762,7 +801,7 @@ The `memberlist` block configures the Gossip memberlist.
 
 # Timeout used when connecting to other nodes to send packet.
 # CLI flag: -memberlist.packet-dial-timeout
-[packet_dial_timeout: <duration> | default = 5s]
+[packet_dial_timeout: <duration> | default = 2s]
 
 # Timeout for writing 'packet' data.
 # CLI flag: -memberlist.packet-write-timeout
@@ -794,6 +833,44 @@ The `memberlist` block configures the Gossip memberlist.
 # Skip validating server certificate.
 # CLI flag: -memberlist.tls-insecure-skip-verify
 [tls_insecure_skip_verify: <boolean> | default = false]
+
+# Override the default cipher suite list (separated by commas). Allowed values:
+# 
+# Secure Ciphers:
+# - TLS_RSA_WITH_AES_128_CBC_SHA
+# - TLS_RSA_WITH_AES_256_CBC_SHA
+# - TLS_RSA_WITH_AES_128_GCM_SHA256
+# - TLS_RSA_WITH_AES_256_GCM_SHA384
+# - TLS_AES_128_GCM_SHA256
+# - TLS_AES_256_GCM_SHA384
+# - TLS_CHACHA20_POLY1305_SHA256
+# - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+# - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+# - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+# - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+# - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+# - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+# - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+# - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+# 
+# Insecure Ciphers:
+# - TLS_RSA_WITH_RC4_128_SHA
+# - TLS_RSA_WITH_3DES_EDE_CBC_SHA
+# - TLS_RSA_WITH_AES_128_CBC_SHA256
+# - TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
+# - TLS_ECDHE_RSA_WITH_RC4_128_SHA
+# - TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+# - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+# CLI flag: -memberlist.tls-cipher-suites
+[tls_cipher_suites: <string> | default = ""]
+
+# Override the default minimum TLS version. Allowed values: VersionTLS10,
+# VersionTLS11, VersionTLS12, VersionTLS13
+# CLI flag: -memberlist.tls-min-version
+[tls_min_version: <string> | default = ""]
 ```
 
 ### Scrape configs
