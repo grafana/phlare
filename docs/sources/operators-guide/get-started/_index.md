@@ -95,7 +95,7 @@ curl localhost:4100/ready
 ## Configure Grafana Phlare to scrape Profiles
 
 By default, Grafana Phlare is configured to scrape itself.
-To scrape more profiles, you need to configure the `scrape_configs` section of the [configuration file](({{< relref "../configure/reference-configuration-parameters/index.md#scrape-configs" >}})).
+To scrape more profiles, you need to configure the `scrape_configs` section of the [configuration file]({{< relref "../configure/reference-configuration-parameters/index.md#scrape-configs" >}}).
 
 To learn more about language integrations and the phlare agent, refer to [Grafana Phlare Agent]({{< relref "../configure-agent/_index.md" >}}).
 
