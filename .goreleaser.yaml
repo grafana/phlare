@@ -16,6 +16,9 @@ builds:
       - "6"
       - "7"
     main: ./cmd/phlare
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
     tags:
       - netgo
     ldflags:
@@ -52,6 +55,9 @@ builds:
       - goos: windows
         goarch: arm
     main: ./cmd/profilecli
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
     binary: profilecli
     id: profilecli
 dockers:

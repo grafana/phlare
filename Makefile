@@ -23,6 +23,7 @@ IMAGE_TAG ?= $(shell ./tools/image-tag)
 GIT_REVISION := $(shell git rev-parse --short HEAD)
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 GIT_LAST_COMMIT_DATE := $(shell git log -1 --date=iso-strict --format=%cd)
+GORELEASER_ENV := GIT_BRANCH=$(GIT_BRANCH) GIT_REVISION=$(GIT_REVISION) GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) IMAGE_TAG=$(IMAGE_TAG)
 
 # Build flags
 VPREFIX := github.com/grafana/phlare/pkg/util/build
@@ -63,34 +64,22 @@ build: go/bin plugin/datasource/build ## Build all packages
 
 .PHONY: release
 release: ## Create a release
-	GIT_BRANCH=$(GIT_BRANCH) \
-	GIT_REVISION=$(GIT_REVISION) \
-	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
-	IMAGE_TAG=$(IMAGE_TAG) \
+	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser release -p=16 --rm-dist
 
 .PHONY: release/prepare
 release/prepare: ## Prepare a release
-	GIT_BRANCH=$(GIT_BRANCH) \
-	GIT_REVISION=$(GIT_REVISION) \
-	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
-	IMAGE_TAG=$(IMAGE_TAG) \
+	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser release -p=16 --rm-dist --snapshot
 
 .PHONY: release/build/all
 release/build/all: $(BIN)/goreleaser ## Build all release binaries
-	GIT_BRANCH=$(GIT_BRANCH) \
-	GIT_REVISION=$(GIT_REVISION) \
-	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
-	IMAGE_TAG=$(IMAGE_TAG) \
+	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser build -p 16 --snapshot --rm-dist
 
 .PHONY: release/build
 release/build: $(BIN)/goreleaser ## Build current platform release binaries
-	GIT_BRANCH=$(GIT_BRANCH) \
-	GIT_REVISION=$(GIT_REVISION) \
-	GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE) \
-	IMAGE_TAG=$(IMAGE_TAG) \
+	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser build -p 16 --snapshot --rm-dist --single-target
 
 .PHONY: go/deps
