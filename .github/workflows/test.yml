@@ -146,7 +146,7 @@ jobs:
         run: make docker-image/grafana/build "BUILDX_ARGS=--cache-from=type=gha --cache-to=type=gha"
 
   build-push:
-    # if: github.event_name == 'push' && github.repository == 'grafana/phlare'
+    if: github.event_name == 'push' && github.repository == 'grafana/phlare'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
