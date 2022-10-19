@@ -5,7 +5,7 @@ description: "Learn more about the Phlare agent"
 weight: 10
 ---
 
-# Grafana Phlare Agent
+# Grafana Phlare about the agent
 
 The Grafana Phlare Agent is responsible for pulling profiles from applications and delivering them
 to the Grafana Phlare database.
