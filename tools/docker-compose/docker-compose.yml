@@ -18,6 +18,8 @@ services:
     image: aocenas/grafana:profiling-ds
     ports:
       - "3000:3000"
+    environment:
+      - GF_FEATURE_TOGGLES_ENABLE=flameGraph
     volumes:
       - ./datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml
     networks:

@@ -1,6 +1,3 @@
-server:
-  http_listen_port: 4100
-
 scrape_configs:
   - job_name: "default"
     scrape_interval: "15s"
