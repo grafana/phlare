@@ -104,7 +104,7 @@ To learn more about language integrations and the phlare agent, refer to [Grafan
 In a new terminal, run a local Grafana server using Docker:
 
 ```bash
-docker run --rm --name=grafana -p 3000:3000 -e "GF_FEATURE_TOGGLES_ENABLE=flameGraph" --network=phlare-demo aocenas/grafana:phlare
+docker run --rm --name=grafana -p 3000:3000 -e "GF_FEATURE_TOGGLES_ENABLE=flameGraph" --network=phlare-demo aocenas/grafana:profiling-ds
 ```
 
 ### Add Grafana Phlare data source
