@@ -47,21 +47,15 @@ The written instructions focus on deploying Grafana Phlare as a [monolith]({{< r
 
 To run Grafana Phlare as a monolith and with local filesystem storage, write the following YAML configuration to a file called `demo.yaml`:
 
-<!-- prettier-ignore-start -->
-[embedmd]:# (../../../configurations/demo.yaml)
 ```yaml
 # Do not use this configuration in production.
 # It is for demonstration purposes only.
-server:
-  http_listen_port: 4100
-
 scrape_configs:
   - job_name: "default"
     scrape_interval: "15s"
     static_configs:
       - targets: ["127.0.0.1:4100"]
 ```
-<!-- prettier-ignore-end -->
 
 You can also simply download our [demo configuration](https://raw.githubusercontent.com/grafana/phlare/main/cmd/phlare/phlare.yaml) using:
 
