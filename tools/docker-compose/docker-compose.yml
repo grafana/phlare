@@ -15,7 +15,7 @@ services:
       - phlare
 
   grafana:
-    image: aocenas/grafana:phlare
+    image: aocenas/grafana:profiling-ds
     ports:
       - "3000:3000"
     volumes:
