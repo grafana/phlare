@@ -65,7 +65,7 @@ To turn off profiling entirely, pass rate 0 (default).
 
 ## Combining I/O and CPU Mode Profiles
 
-To enable both CPU mode and mixed I/O and CPU profiling enabled using [`fgprof`](github.com/felixge/fgprof), use the following example snippet:
+To enable both CPU mode and mixed I/O and CPU profiling enabled using [`fgprof`](https://github.com/felixge/fgprof), use the following example snippet:
 
 ```go
 import (
