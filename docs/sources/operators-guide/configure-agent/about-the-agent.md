@@ -66,8 +66,6 @@ You can override the `profiling_config` as follow:
 scrape_configs:
   - job_name: 'default'
     scrape_interval: 10s
-    scrape_timeout: 0s
-    scheme: http
     profiling_config:
       pprof_config:
         goroutine:
