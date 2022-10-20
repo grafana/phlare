@@ -22,7 +22,9 @@ import pprof "net/http/pprof"
 mux.Handle("/debug/pprof/", pprof.Index)
 ```
 
-Finally, if you are not running an `http.Server` on your application you will need to start one in your main function:
+> **Note:** You should not expose pprof on public endpoints.
+
+Finally, if you are not running a `http.Server` on your application you will need to start one in your main function:
 
 ```go
 go func() {
