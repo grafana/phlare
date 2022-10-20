@@ -4,10 +4,41 @@ networks:
 
 services:
   phlare:
-    image: grafana/phlare:latest
+    image: us.gcr.io/kubernetes-dev/phlare:latest
     ports:
       - "4100:4100"
-    command: -config.file=/etc/phlare/config.yaml
+    entrypoint:
+      - /bin/sh
+      - -euc
+      - |
+        cat > /tmp/config.yaml <<EOF
+        scrape_configs:
+          - job_name: "phlare"
+            scrape_interval: "15s"
+            static_configs:
+              - targets: ["phlare:4100"]
+          - job_name: "cp-rust"
+            scrape_interval: "15s"
+            static_configs:
+              - targets: ["rust:3000"]
+            profiling_config:
+              pprof_config:
+                block: {enabled: false}
+                goroutine: {enabled: false}
+                memory: {enabled: false}
+                mutex: {enabled: false}
+          - job_name: "cp-python"
+            scrape_interval: "15s"
+            static_configs:
+              - targets: ["python:8081"]
+            profiling_config:
+              pprof_config:
+                block: {enabled: false}
+                goroutine: {enabled: false}
+                mutex: {enabled: false}
+        EOF
+
+        exec phlare -config.file=/tmp/config.yaml
     volumes:
       - ./phlare.yaml:/etc/phlare/config.yaml
       - data:/data
@@ -24,6 +55,20 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     volumes:
       - ./datasource.yaml:/etc/grafana/provisioning/datasources/datasources.yml
+    networks:
+      - phlare
+
+  rust:
+    image: simonswine/cp-rust:0.1.0
+    ports:
+      - 8080:3000
+    networks:
+      - phlare
+
+  python:
+    image: simonswine/cp-python:0.1.0
+    ports:
+      - 8081:8081
     networks:
       - phlare
 
