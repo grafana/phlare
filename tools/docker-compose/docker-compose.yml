@@ -4,7 +4,7 @@ networks:
 
 services:
   phlare:
-    image: grafana/phlare:0.1.0@sha256:a73b5b85512b528ea18d07b5d6266026af4a52eae9afb1c4b795b2ecfe70ab87
+    image: us.gcr.io/kubernetes-dev/phlare:main-bebc620
     ports:
       - "4100:4100"
     entrypoint:
@@ -66,14 +66,14 @@ services:
       - phlare
 
   rust:
-    image: simonswine/cp-rust:0.1.0
+    image: simonswine/cp-rust:0.3.0
     ports:
       - 8080:3000
     networks:
       - phlare
 
   python:
-    image: simonswine/cp-python:0.1.0
+    image: simonswine/cp-python:0.3.0
     ports:
       - 8081:8081
     networks:
