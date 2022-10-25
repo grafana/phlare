@@ -59,7 +59,7 @@ const (
 	Querier      string = "querier"
 	GRPCGateway  string = "grpc-gateway"
 	Storage      string = "storage"
-	UsageReport  string = "usage-report"
+	UsageReport  string = "usage-stats"
 
 	// RuntimeConfig            string = "runtime-config"
 	// Overrides                string = "overrides"
@@ -75,7 +75,6 @@ const (
 	// IndexGateway             string = "index-gateway"
 	// IndexGatewayRing         string = "index-gateway-ring"
 	// QueryScheduler           string = "query-scheduler"
-	// UsageReport              string = "usage-report"
 )
 
 var objectStoreTypeStats = usagestats.NewString("store_object_type")
@@ -281,13 +280,13 @@ func (f *Phlare) initServer() (services.Service, error) {
 }
 
 func (f *Phlare) initUsageReport() (services.Service, error) {
-	if !f.Cfg.UsageReport.Enabled {
+	if !f.Cfg.Analytics.Enabled {
 		return nil, nil
 	}
-	f.Cfg.UsageReport.Leader = false
+	f.Cfg.Analytics.Leader = false
 	// ingester is the only component that can be a leader
 	if f.isModuleActive(Ingester) {
-		f.Cfg.UsageReport.Leader = true
+		f.Cfg.Analytics.Leader = true
 	}
 
 	usagestats.Target(f.Cfg.Target.String())
@@ -304,7 +303,7 @@ func (f *Phlare) initUsageReport() (services.Service, error) {
 		b = fs
 	}
 
-	ur, err := usagestats.NewReporter(f.Cfg.UsageReport, f.Cfg.Ingester.LifecyclerConfig.RingConfig.KVStore, b, f.logger, f.reg)
+	ur, err := usagestats.NewReporter(f.Cfg.Analytics, f.Cfg.Ingester.LifecyclerConfig.RingConfig.KVStore, b, f.logger, f.reg)
 	if err != nil {
 		level.Info(f.logger).Log("msg", "failed to initialize usage report", "err", err)
 		return nil, nil

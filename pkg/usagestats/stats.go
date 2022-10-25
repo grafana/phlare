@@ -48,7 +48,6 @@ type Report struct {
 func sendReport(ctx context.Context, seed *ClusterSeed, interval time.Time) error {
 	report := buildReport(seed, interval)
 	out, err := jsoniter.MarshalIndent(report, "", " ")
-	fmt.Println(string(out))
 	if err != nil {
 		return err
 	}

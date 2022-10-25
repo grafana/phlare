@@ -60,9 +60,9 @@ type Config struct {
 	Storage StorageConfig `yaml:"storage"`
 
 	MultitenancyEnabled bool              `yaml:"multitenancy_enabled,omitempty"`
-	UsageReport         usagestats.Config `yaml:"analytics"`
+	Analytics           usagestats.Config `yaml:"analytics"`
 
-	ConfigFile string
+	ConfigFile string `yaml:"-"`
 }
 
 func newDefaultConfig() *Config {
@@ -101,7 +101,7 @@ func (c *Config) RegisterFlagsWithContext(ctx context.Context, f *flag.FlagSet) 
 	c.PhlareDB.RegisterFlags(f)
 	c.Tracing.RegisterFlags(f)
 	c.Storage.RegisterFlagsWithContext(ctx, f)
-	c.UsageReport.RegisterFlags(f)
+	c.Analytics.RegisterFlags(f)
 }
 
 // registerServerFlagsWithChangedDefaultValues registers *Config.Server flags, but overrides some defaults set by the weaveworks package.
