@@ -3,7 +3,7 @@ import React from 'react';
 import { Stack } from './Stack';
 
 interface EditorRowsProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export const EditorRows: React.FC<EditorRowsProps> = ({ children }) => {

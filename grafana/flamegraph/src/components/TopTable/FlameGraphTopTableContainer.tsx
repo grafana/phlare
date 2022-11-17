@@ -20,19 +20,27 @@ type Props = {
   setRangeMax: (range: number) => void;
 };
 
-const FlameGraphTopTableContainer = ({ data, totalLevels, selectedView, search, setSearch, setTopLevelIndex, setRangeMin, setRangeMax }: Props) => {
+const FlameGraphTopTableContainer = ({
+  data,
+  totalLevels,
+  selectedView,
+  search,
+  setSearch,
+  setTopLevelIndex,
+  setRangeMin,
+  setRangeMax,
+}: Props) => {
   const styles = useStyles2(() => getStyles(selectedView));
   const [topTable, setTopTable] = useState<TopTableData[]>();
   const valueField =
     data.fields.find((f) => f.name === 'value') ?? data.fields.find((f) => f.type === FieldType.number);
-  const selfField =
-    data.fields.find((f) => f.name === 'self') ?? data.fields.find((f) => f.type === FieldType.number);
+  const selfField = data.fields.find((f) => f.name === 'self') ?? data.fields.find((f) => f.type === FieldType.number);
 
   const sortLevelsIntoTable = useCallback(() => {
     let label, self, value;
     let table: { [key: string]: TableData } = {};
 
-    if(data.fields.length === 4) {
+    if (data.fields.length === 4) {
       const valueValues = data.fields[1].values;
       const selfValues = data.fields[2].values;
       const labelValues = data.fields[3].values;
@@ -54,7 +62,7 @@ const FlameGraphTopTableContainer = ({ data, totalLevels, selectedView, search, 
     const processor = getDisplayProcessor({ field, theme: createTheme() /* theme does not matter for us here */ });
     const displayValue = processor(value);
     let unitValue = displayValue.text + displayValue.suffix;
-  
+
     switch (field.config.unit) {
       case SampleUnit.Bytes:
         break;
@@ -63,11 +71,11 @@ const FlameGraphTopTableContainer = ({ data, totalLevels, selectedView, search, 
       default:
         if (!displayValue.suffix) {
           // Makes sure we don't show 123undefined or something like that if suffix isn't defined
-          unitValue = displayValue.text
+          unitValue = displayValue.text;
         }
         break;
     }
-  
+
     return unitValue;
   };
 
@@ -82,13 +90,12 @@ const FlameGraphTopTableContainer = ({ data, totalLevels, selectedView, search, 
       topTable.push({
         symbol: key,
         self: { value: table[key].self, unitValue: selfUnit },
-        total: { value: table[key].total, unitValue: valueUnit }
+        total: { value: table[key].total, unitValue: valueUnit },
       });
     }
 
     setTopTable(topTable);
   }, [data.fields, selfField, sortLevelsIntoTable, valueField]);
-
 
   return (
     <>
@@ -96,11 +103,11 @@ const FlameGraphTopTableContainer = ({ data, totalLevels, selectedView, search, 
         <div className={styles.topTableContainer}>
           <AutoSizer style={{ width: '100%', height: PIXELS_PER_LEVEL * totalLevels + 'px' }}>
             {({ width, height }) => (
-              <FlameGraphTopTable 
-                width={width} 
-                height={height} 
-                data={topTable} 
-                search={search} 
+              <FlameGraphTopTable
+                width={width}
+                height={height}
+                data={topTable}
+                search={search}
                 setSearch={setSearch}
                 setTopLevelIndex={setTopLevelIndex}
                 setRangeMin={setRangeMin}
@@ -124,7 +131,7 @@ const getStyles = (selectedView: SelectedView) => {
       margin-right: ${marginRight};
       width: ${selectedView === SelectedView.TopTable ? '100%' : `calc(50% - ${marginRight})`};
     `,
-  }
+  };
 };
 
 export default FlameGraphTopTableContainer;

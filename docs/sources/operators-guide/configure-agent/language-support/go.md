@@ -92,7 +92,7 @@ You'll also need to activate scraping for this new endpoint using the following 
 
 ```yaml
 scrape_configs:
-  - job_name: 'default'
+  - job_name: "default"
     profiling_config:
       pprof_config:
         fgprof:

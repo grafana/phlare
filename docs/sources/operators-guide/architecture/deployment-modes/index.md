@@ -25,6 +25,7 @@ The monolithic mode runs all required components in a single process and is the 
 [//]: # "Diagram source at https://docs.google.com/presentation/d/1C1fl0pH8wmKZe8gXo-VwmUuLvGiPmADfvey15FSkWpE/edit#slide=id.g11694eaa76e_0_0"
 
 ![Phlare's monolithic mode](monolithic-mode.svg)
+
 <!--
 Monolithic mode can be horizontally scaled out by deploying multiple Grafana Phlare binaries with `-target=all`. This approach provides high-availability and increased scale without the configuration complexity of the full [microservices deployment](#microservices-mode).
 
@@ -32,6 +33,7 @@ Monolithic mode can be horizontally scaled out by deploying multiple Grafana Phl
 
 ![Phlare's horizontally scaled monolithic mode](scaled-monolithic-mode.svg)
  -->
+
 ## Microservices mode
 
 In microservices mode, components are deployed in distinct processes. Scaling is per component, which allows for greater flexibility in scaling and more granular failure domains. Microservices mode is the preferred method for a production deployment, but it is also the most complex.

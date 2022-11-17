@@ -34,9 +34,11 @@ const FlameGraphHeader = ({
     { value: SelectedView.FlameGraph, label: 'Flame Graph', description: 'Only show flame graph' },
   ];
   if (containerWidth >= MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH) {
-    viewOptions.push(
-      { value: SelectedView.Both, label: 'Both', description: 'Show both the top table and flame graph' }
-    );
+    viewOptions.push({
+      value: SelectedView.Both,
+      label: 'Both',
+      description: 'Show both the top table and flame graph',
+    });
   }
 
   return (

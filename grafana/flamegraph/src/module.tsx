@@ -16,7 +16,7 @@ export const FlameExploreGraphPanel: React.FunctionComponent<ExplorePanelProps> 
     <div className={styles.container}>
       <FlameGraphContainer data={props.data[0]} />
     </div>
-  )
+  );
 };
 
 // We use ts-ignore here because setExplorePanel and ExplorePanelProps are part of a draft PR that isn't yet merged.

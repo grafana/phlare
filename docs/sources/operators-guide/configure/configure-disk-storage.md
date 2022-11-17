@@ -16,9 +16,9 @@ layout). Each of those blocks are identified by an [ULID] and stored within
 Grafana Phlare's data path `-phlaredb.data-path=` (by default
 `./data`) is organized the following:
 
-* `./<tenant-id>`: Each tenant has its own subdirectory with the following subdirectories:
-   * `head/<block-id>`: Contains the current data still being written.
-   * `local/<block-id>`: Contains the finished blocks, which are kept locally
+- `./<tenant-id>`: Each tenant has its own subdirectory with the following subdirectories:
+  - `head/<block-id>`: Contains the current data still being written.
+  - `local/<block-id>`: Contains the finished blocks, which are kept locally
 
 ## Object storage
 
@@ -28,7 +28,7 @@ uploaded to the object store bucket.
 ## High disk utilization
 
 To avoid loosing the most recent data, Grafana Phlare will remove the oldest
-blocks  when it detects that the volume on which the data path is located is
+blocks when it detects that the volume on which the data path is located is
 close to running out of disk. This high utilization mode will be active when:
 
 Less than 5% of the total size of the volume is available and that is also

@@ -7,7 +7,7 @@ weight: 50
 
 # Grafana Phlare querier
 
-The querier is a stateless component that evaluates queries  expressions by fetching profiles series and labels on the read path.
+The querier is a stateless component that evaluates queries expressions by fetching profiles series and labels on the read path.
 
 The querier uses the [ingester]({{< relref "ingester.md" >}}) component only to query recently written data. The support of querying the [long-term storage]({{< relref "../about-grafana-phlare-architecture/index.md#long-term-storage" >}}) is planned for the next release.
 

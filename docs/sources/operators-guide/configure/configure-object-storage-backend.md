@@ -21,7 +21,7 @@ The supported backends are:
 
 > Under the hood Grafana Phlare uses [Thanos' object store client] library, so their stated limitations apply.
 
-[Thanos' object store client]: https://github.com/thanos-io/objstore#supported-providers-clients
+[thanos' object store client]: https://github.com/thanos-io/objstore#supported-providers-clients
 
 ## Amazon S3
 
@@ -38,13 +38,13 @@ This how one would configure a bucket in the AWS region `eu-west-2`:
 
 ```yaml
 storage:
- backend: s3
- s3:
-   bucket_name: grafana-phlare-data
-   region: eu-west-2
-   endpoint: s3.eu-west-2.amazonaws.com
-   access_key_id: MY_ACCESS_KEY
-   secret_access_key: MY_SECRET_KEY
+  backend: s3
+  s3:
+    bucket_name: grafana-phlare-data
+    region: eu-west-2
+    endpoint: s3.eu-west-2.amazonaws.com
+    access_key_id: MY_ACCESS_KEY
+    secret_access_key: MY_SECRET_KEY
 ```
 
 ### Example using a S3 compatible Bucket
@@ -53,16 +53,16 @@ This how one would configure a bucket on a locally running instance of [MinIO]:
 
 ```yaml
 storage:
- backend: s3
- s3:
-   bucket_name: grafana-phlare-data
-   endpoint: localhost:9000
-   insecure: true
-   access_key_id: grafana-phlare-data
-   secret_access_key: grafana-phlare-data
+  backend: s3
+  s3:
+    bucket_name: grafana-phlare-data
+    endpoint: localhost:9000
+    insecure: true
+    access_key_id: grafana-phlare-data
+    secret_access_key: grafana-phlare-data
 ```
 
-[MinIO]: https://min.io/docs/minio/container/index.html
+[minio]: https://min.io/docs/minio/container/index.html
 
 ## Google Cloud Storage
 
@@ -72,8 +72,8 @@ To use a Google Cloud Storage (GCS) bucket for long term storage, you can find G
 
 At a minimum, you will need to provide a values for the `bucket_name` and a service account. To supply the service account there are two ways:
 
-* Use the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to locate your [application credentials](https://cloud.google.com/docs/authentication/production).
-* Provide the content the service account key within the `service_account` parameter.
+- Use the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to locate your [application credentials](https://cloud.google.com/docs/authentication/production).
+- Provide the content the service account key within the `service_account` parameter.
 
 ### Example using a Google Cloud Storage bucket
 
@@ -85,18 +85,18 @@ storage:
   gcs:
     bucket_name: grafana-phlare-data
     service_account: |
-        {
-          "type": "service_account",
-          "project_id": "PROJECT_ID",
-          "private_key_id": "KEY_ID",
-          "private_key": "-----BEGIN PRIVATE KEY-----\nPRIVATE_KEY\n-----END PRIVATE KEY-----\n",
-          "client_email": "SERVICE_ACCOUNT_EMAIL",
-          "client_id": "CLIENT_ID",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://accounts.google.com/o/oauth2/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/SERVICE_ACCOUNT_EMAIL"
-        }
+      {
+        "type": "service_account",
+        "project_id": "PROJECT_ID",
+        "private_key_id": "KEY_ID",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nPRIVATE_KEY\n-----END PRIVATE KEY-----\n",
+        "client_email": "SERVICE_ACCOUNT_EMAIL",
+        "client_id": "CLIENT_ID",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://accounts.google.com/o/oauth2/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/SERVICE_ACCOUNT_EMAIL"
+      }
 ```
 
 ## Azure Blob Storage
@@ -115,6 +115,6 @@ To use a Swift (OpenStack Object Storage) bucket for long term storage, you can 
 
 [swift_ref]: {{< relref "./reference-configuration-parameters/#swift_storage_backend" >}}
 
->If the `name` of a user, project or tenant is used one must also specify its domain by ID or name. Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
+> If the `name` of a user, project or tenant is used one must also specify its domain by ID or name. Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
 
 [//TODO]: <> (Provide example)

@@ -10,7 +10,7 @@ interface StackProps {
   wrap?: boolean;
   gap?: number;
   flexGrow?: CSSProperties['flexGrow'];
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export function Stack(props: StackProps) {

@@ -19,8 +19,8 @@ The details about the first invalid data are typically logged by the agent.
 
 The distributor data cleanup includes the following transformation:
 
-* Ensure the profile has a timestamp set, if not it will default to the time the distributor received the profile.
-* The distributor will remove samples that are having values of `0` and will sum samples that share the same stacktrace.
+- Ensure the profile has a timestamp set, if not it will default to the time the distributor received the profile.
+- The distributor will remove samples that are having values of `0` and will sum samples that share the same stacktrace.
 
 ## Replication
 

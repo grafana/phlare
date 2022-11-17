@@ -87,7 +87,6 @@ Refer to [Series]({{< relref "#series" >}}).
 
 Refer to [Tenant]({{< relref "#tenant" >}}).
 
-
 ## PProf
 
 pprof is a tool for the visualization and analysis of profiling data. We often refer to pprof as
@@ -104,7 +103,6 @@ created to visualize [stack traces](#Stacktrace) of profiled software so that th
 can be identified quickly and accurately.
 
 Flamegraph when inverted (deepest stack frames at the bottom) are called Icicle Graphs.
-
 
 ## top table
 

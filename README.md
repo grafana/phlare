@@ -2,7 +2,6 @@
 
 <p align="center"><img src="images/logo.png" alt="Grafana Phlare logo" width="400"></p>
 
-
 <p align="center">Grafana Phlare is an open source software project for aggregating continuous profiling data. Continuous profiling is an
 observability signal that allows you to understand your workload's resources (CPU, memory, etc...) usage down to the exact lines of code.</p>
 
@@ -20,8 +19,8 @@ Core features of Grafana Phlare include:
 - **Easy to install:** Using its monolithic mode, you can get Grafana Phlare up and
   running with just one binary and no additional dependencies. On Kubernetes a single helm chart
   allows to deploy in different mode.
-- **Horizontal scalability:**  You can run Grafana Phlare
-   across multiple machines, which makes it effortless for you to scale the database to handle the profiling volumes your workload generates.
+- **Horizontal scalability:** You can run Grafana Phlare
+  across multiple machines, which makes it effortless for you to scale the database to handle the profiling volumes your workload generates.
 - **High availability:** Grafana Phlare replicates incoming profiles, ensuring that
   no data is lost in the event of machine failure. This means you can rollout without
   interrupting profiles ingestion and analysis.

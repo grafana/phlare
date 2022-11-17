@@ -28,11 +28,7 @@ describe('FlameGraphContainer', () => {
       },
     };
 
-    return (
-      <FlameGraphContainer
-        data={flameGraphData}
-      />
-    );
+    return <FlameGraphContainer data={flameGraphData} />;
   };
 
   it('should render without error', async () => {

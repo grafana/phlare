@@ -12,7 +12,7 @@
       "name": "Cyril Tovena",
       "url": "https://www.grafana.com"
     },
-    "keywords": ["grafana", "datasource", "phlare","flamegraph"],
+    "keywords": ["grafana", "datasource", "phlare", "flamegraph"],
     "logos": {
       "small": "img/logo.svg",
       "large": "img/logo.svg"

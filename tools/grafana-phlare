@@ -3,10 +3,10 @@
 DOCKER_ARGS="--net=host"
 
 if [[ $OSTYPE == 'darwin'* ]]; then
-    PHLARE_URL=${PHLARE_URL:-http://docker.for.mac.localhost:4100}
-    DOCKER_ARGS=""
+  PHLARE_URL=${PHLARE_URL:-http://docker.for.mac.localhost:4100}
+  DOCKER_ARGS=""
 else
-    PHLARE_URL=${PHLARE_URL:-http://localhost:4100}
+  PHLARE_URL=${PHLARE_URL:-http://localhost:4100}
 fi
 
 PYRO_URL=$PHLARE_URL/pyroscope
@@ -15,7 +15,7 @@ PROMETHEUS_URL=$PHLARE_URL/prometheus
 datasource_provisioning="$(mktemp "${TMPDIR:-/tmp}/phlare-provisioning-XXXXXX")"
 chmod 0644 "${datasource_provisioning}"
 trap 'rm -f "${datasource_provisioning}"' EXIT
-cat > "${datasource_provisioning}" <<EOF
+cat >"${datasource_provisioning}" <<EOF
 apiVersion: 1
 datasources:
   - name: Prometheus

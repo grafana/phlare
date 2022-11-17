@@ -119,6 +119,7 @@ Use a custom namespace so that you do not have to overwrite the default namespac
      --set-string 'podAnnotations.phlare\.grafana\.com/scrape=true' \
      --set-string 'podAnnotations.phlare\.grafana\.com/port=6060'
    ```
+
    For details, see [Deploy Grafana on Kubernetes](https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/).
 
 1. Port-forward Grafana to `localhost`, by using the `kubectl` command:
@@ -131,10 +132,10 @@ Use a custom namespace so that you do not have to overwrite the default namespac
 1. On the left-hand side, go to **Configuration** > **Data sources**.
 1. Configure a new Grafana Phlare data source to query the Grafana Phlare server, by using the following settings:
 
-   | Field | Value                                                        |
-   | ----- | ------------------------------------------------------------ |
-   | Name  | Phlare                                                       |
-   | URL   | http://phlare-querier.phlare-test.svc.cluster.local.:4100/   |
+   | Field | Value                                                      |
+   | ----- | ---------------------------------------------------------- |
+   | Name  | Phlare                                                     |
+   | URL   | http://phlare-querier.phlare-test.svc.cluster.local.:4100/ |
 
    To add a data source, see [Add a data source](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/).
 
@@ -152,12 +153,12 @@ To ensure the data source gets provisioned at start-up, create the following `da
 ```yaml
 datasources:
   phlare.yaml:
-   apiVersion: 1
-   datasources:
-   - name: Phlare
-     type: phlare
-     uid: phlare-test
-     url: http://phlare-querier.phlare-test.svc.cluster.local.:4100/
+    apiVersion: 1
+    datasources:
+      - name: Phlare
+        type: phlare
+        uid: phlare-test
+        url: http://phlare-querier.phlare-test.svc.cluster.local.:4100/
 ```
 
 Modify the Helm deployment by running:

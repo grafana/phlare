@@ -1,7 +1,6 @@
 networks:
   phlare:
 
-
 services:
   phlare:
     image: grafana/phlare:latest

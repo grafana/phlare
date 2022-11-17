@@ -118,7 +118,7 @@ const FlameGraph = ({
       graphRef.current.onclick = (e) => {
         const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
         const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
-        
+
         if (barIndex !== -1 && !isNaN(levelIndex) && !isNaN(barIndex)) {
           setTopLevelIndex(levelIndex);
           setRangeMin(levels[levelIndex][barIndex].start / totalTicks);
@@ -131,7 +131,7 @@ const FlameGraph = ({
           setShowTooltip(false);
           const pixelsPerTick = graphRef.current!.clientWidth / totalTicks / (rangeMax - rangeMin);
           const { levelIndex, barIndex } = convertPixelCoordinatesToBarCoordinates(e.offsetX, e.offsetY, pixelsPerTick);
-        
+
           if (barIndex !== -1 && !isNaN(levelIndex) && !isNaN(barIndex)) {
             tooltipRef.current.style.left = e.clientX + 10 + 'px';
             tooltipRef.current.style.top = e.clientY + 40 + 'px';

@@ -21,12 +21,8 @@
       "name": "QuerierService"
     }
   ],
-  "consumes": [
-    "application/json"
-  ],
-  "produces": [
-    "application/json"
-  ],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
   "paths": {
     "/api/v1/status/buildinfo": {
       "get": {
@@ -46,9 +42,7 @@
             }
           }
         },
-        "tags": [
-          "StatusService"
-        ]
+        "tags": ["StatusService"]
       }
     },
     "/api/v1/status/config": {
@@ -69,9 +63,7 @@
             }
           }
         },
-        "tags": [
-          "StatusService"
-        ]
+        "tags": ["StatusService"]
       }
     },
     "/api/v1/status/config/default": {
@@ -91,9 +83,7 @@
             }
           }
         },
-        "tags": [
-          "StatusService"
-        ]
+        "tags": ["StatusService"]
       }
     },
     "/api/v1/status/config/diff": {
@@ -114,9 +104,7 @@
             }
           }
         },
-        "tags": [
-          "StatusService"
-        ]
+        "tags": ["StatusService"]
       }
     },
     "/api/v1/targets": {
@@ -143,17 +131,11 @@
             "in": "query",
             "required": false,
             "type": "string",
-            "enum": [
-              "STATE_UNSPECIFIED",
-              "STATE_ACTIVE",
-              "STATE_DROPPED"
-            ],
+            "enum": ["STATE_UNSPECIFIED", "STATE_ACTIVE", "STATE_DROPPED"],
             "default": "STATE_UNSPECIFIED"
           }
         ],
-        "tags": [
-          "AgentService"
-        ]
+        "tags": ["AgentService"]
       }
     }
   },
@@ -378,11 +360,7 @@
     },
     "v1Health": {
       "type": "string",
-      "enum": [
-        "HEALTH_UNSPECIFIED",
-        "HEALTH_UP",
-        "HEALTH_DOWN"
-      ],
+      "enum": ["HEALTH_UNSPECIFIED", "HEALTH_UP", "HEALTH_DOWN"],
       "default": "HEALTH_UNSPECIFIED"
     },
     "v1LabelPair": {
@@ -647,11 +625,7 @@
     },
     "v1State": {
       "type": "string",
-      "enum": [
-        "STATE_UNSPECIFIED",
-        "STATE_ACTIVE",
-        "STATE_DROPPED"
-      ],
+      "enum": ["STATE_UNSPECIFIED", "STATE_ACTIVE", "STATE_DROPPED"],
       "default": "STATE_UNSPECIFIED"
     },
     "v1Target": {

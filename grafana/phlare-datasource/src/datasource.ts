@@ -22,7 +22,7 @@ export class PhlareDataSource extends DataSourceWithBackend<Query, PhlareDataSou
         }
 
         return normalizeQuery(t, request.app);
-      })
+      });
 
     if (!validTargets.length) {
       return of({ data: [] });

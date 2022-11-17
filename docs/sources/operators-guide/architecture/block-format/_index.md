@@ -11,30 +11,30 @@ This document describes how Grafana Phlare stores the data in its blocks. Each
 block belongs to a single tenant and is identfied by a unique [ULID]. Within
 the block there are multiple files:
 
-* A metadata file `meta.json`, which contains information about what the block
+- A metadata file `meta.json`, which contains information about what the block
   contains, like the time range of the profiling data.
 
-* A [TSDB index] `index.tsdb` mapping the external labels to the profiles
+- A [TSDB index] `index.tsdb` mapping the external labels to the profiles
   stored in the profiles table.
 
-* [Parquet] tables for the different models within a profile in the files
+- [Parquet] tables for the different models within a profile in the files
   `profiles.parquet`, `stacktraces.parquet`, `locations.parquet`,
   `functions.parquet`, `mappings.parquet`, `strings.parquet`.
 
 ## Data model
 
 The data model within the block is fairly aligned to Google's [proto
-definition][pprof] for the pprof wire format.  In general strings within the
+definition][pprof] for the pprof wire format. In general strings within the
 block are referenced by their position in a string table.
 
 Grafana Phlare's profiles have two types of labels:
 
-* External Labels: Contain additional information gathered at ingestion time
+- External Labels: Contain additional information gathered at ingestion time
   and can be used to select certain profiles. They are comparable to
   Prometeus'/Loki's label and typical labels are `namespace` and `pod` to
   describe which workload the profiles are coming form.
 
-* Pprof Labels: Part of the pprof payload and used by the agent or the software
+- Pprof Labels: Part of the pprof payload and used by the agent or the software
   to transport additional information.
 
 Each profile ingested will be added into a new row in the profile table. If
@@ -45,5 +45,5 @@ inserted.
 ![Data model of Phlare blocks](model.svg)
 
 [pprof]: https://github.com/google/pprof/blob/main/proto/profile.proto
-[TSDB index]: https://ganeshvernekar.com/blog/prometheus-tsdb-persistent-block-and-its-index/
-[Parquet]: https://parquet.apache.org/docs/
+[tsdb index]: https://ganeshvernekar.com/blog/prometheus-tsdb-persistent-block-and-its-index/
+[parquet]: https://parquet.apache.org/docs/

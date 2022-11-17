@@ -9,7 +9,6 @@ weight: 100
 
 ![Grafana Phlare Logo](phlare-logo.png)
 
-
 The Grafana Phlare team is excited to announce the first release. We’re committed to building the best continuous profiling experience in Grafana and contributing to that space along with the open-source community.
 
 From the first release you can expect:

@@ -15,7 +15,6 @@ To see the CLI flags that you need to get started with Grafana Phlare, run the `
 
 To see the current configuration state of any component, use the `/api/v1/status/config` HTTP API endpoint.
 
-
 ## Operational considerations
 
 Use a single configuration file, and either pass it to all replicas of Grafana Phlare (if you are running multiple single-process Phlare replicas) or to all components of Grafana Phlare (if you are running Grafana Phlare as microservices). If you are running Grafana Phlare on Kubernetes, you can achieve this by storing the configuration file in a [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/) and mounting it in each Grafana Phlare container.

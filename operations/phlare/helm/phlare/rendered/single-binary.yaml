@@ -68,19 +68,19 @@ metadata:
     app.kubernetes.io/version: "0.1.0"
     app.kubernetes.io/managed-by: Helm
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
 ---
 # Source: phlare/templates/clusterrolebinding.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -98,9 +98,9 @@ roleRef:
   kind: ClusterRole
   name: default-phlare-dev
 subjects:
-- kind: ServiceAccount
-  name: phlare-dev
-  namespace: default
+  - kind: ServiceAccount
+    name: phlare-dev
+    namespace: default
 ---
 # Source: phlare/templates/memberlist-service.yaml
 apiVersion: v1
@@ -214,8 +214,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: "phlare"
-          securityContext:
-            {}
+          securityContext: {}
           image: "grafana/phlare:0.1.0"
           imagePullPolicy: IfNotPresent
           args:
@@ -241,8 +240,7 @@ spec:
               subPath: config.yaml
             - name: data
               mountPath: /data
-          resources:
-            {}
+          resources: {}
       volumes:
         - name: config
           configMap:

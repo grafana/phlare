@@ -10,7 +10,7 @@ export type TooltipData = {
 export enum SampleUnit {
   Bytes = 'bytes',
   Short = 'short',
-  Nanoseconds = 'ns'
+  Nanoseconds = 'ns',
 }
 
 export enum ColumnTypes {
@@ -37,6 +37,6 @@ export interface TopTableData {
 }
 
 export type TopTableValue = {
-  value: number,
-  unitValue: string,
-}
+  value: number;
+  unitValue: string;
+};

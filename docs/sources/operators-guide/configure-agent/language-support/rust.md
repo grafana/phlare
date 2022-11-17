@@ -61,5 +61,5 @@ pprof -http :3000 "http://127.0.0.1:8081/debug/pprof/profile?seconds=5"
 
 [pprof]: https://github.com/google/pprof
 [pprof-rs]: https://github.com/tikv/pprof-rs
-[TiKV]: https://github.com/tikv/tikv
+[tikv]: https://github.com/tikv/tikv
 [example application]: https://github.com/grafana/phlare/tree/main/tools/docker-compose/rust/

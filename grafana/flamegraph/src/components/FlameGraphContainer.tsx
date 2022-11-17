@@ -34,7 +34,11 @@ const FlameGraphContainer = (props: Props) => {
 
   // If user resizes window with both as the selected view
   useEffect(() => {
-    if (containerWidth > 0 && containerWidth < MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH && selectedView === SelectedView.Both) {
+    if (
+      containerWidth > 0 &&
+      containerWidth < MIN_WIDTH_TO_SHOW_BOTH_TOPTABLE_AND_FLAMEGRAPH &&
+      selectedView === SelectedView.Both
+    ) {
       setSelectedView(SelectedView.FlameGraph);
     }
   }, [selectedView, setSelectedView, containerWidth]);
@@ -55,10 +59,10 @@ const FlameGraphContainer = (props: Props) => {
       {selectedView !== SelectedView.FlameGraph && (
         <FlameGraphTopTableContainer
           data={props.data}
-          totalLevels={levels.length} 
-          selectedView={selectedView} 
-          search={search} 
-          setSearch={setSearch} 
+          totalLevels={levels.length}
+          selectedView={selectedView}
+          search={search}
+          setSearch={setSearch}
           setTopLevelIndex={setTopLevelIndex}
           setRangeMin={setRangeMin}
           setRangeMax={setRangeMax}

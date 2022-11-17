@@ -1,12 +1,6 @@
 import { css, cx } from '@emotion/css';
 import React, { useCallback, useMemo } from 'react';
-import {
-  SortByFn,
-  useSortBy, 
-  useAbsoluteLayout, 
-  useTable,
-  CellProps,
-} from 'react-table';
+import { SortByFn, useSortBy, useAbsoluteLayout, useTable, CellProps } from 'react-table';
 import { FixedSizeList } from 'react-window';
 
 import { Icon, useStyles2, CustomScrollbar } from '@grafana/ui';
@@ -25,16 +19,25 @@ type Props = {
   setRangeMax: (range: number) => void;
 };
 
-const FlameGraphTopTable = ({ width, height, data, search, setSearch, setTopLevelIndex, setRangeMin, setRangeMax }: Props) => {
+const FlameGraphTopTable = ({
+  width,
+  height,
+  data,
+  search,
+  setSearch,
+  setTopLevelIndex,
+  setRangeMin,
+  setRangeMax,
+}: Props) => {
   const styles = useStyles2((theme) => getStyles(theme));
 
   const sortSymbols: SortByFn<object> = (a, b, column) => {
     return a.values[column].localeCompare(b.values[column]);
-  }
+  };
 
   const sortUnits: SortByFn<object> = (a, b, column) => {
-    return a.values[column].value.toString().localeCompare(b.values[column].value.toString(), "en", { numeric: true })
-  }
+    return a.values[column].value.toString().localeCompare(b.values[column].value.toString(), 'en', { numeric: true });
+  };
 
   const columns = useMemo<any>(
     () => [
@@ -43,7 +46,7 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch, setTopLeve
         header: ColumnTypes.Symbol,
         cell: SymbolCell,
         sortType: sortSymbols,
-        width: width - (TOP_TABLE_COLUMN_WIDTH * 2),
+        width: width - TOP_TABLE_COLUMN_WIDTH * 2,
       },
       {
         accessor: ColumnTypes.Self.toLowerCase(),
@@ -68,26 +71,31 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch, setTopLeve
       columns,
       data,
       initialState: {
-        sortBy: [{
-          id: ColumnTypes.Self.toLowerCase(),
-          desc: true
-        }]
-      }
+        sortBy: [
+          {
+            id: ColumnTypes.Self.toLowerCase(),
+            desc: true,
+          },
+        ],
+      },
     }),
     [columns, data]
   );
-  
-  const rowClicked = useCallback((row: string) => {
-    if(search === row) {
-      setSearch('');
-    } else {
-      setSearch(row);
-      // Reset selected level in flamegraph when selecting row in top table
-      setTopLevelIndex(0);
-      setRangeMin(0);
-      setRangeMax(1);
-    }
-  }, [search, setRangeMax, setRangeMin, setSearch, setTopLevelIndex]);
+
+  const rowClicked = useCallback(
+    (row: string) => {
+      if (search === row) {
+        setSearch('');
+      } else {
+        setSearch(row);
+        // Reset selected level in flamegraph when selecting row in top table
+        setTopLevelIndex(0);
+        setRangeMin(0);
+        setRangeMax(1);
+      }
+    },
+    [search, setRangeMax, setRangeMin, setSearch, setTopLevelIndex]
+  );
 
   const { headerGroups, rows, prepareRow } = useTable(options, useSortBy, useAbsoluteLayout);
 
@@ -100,7 +108,13 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch, setTopLeve
       const classNames = cx(rowValue === search && styles.matchedRow, styles.row);
 
       return (
-        <div {...row.getRowProps({ style })} className={classNames} onClick={() => { rowClicked(rowValue) }}>
+        <div
+          {...row.getRowProps({ style })}
+          className={classNames}
+          onClick={() => {
+            rowClicked(rowValue);
+          }}
+        >
           {row.cells.map((cell) => {
             const { key, ...cellProps } = cell.getCellProps();
             if (cellProps.style) {
@@ -160,15 +174,15 @@ const FlameGraphTopTable = ({ width, height, data, search, setSearch, setTopLeve
       )}
     </div>
   );
-}
+};
 
-const SymbolCell = ({cell: { value }}: CellProps<TopTableValue, TopTableValue>) => { 
-  return <div>{value}</div>
-}
+const SymbolCell = ({ cell: { value } }: CellProps<TopTableValue, TopTableValue>) => {
+  return <div>{value}</div>;
+};
 
-const UnitCell = ({cell: { value }}: CellProps<TopTableValue, TopTableValue>) => {
-  return <div>{value.unitValue}</div>
-}
+const UnitCell = ({ cell: { value } }: CellProps<TopTableValue, TopTableValue>) => {
+  return <div>{value.unitValue}</div>;
+};
 
 const getStyles = (theme: GrafanaTheme2) => ({
   table: (height: number) => {
@@ -184,7 +198,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   header: css`
     height: 38px;
 
-    & > :nth-child(2), & > :nth-child(3) {
+    & > :nth-child(2),
+    & > :nth-child(3) {
       text-align: right;
     }
   `,
@@ -194,7 +209,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: ${theme.spacing(1)};
   `,
   matchedRow: css`
-    & > :nth-child(1), & > :nth-child(2), & > :nth-child(3) {
+    & > :nth-child(1),
+    & > :nth-child(2),
+    & > :nth-child(3) {
       background-color: ${theme.colors.background.secondary} !important;
     }
   `,
@@ -204,7 +221,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     &:hover {
       background-color: ${theme.colors.emphasize(theme.colors.background.primary, 0.03)};
     }
-    & > :nth-child(2), & > :nth-child(3) {
+    & > :nth-child(2),
+    & > :nth-child(3) {
       text-align: right;
     }
     & > :nth-child(3) {
@@ -214,7 +232,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   cell: css`
     border-right: 1px solid ${theme.components.panel.borderColor};
     padding: ${theme.spacing(1)};
-    
+
     div {
       overflow: hidden;
       text-overflow: ellipsis;

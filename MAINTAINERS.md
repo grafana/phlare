@@ -7,4 +7,3 @@ Some parts of the codebase have other maintainers, the package paths also includ
 
 - `docs`:
   - Eve Meelan - [@](https://github.com/) ([Grafana Labs](https://grafana.com/))
-

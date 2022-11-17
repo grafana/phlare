@@ -20,7 +20,7 @@ By default the agent will pull profiles every 10s with no timeout using `http` s
 
 ```yaml
 scrape_configs:
-  - job_name: 'default'
+  - job_name: "default"
     scrape_interval: 10s
     scrape_timeout: 0s
     scheme: http
@@ -30,7 +30,7 @@ If you don't provide an override of `profiling_config` for each `scrape_configs`
 
 ```yaml
 profiling_config:
-  path_prefix: ''
+  path_prefix: ""
   pprof_config:
     memory:
       enabled: true
@@ -64,7 +64,7 @@ You can override the `profiling_config` as follow:
 
 ```yaml
 scrape_configs:
-  - job_name: 'default'
+  - job_name: "default"
     scrape_interval: 10s
     profiling_config:
       pprof_config:
@@ -82,12 +82,12 @@ Finally if you're running pprof endpoints below a path prefix, you can specify i
 
 ```yaml
 scrape_configs:
-  - job_name: 'default'
+  - job_name: "default"
     scrape_interval: 10s
     scrape_timeout: 0s
     scheme: http
     profiling_config:
-      path_prefix: '/app'
+      path_prefix: "/app"
 ```
 
 For more details about available configuration options, please refer to the [configuration reference]({{<relref "../configure/reference-configuration-parameters/#scrape-configs">}}).

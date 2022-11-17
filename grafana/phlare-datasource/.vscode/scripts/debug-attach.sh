@@ -4,7 +4,7 @@
 export PATH=$(go env GOPATH)/bin:$PATH
 
 PLUGIN_NAME="gpx_phlare-datasource_darwin_arm64"
-PLUGIN_PID=`pgrep ${PLUGIN_NAME}`
+PLUGIN_PID=$(pgrep ${PLUGIN_NAME})
 PORT="${2:-3222}"
 
 dlv attach ${PLUGIN_PID} --headless --listen=:${PORT} --api-version 2 --log
