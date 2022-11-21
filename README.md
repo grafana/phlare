@@ -9,7 +9,9 @@ observability signal that allows you to understand your workload's resources (CP
 Grafana Phlare is fully integrated with Grafana allowing you to **correlate** with other observability signals, like metrics, logs, and traces.
 
 <p align="center">
-  <img alt="Explore UI" src=images/grafana-profiles.gif>
+  <video controls alt= "Explore UI" width="660">
+    <source src="docs/sources/ui.webm" type="video/webm" />
+  </video>
 </p>
 
 [//TODO]: <> (If you want to understand what profiling data looks like, try the profiling experience in play.grafana.com)
