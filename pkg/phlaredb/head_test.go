@@ -18,6 +18,7 @@ import (
 	ingestv1 "github.com/grafana/phlare/pkg/gen/ingester/v1"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
+	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/grafana/phlare/pkg/pprof"
 )
 
@@ -221,18 +222,18 @@ func TestHeadIngestStrings(t *testing.T) {
 	head := newTestHead(t)
 
 	r := &rewriter{}
-	require.NoError(t, head.strings.ingest(ctx, newProfileFoo().StringTable, r))
-	require.Equal(t, []string{"", "unit", "type", "func_a", "func_b", "my-foo-binary"}, head.strings.slice)
+	require.NoError(t, head.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(newProfileFoo().StringTable), r))
+	require.Equal(t, schemav1.StoredStringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary"}), head.strings.slice)
 	require.Equal(t, stringConversionTable{0, 1, 2, 3, 4, 5}, r.strings)
 
 	r = &rewriter{}
-	require.NoError(t, head.strings.ingest(ctx, newProfileBar().StringTable, r))
-	require.Equal(t, []string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary"}, head.strings.slice)
+	require.NoError(t, head.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(newProfileBar().StringTable), r))
+	require.Equal(t, schemav1.StoredStringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary"}), head.strings.slice)
 	require.Equal(t, stringConversionTable{0, 1, 2, 4, 3, 6}, r.strings)
 
 	r = &rewriter{}
-	require.NoError(t, head.strings.ingest(ctx, newProfileBaz().StringTable, r))
-	require.Equal(t, []string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary", "func_c"}, head.strings.slice)
+	require.NoError(t, head.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(newProfileBaz().StringTable), r))
+	require.Equal(t, schemav1.StoredStringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary", "func_c"}), head.strings.slice)
 	require.Equal(t, stringConversionTable{0, 7}, r.strings)
 }
 

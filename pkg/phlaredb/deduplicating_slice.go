@@ -41,7 +41,7 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 	cfg    *ParquetConfig
 	writer *parquet.Writer
 
-	buffer      *parquet.Buffer
+	buffer      *parquet.GenericBuffer[M]
 	rowsFlushed int
 }
 
@@ -109,7 +109,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush() (numRows uint64, numRowGroups u
 
 	// intialise buffer if not existing
 	if s.buffer == nil {
-		s.buffer = parquet.NewBuffer(
+		s.buffer = parquet.NewGenericBuffer[M](
 			s.persister.Schema(),
 			parquet.SortingRowGroupConfig(s.persister.SortingColumns()),
 			parquet.ColumnBufferCapacity(s.cfg.MaxBufferRowCount),

@@ -18,6 +18,16 @@ type StoredString struct {
 
 type StringPersister struct{}
 
+func StoredStringsFromStringSlice(strings []string) []*StoredString {
+	sl := make([]StoredString, len(strings))
+	slp := make([]*StoredString, len(strings))
+	for i, s := range strings {
+		sl[i].String = s
+		slp[i] = &sl[i]
+	}
+	return slp
+}
+
 func (*StringPersister) Name() string {
 	return "strings"
 }
@@ -33,18 +43,18 @@ func (*StringPersister) SortingColumns() parquet.SortingOption {
 	)
 }
 
-func (*StringPersister) Deconstruct(row parquet.Row, id uint64, s string) parquet.Row {
+func (*StringPersister) Deconstruct(row parquet.Row, id uint64, s *StoredString) parquet.Row {
 	var stored StoredString
 	stored.ID = id
-	stored.String = s
+	stored.String = s.String
 	row = stringsSchema.Deconstruct(row, &stored)
 	return row
 }
 
-func (*StringPersister) Reconstruct(row parquet.Row) (id uint64, s string, err error) {
+func (*StringPersister) Reconstruct(row parquet.Row) (id uint64, s *StoredString, err error) {
 	var stored StoredString
 	if err := stringsSchema.Reconstruct(&stored, row); err != nil {
-		return 0, "", err
+		return 0, nil, err
 	}
-	return stored.ID, stored.String, nil
+	return stored.ID, &stored, nil
 }

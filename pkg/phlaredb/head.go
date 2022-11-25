@@ -116,7 +116,7 @@ type Head struct {
 
 	index           *profilesIndex
 	parquetConfig   *ParquetConfig
-	strings         deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
+	strings         deduplicatingSlice[*schemav1.StoredString, string, *stringsHelper, *schemav1.StringPersister]
 	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
 	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
 	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
@@ -285,7 +285,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	// create a rewriter state
 	rewrites := &rewriter{}
 
-	if err := h.strings.ingest(ctx, p.StringTable, rewrites); err != nil {
+	if err := h.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(p.StringTable), rewrites); err != nil {
 		return err
 	}
 
@@ -512,7 +512,7 @@ func (h *Head) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profil
 					if !ok {
 						functions[fnNameID] = len(names)
 						fnIds = append(fnIds, int32(len(names)))
-						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
+						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name].String)
 						continue
 					}
 					fnIds = append(fnIds, int32(pos))

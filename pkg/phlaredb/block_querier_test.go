@@ -15,7 +15,7 @@ import (
 
 func TestInMemoryReader(t *testing.T) {
 	path := t.TempDir()
-	st := deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]{}
+	st := deduplicatingSlice[*schemav1.StoredString, string, *stringsHelper, *schemav1.StringPersister]{}
 	require.NoError(t, st.Init(path, &ParquetConfig{
 		MaxBufferRowCount: defaultParquetConfig.MaxBufferRowCount / 1024,
 		MaxRowGroupBytes:  defaultParquetConfig.MaxRowGroupBytes / 1024,
@@ -24,7 +24,7 @@ func TestInMemoryReader(t *testing.T) {
 	rewrites := &rewriter{}
 	rgCount := 5
 	for i := 0; i < rgCount*st.cfg.MaxBufferRowCount; i++ {
-		require.NoError(t, st.ingest(context.Background(), []string{fmt.Sprintf("foobar %d", i)}, rewrites))
+		require.NoError(t, st.ingest(context.Background(), []*schemav1.StoredString{&schemav1.StoredString{String: fmt.Sprintf("foobar %d", i)}}, rewrites))
 	}
 	numRows, numRg, err := st.Flush()
 	require.NoError(t, err)

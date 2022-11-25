@@ -2,6 +2,7 @@ package phlaredb
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -17,8 +18,8 @@ var profilePool = sync.Pool{
 }
 
 type profileHead struct {
-	buffer *parquet.Buffer
-	ch     chan parquet.Row
+	buffer *parquet.GenericBuffer[*schemav1.Profile]
+	ch     chan *schemav1.Profile
 
 	persister schemav1.ProfilePersister
 	helper    profilesHelper
@@ -26,9 +27,9 @@ type profileHead struct {
 
 func newProfileHead() *profileHead {
 	h := &profileHead{
-		ch: make(chan parquet.Row, 32),
+		ch: make(chan *schemav1.Profile, 32),
 	}
-	h.buffer = parquet.NewBuffer(h.persister.Schema(), h.persister.SortingColumns())
+	h.buffer = parquet.NewGenericBuffer[*schemav1.Profile](h.persister.Schema(), h.persister.SortingColumns())
 
 	return h
 }
@@ -36,18 +37,18 @@ func newProfileHead() *profileHead {
 func (p *profileHead) run(ctx context.Context) error {
 	go func() {
 		var (
-			batch              = make([]parquet.Row, 0, 32)
+			batch              = make([]*schemav1.Profile, 0, 32)
 			oldestBatchElement time.Time
 		)
 
 		for {
 
 			if (!oldestBatchElement.IsZero() && time.Since(oldestBatchElement) > time.Second) || len(batch) == cap(batch) {
-				// TODO: do stuff
-				_, err := p.buffer.WriteRows(batch)
+				l, err := p.buffer.Write(batch)
 				if err != nil {
 					panic(err)
 				}
+				fmt.Printf("wrote %d profiles\n", l)
 
 				// reset batch
 				for pos := range batch {

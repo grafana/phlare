@@ -58,20 +58,20 @@ func TestStacktracesRoundTrip(t *testing.T) {
 	assert.Equal(t, newStacktraces(), sRead)
 }
 
-func newStrings() []string {
-	return []string{
-		"",
-		"foo",
-		"bar",
-		"baz",
-		"",
+func newStrings() []*StoredString {
+	return []*StoredString{
+		{String: ""},
+		{String: "foo"},
+		{String: "bar"},
+		{String: "baz"},
+		{String: ""},
 	}
 }
 
 func TestStringsRoundTrip(t *testing.T) {
 	var (
 		s   = newStrings()
-		w   = &ReadWriter[string, *StringPersister]{}
+		w   = &ReadWriter[*StoredString, *StringPersister]{}
 		buf bytes.Buffer
 	)
 
