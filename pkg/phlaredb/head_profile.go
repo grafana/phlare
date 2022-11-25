@@ -83,8 +83,7 @@ func (p *profileHead) ingest(ctx context.Context, elems []*schemav1.Profile, rew
 			return err
 		}
 
-		row := profilePool.Get().(parquet.Row)
-		p.ch <- p.persister.Deconstruct(row, 0, elems[pos])
+		p.ch <- elems[pos]
 	}
 	return nil
 }

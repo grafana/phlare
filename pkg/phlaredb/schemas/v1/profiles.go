@@ -111,22 +111,63 @@ func (*ProfilePersister) SortingColumns() parquet.SortingOption {
 	)
 }
 
+type columnBuffer struct {
+	values  []parquet.Value
+	uint32s []uint32
+	int64s  []int64
+}
+
+type uint32Writer interface {
+	WriteUint32s([]uint32) (int, error)
+}
+
 func (*ProfilePersister) WriteColumns(buffer *parquet.Buffer, values []*Profile) error {
 	columns := buffer.ColumnBuffers()
+	columnIdError := func(pos int) error {
+		return fmt.Errorf("unexpected column type %T for column %s", columns[pos], strings.Join(profilesSchema.Columns()[pos], "/"))
+	}
+
+	var buf = columnBuffer{
+		values:  make([]parquet.Value, len(values)),
+		uint32s: make([]uint32, len(values)),
+		int64s:  make([]int64, len(values)),
+	}
 
 	// uuids
-	uuidWriter, ok := columns[0].(parquet.FixedLenByteArrayWriter)
+	uuidC := columns[0]
+	for pos, value := range values {
+		buf.values[pos] = parquet.ValueOf(value.ID)
+	}
+	l, err := uuidC.WriteValues(buf.values)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("written %d uuids\n", l)
+
+	// series index
+	seriesIndexC, ok := columns[1].(uint32Writer)
 	if !ok {
-		return fmt.Errorf("unexpected column type %T", columns[0])
+		return columnIdError(1)
 	}
-
-	uuids := make([]byte, 0, len(values)*16)
-	for _, value := range values {
-		uuids = append(uuids, value.ID[:]...)
+	for pos := range values {
+		buf.uint32s[pos] = values[pos].SeriesIndex
 	}
+	l, err = seriesIndexC.WriteUint32s(buf.uint32s)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("written %d seriesIndex\n", l)
 
-	l, err := uuidWriter.WriteFixedLenByteArrays(uuids)
-	fmt.Printf("written %d uuids", l)
+	// TODO: samples
+
+	/*dropFramesC, ok := columns[8].(uint32Writer)
+	if !ok {
+		return columnIdError(8)
+	}
+	for pos := range values {
+		buf.int64[pos] = values[pos].DropFrames
+	}
+	*/
 
 	return err
 }
