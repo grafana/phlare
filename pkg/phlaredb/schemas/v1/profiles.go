@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/prometheus/common/model"
 	"github.com/segmentio/parquet-go"
@@ -106,6 +108,26 @@ func (*ProfilePersister) SortingColumns() parquet.SortingOption {
 		parquet.Ascending("TimeNanos"),
 		parquet.Ascending("Samples", "list", "element", "StacktraceID"),
 	)
+}
+
+func (*ProfilePersister) WriteColumns(buffer *parquet.Buffer, values []*Profile) error {
+	columns := buffer.ColumnBuffers()
+
+	// uuids
+	uuidWriter, ok := columns[0].(parquet.FixedLenByteArrayWriter)
+	if !ok {
+		return fmt.Errorf("unexpected column type %T", columns[0])
+	}
+
+	uuids := make([]byte, 0, len(values)*16)
+	for _, value := range values {
+		uuids = append(uuids, value.ID[:]...)
+	}
+
+	l, err := uuidWriter.WriteFixedLenByteArrays(uuids)
+	fmt.Printf("written %d uuids", l)
+
+	return err
 }
 
 func (*ProfilePersister) Deconstruct(row parquet.Row, id uint64, s *Profile) parquet.Row {
