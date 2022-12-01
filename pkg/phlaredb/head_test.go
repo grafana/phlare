@@ -210,11 +210,11 @@ func TestHeadIngestFunctions(t *testing.T) {
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New()))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBaz(), uuid.New()))
 
-	require.Equal(t, 3, len(head.functions.slice))
+	require.Equal(t, 3, head.functions.buffer.NumRows())
 	helper := &functionsHelper{}
-	assert.Equal(t, functionsKey{Name: 3}, helper.key(head.functions.slice[0]))
-	assert.Equal(t, functionsKey{Name: 4}, helper.key(head.functions.slice[1]))
-	assert.Equal(t, functionsKey{Name: 7}, helper.key(head.functions.slice[2]))
+	assert.Equal(t, functionsKey{Name: 3}, helper.key(head.functions.GetRowNum(0)))
+	assert.Equal(t, functionsKey{Name: 4}, helper.key(head.functions.GetRowNum(1)))
+	assert.Equal(t, functionsKey{Name: 7}, helper.key(head.functions.GetRowNum(2)))
 }
 
 func TestHeadIngestStrings(t *testing.T) {
@@ -222,18 +222,19 @@ func TestHeadIngestStrings(t *testing.T) {
 	head := newTestHead(t)
 
 	r := &rewriter{}
-	require.NoError(t, head.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(newProfileFoo().StringTable), r))
-	require.Equal(t, schemav1.StoredStringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary"}), head.strings.slice)
+	require.NoError(t, head.strings.ingest(ctx, schemav1.StringsFromStringSlice(newProfileFoo().StringTable), r))
+	require.Equal(t, schemav1.StringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary"}), head.strings.Slice())
+	require.Equal(t, schemav1.StringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary"}), head.strings.Slice())
 	require.Equal(t, stringConversionTable{0, 1, 2, 3, 4, 5}, r.strings)
 
 	r = &rewriter{}
-	require.NoError(t, head.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(newProfileBar().StringTable), r))
-	require.Equal(t, schemav1.StoredStringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary"}), head.strings.slice)
+	require.NoError(t, head.strings.ingest(ctx, schemav1.StringsFromStringSlice(newProfileBar().StringTable), r))
+	require.Equal(t, schemav1.StringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary"}), head.strings.Slice())
 	require.Equal(t, stringConversionTable{0, 1, 2, 4, 3, 6}, r.strings)
 
 	r = &rewriter{}
-	require.NoError(t, head.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(newProfileBaz().StringTable), r))
-	require.Equal(t, schemav1.StoredStringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary", "func_c"}), head.strings.slice)
+	require.NoError(t, head.strings.ingest(ctx, schemav1.StringsFromStringSlice(newProfileBaz().StringTable), r))
+	require.Equal(t, schemav1.StringsFromStringSlice([]string{"", "unit", "type", "func_a", "func_b", "my-foo-binary", "my-bar-binary", "func_c"}), head.strings.Slice())
 	require.Equal(t, stringConversionTable{0, 7}, r.strings)
 }
 
@@ -246,19 +247,19 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	require.NoError(t, head.Ingest(ctx, newProfileBar(), uuid.New()))
 
 	// expect 2 mappings
-	require.Equal(t, 2, len(head.mappings.slice))
-	assert.Equal(t, "my-foo-binary", head.strings.slice[head.mappings.slice[0].Filename])
-	assert.Equal(t, "my-bar-binary", head.strings.slice[head.mappings.slice[1].Filename])
+	require.Equal(t, uint64(2), head.mappings.NumRows())
+	assert.Equal(t, &schemav1.String{String: "my-foo-binary"}, head.strings.GetRowNum(uint64(head.mappings.GetRowNum(0).Filename)))
+	assert.Equal(t, &schemav1.String{String: "my-bar-binary"}, head.strings.GetRowNum(uint64(head.mappings.GetRowNum(1).Filename)))
 
 	// expect 3 stacktraces
-	require.Equal(t, 3, len(head.stacktraces.slice))
+	require.Equal(t, uint64(3), head.stacktraces.NumRows())
 
 	// expect 3 profiles
-	require.Equal(t, 3, len(head.profiles.slice))
+	require.Equal(t, uint64(3), head.profiles.NumRows())
 
 	var samples []uint64
-	for pos := range head.profiles.slice {
-		for _, sample := range head.profiles.slice[pos].Samples {
+	for _, profile := range head.profiles.Slice() {
+		for _, sample := range profile.Samples {
 			samples = append(samples, sample.StacktraceID)
 		}
 	}
@@ -351,7 +352,7 @@ func TestHeadIngestRealProfiles(t *testing.T) {
 	}
 
 	require.NoError(t, head.Flush(ctx))
-	t.Logf("strings=%d samples=%d", len(head.strings.slice), head.totalSamples.Load())
+	t.Logf("strings=%d samples=%d", head.strings.NumRows(), head.totalSamples.Load())
 }
 
 func BenchmarkHeadIngestProfiles(t *testing.B) {

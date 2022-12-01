@@ -27,10 +27,10 @@ func TestSchemaMatch(t *testing.T) {
 
 	require.Equal(t, profilesStructSchema, profilesSchema.String())
 
-	stacktracesStructSchema := parquet.SchemaOf(&storedStacktrace{})
+	stacktracesStructSchema := parquet.SchemaOf(&Stacktrace{})
 	require.Equal(t, strings.Replace(stacktracesStructSchema.String(), "message storedStacktrace", "message Stacktrace", 1), stacktracesSchema.String())
 
-	stringsStructSchema := parquet.SchemaOf(&StoredString{})
+	stringsStructSchema := parquet.SchemaOf(&String{})
 	require.Equal(t, strings.Replace(stringsStructSchema.String(), "message StoredString", "message String", 1), stringsSchema.String())
 }
 
@@ -58,8 +58,8 @@ func TestStacktracesRoundTrip(t *testing.T) {
 	assert.Equal(t, newStacktraces(), sRead)
 }
 
-func newStrings() []*StoredString {
-	return []*StoredString{
+func newStrings() []*String {
+	return []*String{
 		{String: ""},
 		{String: "foo"},
 		{String: "bar"},
@@ -71,7 +71,7 @@ func newStrings() []*StoredString {
 func TestStringsRoundTrip(t *testing.T) {
 	var (
 		s   = newStrings()
-		w   = &ReadWriter[*StoredString, *StringPersister]{}
+		w   = &ReadWriter[*String, *StringPersister]{}
 		buf bytes.Buffer
 	)
 

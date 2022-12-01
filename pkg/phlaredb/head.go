@@ -64,7 +64,7 @@ func (t idConversionTable) rewriteUint64(idx *uint64) {
 }
 
 type Models interface {
-	*schemav1.Profile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
+	schemav1.Profile | schemav1.Stacktrace | profilev1.Location | profilev1.Mapping | profilev1.Function | string | schemav1.String
 }
 
 // rewriter contains slices to rewrite the per profile reference into per head references.
@@ -77,17 +77,17 @@ type rewriter struct {
 }
 
 type Helper[M Models, K comparable] interface {
-	key(M) K
+	key(*M) K
 	addToRewriter(*rewriter, idConversionTable)
-	rewrite(*rewriter, M) error
+	rewrite(*rewriter, *M) error
 	// some Models contain their own IDs within the struct, this allows to set them and keep track of the preexisting ID. It should return the oldID that is supposed to be rewritten.
-	setID(existingSliceID uint64, newID uint64, element M) uint64
+	setID(existingSliceID uint64, newID uint64, element *M) uint64
 
 	// size returns a (rough estimation) of the size of a single element M
-	size(M) uint64
+	size(*M) uint64
 
 	// clone copies parts that are not optimally sized from protobuf parsing
-	clone(M) M
+	clone(*M) *M
 }
 
 type Table interface {
@@ -116,12 +116,12 @@ type Head struct {
 
 	index           *profilesIndex
 	parquetConfig   *ParquetConfig
-	strings         deduplicatingSlice[*schemav1.StoredString, string, *stringsHelper, *schemav1.StringPersister]
-	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
-	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
-	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
-	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
-	profiles        deduplicatingSlice[*schemav1.Profile, noKey, *profilesHelper, *schemav1.ProfilePersister]
+	strings         deduplicatingSlice[schemav1.String, string, *stringsHelper, *schemav1.StringPersister]
+	mappings        deduplicatingSlice[profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
+	functions       deduplicatingSlice[profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
+	locations       deduplicatingSlice[profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
+	stacktraces     deduplicatingSlice[schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
+	profiles        deduplicatingSlice[schemav1.Profile, noKey, *profilesHelper, *schemav1.ProfilePersister]
 	totalSamples    *atomic.Uint64
 	tables          []Table
 	delta           *deltaProfiles
@@ -285,7 +285,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	// create a rewriter state
 	rewrites := &rewriter{}
 
-	if err := h.strings.ingest(ctx, schemav1.StoredStringsFromStringSlice(p.StringTable), rewrites); err != nil {
+	if err := h.strings.ingest(ctx, schemav1.StringsFromStringSlice(p.StringTable), rewrites); err != nil {
 		return err
 	}
 
@@ -503,16 +503,16 @@ func (h *Head) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profil
 				existing.Value += s.Value
 				continue
 			}
-			locs := h.stacktraces.slice[s.StacktraceID].LocationIDs
+			locs := h.stacktraces.GetRowNum(s.StacktraceID).LocationIDs
 			fnIds := make([]int32, 0, 2*len(locs))
 			for _, loc := range locs {
-				for _, line := range h.locations.slice[loc].Line {
-					fnNameID := h.functions.slice[line.FunctionId].Name
+				for _, line := range h.locations.GetRowNum(loc).Line {
+					fnNameID := h.functions.GetRowNum(line.FunctionId).Name
 					pos, ok := functions[fnNameID]
 					if !ok {
 						functions[fnNameID] = len(names)
 						fnIds = append(fnIds, int32(len(names)))
-						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name].String)
+						names = append(names, h.strings.GetRowNum(uint64(h.functions.GetRowNum(line.FunctionId).Name)).String)
 						continue
 					}
 					fnIds = append(fnIds, int32(pos))
@@ -688,7 +688,7 @@ func (h *Head) Close() error {
 
 // Flush closes the head and writes data to disk
 func (h *Head) Flush(ctx context.Context) error {
-	if len(h.profiles.slice) == 0 {
+	if h.profiles.buffer.NumRows() == 0 {
 		level.Info(h.logger).Log("msg", "head empty - no block written")
 		return os.RemoveAll(h.headPath)
 	}

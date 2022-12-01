@@ -281,12 +281,12 @@ type singleBlockQuerier struct {
 	opened                bool
 	tsBoundaryPerRowGroup []minMax
 	index                 *index.Reader
-	strings               inMemoryparquetReader[*schemav1.StoredString, *schemav1.StringPersister]
-	functions             inMemoryparquetReader[*profilev1.Function, *schemav1.FunctionPersister]
-	locations             inMemoryparquetReader[*profilev1.Location, *schemav1.LocationPersister]
-	mappings              inMemoryparquetReader[*profilev1.Mapping, *schemav1.MappingPersister]
-	stacktraces           parquetReader[*schemav1.Stacktrace, *schemav1.StacktracePersister]
-	profiles              parquetReader[*schemav1.Profile, *schemav1.ProfilePersister]
+	strings               inMemoryparquetReader[schemav1.String, *schemav1.StringPersister]
+	functions             inMemoryparquetReader[profilev1.Function, *schemav1.FunctionPersister]
+	locations             inMemoryparquetReader[profilev1.Location, *schemav1.LocationPersister]
+	mappings              inMemoryparquetReader[profilev1.Mapping, *schemav1.MappingPersister]
+	stacktraces           parquetReader[schemav1.Stacktrace, *schemav1.StacktracePersister]
+	profiles              parquetReader[schemav1.Profile, *schemav1.ProfilePersister]
 }
 
 func newSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobjstore.BucketReader, meta *block.Meta) *singleBlockQuerier {

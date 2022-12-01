@@ -12,7 +12,7 @@ func (t stringConversionTable) rewrite(idx *int64) {
 
 type stringsHelper struct{}
 
-func (*stringsHelper) key(s *schemav1.StoredString) string {
+func (*stringsHelper) key(s *schemav1.String) string {
 	return s.String
 }
 
@@ -30,20 +30,20 @@ func (*stringsHelper) addToRewriter(r *rewriter, m idConversionTable) {
 	}
 }
 
-func (*stringsHelper) rewrite(*rewriter, *schemav1.StoredString) error {
+func (*stringsHelper) rewrite(*rewriter, *schemav1.String) error {
 	return nil
 }
 
-func (*stringsHelper) size(s *schemav1.StoredString) uint64 {
+func (*stringsHelper) size(s *schemav1.String) uint64 {
 	return uint64(len(s.String)) + 8
 }
 
-func (*stringsHelper) setID(oldID, newID uint64, s *schemav1.StoredString) uint64 {
+func (*stringsHelper) setID(oldID, newID uint64, s *schemav1.String) uint64 {
 	return oldID
 }
 
-func (*stringsHelper) clone(s *schemav1.StoredString) *schemav1.StoredString {
-	return &schemav1.StoredString{
+func (*stringsHelper) clone(s *schemav1.String) *schemav1.String {
+	return &schemav1.String{
 		ID:     s.ID,
 		String: s.String,
 	}

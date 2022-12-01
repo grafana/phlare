@@ -12,10 +12,6 @@ var stacktracesSchema = parquet.NewSchema("Stacktrace", phlareparquet.Group{
 })
 
 type Stacktrace struct {
-	LocationIDs []uint64 `parquet:",list"`
-}
-
-type storedStacktrace struct {
 	ID          uint64   `parquet:",delta"`
 	LocationIDs []uint64 `parquet:",list"`
 }
@@ -38,17 +34,13 @@ func (*StacktracePersister) SortingColumns() parquet.SortingOption {
 }
 
 func (*StacktracePersister) Deconstruct(row parquet.Row, id uint64, s *Stacktrace) parquet.Row {
-	var stored storedStacktrace
-	stored.ID = id
-	stored.LocationIDs = s.LocationIDs
-	row = stacktracesSchema.Deconstruct(row, &stored)
-	return row
+	return stacktracesSchema.Deconstruct(row, &s)
 }
 
 func (*StacktracePersister) Reconstruct(row parquet.Row) (id uint64, s *Stacktrace, err error) {
-	var stored storedStacktrace
+	var stored Stacktrace
 	if err := stacktracesSchema.Reconstruct(&stored, row); err != nil {
 		return 0, nil, err
 	}
-	return stored.ID, &Stacktrace{LocationIDs: stored.LocationIDs}, nil
+	return stored.ID, &stored, nil
 }

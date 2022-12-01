@@ -15,7 +15,7 @@ import (
 
 func TestInMemoryReader(t *testing.T) {
 	path := t.TempDir()
-	st := deduplicatingSlice[*schemav1.StoredString, string, *stringsHelper, *schemav1.StringPersister]{}
+	st := deduplicatingSlice[schemav1.String, string, *stringsHelper, *schemav1.StringPersister]{}
 	require.NoError(t, st.Init(path, &ParquetConfig{
 		MaxBufferRowCount: defaultParquetConfig.MaxBufferRowCount / 1024,
 		MaxRowGroupBytes:  defaultParquetConfig.MaxRowGroupBytes / 1024,
@@ -24,14 +24,14 @@ func TestInMemoryReader(t *testing.T) {
 	rewrites := &rewriter{}
 	rgCount := 5
 	for i := 0; i < rgCount*st.cfg.MaxBufferRowCount; i++ {
-		require.NoError(t, st.ingest(context.Background(), []*schemav1.StoredString{&schemav1.StoredString{String: fmt.Sprintf("foobar %d", i)}}, rewrites))
+		require.NoError(t, st.ingest(context.Background(), []*schemav1.String{&schemav1.String{String: fmt.Sprintf("foobar %d", i)}}, rewrites))
 	}
 	numRows, numRg, err := st.Flush()
 	require.NoError(t, err)
 	require.Equal(t, uint64(rgCount*st.cfg.MaxBufferRowCount), numRows)
 	require.Equal(t, uint64(rgCount), numRg)
 	require.NoError(t, st.Close())
-	reader := inMemoryparquetReader[*schemav1.StoredString, *schemav1.StringPersister]{}
+	reader := inMemoryparquetReader[schemav1.String, *schemav1.StringPersister]{}
 	fs, err := filesystem.NewBucket(path)
 	require.NoError(t, err)
 
