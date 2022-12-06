@@ -674,7 +674,7 @@ func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []mi
 
 	// find minTS and maxTS
 	var columnTimeNanos *parquet.Column
-	for _, c := range q.profiles.file.Root().Columns() {
+	for _, c := range q.profiles.source.Columns() {
 		if c.Name() == "TimeNanos" {
 			columnTimeNanos = c
 			break
@@ -685,7 +685,7 @@ func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []mi
 	}
 
 	var (
-		rowGroups             = q.profiles.file.RowGroups()
+		rowGroups             = q.profiles.source.RowGroups()
 		tsBoundary            minMax
 		tsBoundaryPerRowGroup = make([]minMax, len(rowGroups))
 	)
@@ -791,11 +791,17 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 
 type parquetReader[M Models, P schemav1.PersisterName] struct {
 	persister P
-	file      *parquet.File
-	reader    phlareobjstore.ReaderAt
-	metrics   *blocksMetrics
+	source    query.Source
+	//	file      *parquet.File
+	// reader    phlareobjstore.ReaderAt
+	metrics *blocksMetrics
 }
 
+func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
+	return fmt.Errorf("not implemented")
+}
+
+/*
 func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
 	r.metrics = contextBlockMetrics(ctx)
 	filePath := r.persister.Name() + block.ParquetSuffix
@@ -823,11 +829,20 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjst
 
 	return nil
 }
+*/
+
+// newParquetReaderFromSource creates a new parquet reader from a source.
+func newParquetReaderFromSource[M Models, P schemav1.PersisterName](source query.Source) *parquetReader[M, P] {
+	return &parquetReader[M, P]{
+		source: source,
+	}
+}
 
 func (r *parquetReader[M, P]) Close() error {
-	if r.reader != nil {
-		return r.reader.Close()
-	}
+	// TODO: reimplement
+	//if r.reader != nil {
+	//	return r.reader.Close()
+	//}
 	return nil
 }
 
@@ -838,16 +853,16 @@ func (r *parquetReader[M, P]) relPath() string {
 func (r *parquetReader[M, P]) info() block.File {
 	return block.File{
 		Parquet: &block.ParquetFile{
-			NumRows:      uint64(r.file.NumRows()),
-			NumRowGroups: uint64(len(r.file.RowGroups())),
+			NumRows:      uint64(r.source.NumRows()),
+			NumRowGroups: uint64(len(r.source.RowGroups())),
 		},
-		SizeBytes: uint64(r.file.Size()),
+		SizeBytes: uint64(r.source.Size()),
 		RelPath:   r.relPath(),
 	}
 }
 
 func (r *parquetReader[M, P]) columnIter(ctx context.Context, columnName string, predicate query.Predicate, alias string) query.Iterator {
-	index, _ := query.GetColumnIndexByPath(r.file, columnName)
+	index, _ := query.GetColumnIndexByPath(r.source, columnName)
 	if index == -1 {
 		return query.NewErrIterator(fmt.Errorf("column '%s' not found in parquet file '%s'", columnName, r.relPath()))
 	}

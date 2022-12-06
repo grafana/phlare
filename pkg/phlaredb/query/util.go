@@ -6,7 +6,18 @@ import (
 	pq "github.com/segmentio/parquet-go"
 )
 
-func GetColumnIndexByPath(pf *pq.File, s string) (index, depth int) {
+type Source interface {
+	// Name() returns the name of the table.
+	Name() string
+	// Columns() returns the columns defintions.
+	Columns() []*pq.Column
+	// RowGroups() returns the current available row groups.
+	RowGroups() []pq.RowGroup
+	NumRows() int64
+	Size() int64
+}
+
+func GetColumnIndexByPath(source Source, s string) (index, depth int) {
 	colSelector := strings.Split(s, ".")
 	n := pf.Root()
 	for len(colSelector) > 0 {
