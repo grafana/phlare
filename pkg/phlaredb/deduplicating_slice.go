@@ -70,7 +70,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Init(path string, cfg *ParquetConfig) e
 	// initialize the buffer
 	s.buffer = parquet.NewGenericBuffer[*M](
 		s.persister.Schema(),
-		s.persister.SortingColumns(),
+		parquet.SortingRowGroupConfig(s.persister.SortingColumns()),
 		parquet.ColumnBufferCapacity(s.cfg.MaxBufferRowCount),
 	)
 

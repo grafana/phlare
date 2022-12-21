@@ -9,8 +9,9 @@ import (
 type Source interface {
 	// Name() returns the name of the table.
 	Name() string
+	Root() *pq.Column
 	// Columns() returns the columns defintions.
-	Columns() []*pq.Column
+	// Columns() []*pq.Column
 	// RowGroups() returns the current available row groups.
 	RowGroups() []pq.RowGroup
 	NumRows() int64
@@ -19,7 +20,7 @@ type Source interface {
 
 func GetColumnIndexByPath(source Source, s string) (index, depth int) {
 	colSelector := strings.Split(s, ".")
-	n := pf.Root()
+	n := source.Root()
 	for len(colSelector) > 0 {
 		n = n.Column(colSelector[0])
 		if n == nil {
@@ -33,7 +34,7 @@ func GetColumnIndexByPath(source Source, s string) (index, depth int) {
 	return n.Index(), depth
 }
 
-func HasColumn(pf *pq.File, s string) bool {
-	index, _ := GetColumnIndexByPath(pf, s)
+func HasColumn(source Source, s string) bool {
+	index, _ := GetColumnIndexByPath(source, s)
 	return index >= 0
 }

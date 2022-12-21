@@ -674,7 +674,7 @@ func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []mi
 
 	// find minTS and maxTS
 	var columnTimeNanos *parquet.Column
-	for _, c := range q.profiles.source.Columns() {
+	for _, c := range q.profiles.source.Root().Columns() {
 		if c.Name() == "TimeNanos" {
 			columnTimeNanos = c
 			break
@@ -867,16 +867,27 @@ func (r *parquetReader[M, P]) columnIter(ctx context.Context, columnName string,
 		return query.NewErrIterator(fmt.Errorf("column '%s' not found in parquet file '%s'", columnName, r.relPath()))
 	}
 	ctx = query.AddMetricsToContext(ctx, r.metrics.query)
-	return query.NewColumnIterator(ctx, r.file.RowGroups(), index, columnName, 1000, predicate, alias)
+	return query.NewColumnIterator(ctx, r.source.RowGroups(), index, columnName, 1000, predicate, alias)
 }
 
-func repeatedColumnIter[T any](ctx context.Context, f *parquet.File, columnName string, rows iter.Iterator[T]) iter.Iterator[*query.RepeatedRow[T]] {
-	index, _ := query.GetColumnIndexByPath(f, columnName)
+/*
+type parquetFileSourceWrapper struct {
+	*parquet.File
+}
+
+func (w *parquetFileSourceWrapper) Name() string {
+	panic("implement me")
+	return "todo"
+}
+*/
+
+func repeatedColumnIter[T any](ctx context.Context, source query.Source, columnName string, rows iter.Iterator[T]) iter.Iterator[*query.RepeatedRow[T]] {
+	index, _ := query.GetColumnIndexByPath(source, columnName)
 	if index == -1 {
 		return iter.NewErrIterator[*query.RepeatedRow[T]](fmt.Errorf("column '%s' not found in parquet file", columnName))
 	}
 	opentracing.SpanFromContext(ctx).SetTag("columnName", columnName)
-	return query.NewRepeatedPageIterator(ctx, rows, f.RowGroups(), index, 1e4)
+	return query.NewRepeatedPageIterator(ctx, rows, source.RowGroups(), index, 1e4)
 }
 
 type retrieveRowIterator[M any] struct {
@@ -894,7 +905,7 @@ type retrieveRowIterator[M any] struct {
 
 func (r *parquetReader[M, P]) retrieveRows(ctx context.Context, rowNumIterator iter.Iterator[int64]) iter.Iterator[ResultWithRowNum[M]] {
 	return &retrieveRowIterator[M]{
-		rowGroups:      r.file.RowGroups(),
+		rowGroups:      r.source.RowGroups(),
 		row:            make([]M, 1),
 		rowNumIterator: rowNumIterator,
 	}

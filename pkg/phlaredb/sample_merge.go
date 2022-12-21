@@ -25,8 +25,8 @@ func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.I
 		return nil, err
 	}
 	it := query.NewMultiRepeatedPageIterator(
-		repeatedColumnIter(ctx, b.profiles.file, "Samples.list.element.StacktraceID", multiRows[0]),
-		repeatedColumnIter(ctx, b.profiles.file, "Samples.list.element.Value", multiRows[1]),
+		repeatedColumnIter(ctx, b.profiles.source, "Samples.list.element.StacktraceID", multiRows[0]),
+		repeatedColumnIter(ctx, b.profiles.source, "Samples.list.element.Value", multiRows[1]),
 	)
 	defer it.Close()
 
@@ -61,7 +61,7 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 
 	var (
 		locationIDs = newUniqueIDs[struct{}]()
-		stacktraces = repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
+		stacktraces = repeatedColumnIter(ctx, b.stacktraces.source, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
 	)
 
 	for stacktraces.Next() {
@@ -181,7 +181,7 @@ func (b *singleBlockQuerier) MergeByLabels(ctx context.Context, rows iter.Iterat
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByLabels - Block")
 	defer sp.Finish()
 
-	it := repeatedColumnIter(ctx, b.profiles.file, "Samples.list.element.Value", rows)
+	it := repeatedColumnIter(ctx, b.profiles.source, "Samples.list.element.Value", rows)
 
 	defer it.Close()
 

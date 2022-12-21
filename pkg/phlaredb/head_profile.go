@@ -29,7 +29,7 @@ func newProfileHead() *profileHead {
 	h := &profileHead{
 		ch: make(chan *schemav1.Profile, 32),
 	}
-	h.buffer = parquet.NewGenericBuffer[*schemav1.Profile](h.persister.Schema(), h.persister.SortingColumns())
+	h.buffer = parquet.NewGenericBuffer[*schemav1.Profile](h.persister.Schema(), parquet.SortingRowGroupConfig(h.persister.SortingColumns()))
 
 	return h
 }
