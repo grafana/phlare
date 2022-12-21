@@ -797,11 +797,14 @@ type parquetReader[M Models, P schemav1.PersisterName] struct {
 	metrics *blocksMetrics
 }
 
-func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
-	return fmt.Errorf("not implemented")
+type parquetFileSourceWrapper struct {
+	*parquet.File
 }
 
-/*
+func (w *parquetFileSourceWrapper) Name() string {
+	return w.File.Schema().Name()
+}
+
 func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
 	r.metrics = contextBlockMetrics(ctx)
 	filePath := r.persister.Name() + block.ParquetSuffix
@@ -810,7 +813,6 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjst
 	if err != nil {
 		return errors.Wrapf(err, "opening file '%s'", filePath)
 	}
-	r.reader = ra
 
 	// first try to open file, this is required otherwise OpenFile panics
 	parquetFile, err := parquet.OpenFile(ra, ra.Size(), parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
@@ -822,14 +824,14 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjst
 	}
 
 	// now open it for real
-	r.file, err = parquet.OpenFile(ra, ra.Size())
+	file, err := parquet.OpenFile(ra, ra.Size())
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
 
+	r.source = &parquetFileSourceWrapper{file}
 	return nil
 }
-*/
 
 // newParquetReaderFromSource creates a new parquet reader from a source.
 func newParquetReaderFromSource[M Models, P schemav1.PersisterName](source query.Source) *parquetReader[M, P] {
@@ -869,17 +871,6 @@ func (r *parquetReader[M, P]) columnIter(ctx context.Context, columnName string,
 	ctx = query.AddMetricsToContext(ctx, r.metrics.query)
 	return query.NewColumnIterator(ctx, r.source.RowGroups(), index, columnName, 1000, predicate, alias)
 }
-
-/*
-type parquetFileSourceWrapper struct {
-	*parquet.File
-}
-
-func (w *parquetFileSourceWrapper) Name() string {
-	panic("implement me")
-	return "todo"
-}
-*/
 
 func repeatedColumnIter[T any](ctx context.Context, source query.Source, columnName string, rows iter.Iterator[T]) iter.Iterator[*query.RepeatedRow[T]] {
 	index, _ := query.GetColumnIndexByPath(source, columnName)
