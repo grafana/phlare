@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -40,6 +41,8 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 	buffer      *parquet.GenericBuffer[*M]
 	appendCh    chan *appendElems[M]
 	rowsFlushed int
+
+	wg sync.WaitGroup
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Name() string {
@@ -75,13 +78,15 @@ func (s *deduplicatingSlice[M, K, H, P]) Init(path string, cfg *ParquetConfig) e
 	)
 
 	// start goroutine for ingest
-	// TODO: Should be shutdown properly at exist
+	s.wg.Add(1)
 	go s.appendLoop()
 
 	return nil
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Close() error {
+	close(s.appendCh)
+
 	if err := s.writer.Close(); err != nil {
 		return errors.Wrap(err, "closing parquet writer")
 	}
@@ -89,6 +94,8 @@ func (s *deduplicatingSlice[M, K, H, P]) Close() error {
 	if err := s.file.Close(); err != nil {
 		return errors.Wrap(err, "closing parquet file")
 	}
+
+	s.wg.Wait()
 
 	return nil
 }
@@ -116,60 +123,20 @@ func (s *deduplicatingSlice[M, K, H, P]) maxRowsPerRowGroup() int {
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
-	return 0, 0, err
-	/*
-		s.lock.Lock()
-		defer s.lock.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-		var (
-			maxRows = s.maxRowsPerRowGroup()
+	// TODO: Ensure we write multiple row groups
 
-			rowGroupsFlushed int
-			rowsFlushed      int
+	sort.Sort(s.buffer)
 
-		for {
-			// how many rows of the head still in need of flushing
-			rowsToFlush := len(s.slice) - s.rowsFlushed
+	n, err := s.writer.WriteRowGroup(s.buffer)
+	if err != nil {
+		return 0, 0, err
+	}
+	s.buffer.Reset()
 
-			if rowsToFlush == 0 {
-				break
-			}
-
-			// cap max row size by bytes
-			if rowsToFlush > maxRows {
-				rowsToFlush = maxRows
-			}
-			// cap max row size by buffer
-			if rowsToFlush > s.cfg.MaxBufferRowCount {
-				rowsToFlush = s.cfg.MaxBufferRowCount
-
-			}
-
-			rows := make([]parquet.Row, rowsToFlush)
-			var slicePos int
-			for pos := range rows {
-				slicePos = pos + s.rowsFlushed
-				rows[pos] = s.persister.Deconstruct(rows[pos], uint64(slicePos), s.slice[slicePos])
-			}
-
-			s.buffer.Reset()
-			if _, err := s.buffer.WriteRows(rows); err != nil {
-				return 0, 0, err
-			}
-
-			sort.Sort(s.buffer)
-
-			if _, err := s.writer.WriteRowGroup(s.buffer); err != nil {
-				return 0, 0, err
-			}
-
-			s.rowsFlushed += rowsToFlush
-			rowsFlushed += rowsToFlush
-			rowGroupsFlushed++
-		}
-
-		return uint64(rowsFlushed), uint64(rowGroupsFlushed), nil
-	*/
+	return uint64(n), uint64(1), nil
 }
 
 // TODO: Remove me, bad idea
@@ -250,45 +217,52 @@ func (s *deduplicatingSlice[M, K, H, P]) filterAlreadyExistingElems(elems *appen
 
 // append loop is used to serialize the append and avoid locking
 func (s *deduplicatingSlice[M, K, H, P]) appendLoop() {
-	// TODO: Sort out graceful shutdown.
+	defer s.wg.Done()
 
-	for elems := range s.appendCh {
-		if s.isDeduplicating() {
-			s.filterAlreadyExistingElems(elems)
-		}
-
-		// all elements already exist
-		if len(elems.elems) == 0 {
-			close(elems.done)
-			continue
-		}
-
-		numRows := s.buffer.NumRows()
-
-		// append rows to buffer
-		_, err := s.buffer.Write(elems.elems)
-		if err != nil {
-			elems.err = err
-			close(elems.done)
-			continue
-		}
-
-		// update hashmap and add rewrite information
-		for pos := range elems.elems {
-			k := s.helper.key(elems.elems[pos])
-			var (
-				previousPos = uint64(pos)
-				newPos      = numRows + int64(pos)
-			)
-			s.lookup[k] = newPos
-			if s.isDeduplicating() {
-				previousPos = uint64(elems.originalPos[pos])
+	for {
+		select {
+		case elems, open := <-s.appendCh:
+			if !open {
+				return
 			}
-			elems.rewritingMap[int64(s.helper.setID(previousPos, uint64(newPos), elems.elems[pos]))] = newPos
-		}
 
-		// close done channel
-		close(elems.done)
+			if s.isDeduplicating() {
+				s.filterAlreadyExistingElems(elems)
+			}
+
+			// all elements already exist
+			if len(elems.elems) == 0 {
+				close(elems.done)
+				continue
+			}
+
+			numRows := s.buffer.NumRows()
+
+			// append rows to buffer
+			_, err := s.buffer.Write(elems.elems)
+			if err != nil {
+				elems.err = err
+				close(elems.done)
+				continue
+			}
+
+			// update hashmap and add rewrite information
+			for pos := range elems.elems {
+				k := s.helper.key(elems.elems[pos])
+				var (
+					previousPos = uint64(pos)
+					newPos      = numRows + int64(pos)
+				)
+				s.lookup[k] = newPos
+				if s.isDeduplicating() {
+					previousPos = uint64(elems.originalPos[pos])
+				}
+				elems.rewritingMap[int64(s.helper.setID(previousPos, uint64(newPos), elems.elems[pos]))] = newPos
+			}
+
+			// close done channel
+			close(elems.done)
+		}
 	}
 
 }

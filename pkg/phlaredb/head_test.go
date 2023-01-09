@@ -210,7 +210,7 @@ func TestHeadIngestFunctions(t *testing.T) {
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New()))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBaz(), uuid.New()))
 
-	require.Equal(t, 3, head.functions.buffer.NumRows())
+	require.Equal(t, int64(3), head.functions.buffer.NumRows())
 	helper := &functionsHelper{}
 	assert.Equal(t, functionsKey{Name: 3}, helper.key(head.functions.GetRowNum(0)))
 	assert.Equal(t, functionsKey{Name: 4}, helper.key(head.functions.GetRowNum(1)))

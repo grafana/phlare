@@ -675,6 +675,7 @@ func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesR
 
 // Flush closes the head and writes data to disk
 func (h *Head) Close() error {
+	fmt.Println("Close called")
 	close(h.stopCh)
 
 	var merr multierror.MultiError
