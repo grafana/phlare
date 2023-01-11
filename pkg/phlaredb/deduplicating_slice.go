@@ -36,13 +36,32 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 
 	file   *os.File
 	cfg    *ParquetConfig
-	writer *parquet.Writer
+	writer *parquet.GenericWriter[M]
 
 	buffer      *parquet.GenericBuffer[*M]
 	appendCh    chan *appendElems[M]
 	rowsFlushed int
+	rgDivider   RowGroupDivider
 
 	wg sync.WaitGroup
+}
+
+type RowGroupDivider interface {
+	IsRowGroupFull(rows uint64, bytes uint64) bool
+}
+
+type singleRowGroup struct{}
+
+func (_ *singleRowGroup) IsRowGroupFull(_, _ uint64) bool {
+	return false
+}
+
+type splitRowGroupsByByteSize struct {
+	maxRowGroupBytes uint64
+}
+
+func (d *splitRowGroupsByByteSize) IsRowGroupFull(_, size uint64) bool {
+	return d.maxRowGroupBytes < size
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Name() string {
@@ -62,7 +81,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Init(path string, cfg *ParquetConfig) e
 	s.file = file
 
 	// TODO: Reuse parquet.Writer beyond life time of the head.
-	s.writer = parquet.NewWriter(file, s.persister.Schema(),
+	s.writer = parquet.NewGenericWriter[M](file, s.persister.Schema(),
 		parquet.ColumnPageBuffers(parquet.NewFileBufferPool(os.TempDir(), "phlaredb-parquet-buffers*")),
 		parquet.CreatedBy("github.com/grafana/phlare/", build.Version, build.Revision),
 	)
@@ -262,6 +281,16 @@ func (s *deduplicatingSlice[M, K, H, P]) appendLoop() {
 
 			// close done channel
 			close(elems.done)
+
+			// check if row group is now considered as full
+			if s.cfg.MaxRowGroupBytes > 0 && uint64(s.buffer.Size()) >= s.cfg.MaxRowGroupBytes {
+				// TODO: Implement write to disk
+			}
+
+			// check if row group has too many rows
+			if s.cfg.MaxBufferRowCount > 0 && uint64(s.buffer.NumRows()) >= s.cfg.MaxBufferRowCount {
+				// TODO: Write rowgroup to disk
+			}
 		}
 	}
 
