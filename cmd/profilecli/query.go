@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log/level"
+	gprofile "github.com/google/pprof/profile"
 	"github.com/k0kubun/pp/v3"
 	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
@@ -22,6 +24,7 @@ import (
 
 const (
 	outputConsole = "console"
+	outputRaw     = "raw"
 	outputPprof   = "pprof="
 )
 
@@ -105,7 +108,7 @@ func addQueryParams(queryCmd flagger) *queryParams {
 	return params
 }
 
-func queryMerge(ctx context.Context, params *queryParams, output string) error {
+func queryMerge(ctx context.Context, params *queryParams, outputFlag string) error {
 	from, to, err := params.parseFromTo()
 	if err != nil {
 		return err
@@ -126,21 +129,42 @@ func queryMerge(ctx context.Context, params *queryParams, output string) error {
 		return errors.Wrap(err, "failed to query")
 	}
 
-	if output == outputConsole {
-		mypp := pp.New()
-		mypp.SetColoringEnabled(isatty.IsTerminal(os.Stdout.Fd()))
-		mypp.SetExportedOnly(true)
-		mypp.Print(resp.Msg)
-		return nil
-	}
-	if strings.HasPrefix(output, outputPprof) {
-		filePath := strings.TrimPrefix(output, outputPprof)
+	mypp := pp.New()
+	mypp.SetColoringEnabled(isatty.IsTerminal(os.Stdout.Fd()))
+	mypp.SetExportedOnly(true)
+
+	if outputFlag == outputConsole {
 		buf, err := resp.Msg.MarshalVT()
 		if err != nil {
 			return errors.Wrap(err, "failed to marshal protobuf")
 		}
 
-		os.WriteFile(filePath, buf, 0644)
+		p, err := gprofile.Parse(bytes.NewReader(buf))
+		if err != nil {
+			return errors.Wrap(err, "failed to parse profile")
+		}
+
+		fmt.Fprintln(output(ctx), p.String())
+		return nil
+
+	}
+
+	if outputFlag == outputRaw {
+		mypp.Print(resp.Msg)
+		return nil
+	}
+
+	if strings.HasPrefix(outputFlag, outputPprof) {
+		filePath := strings.TrimPrefix(outputFlag, outputPprof)
+		if filePath == "" {
+			return errors.New("no file path specified after pprof=")
+		}
+		buf, err := resp.Msg.MarshalVT()
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal protobuf")
+		}
+
+		err = os.WriteFile(filePath, buf, 0644)
 		if err != nil {
 			return errors.Wrap(err, "failed to write pprof")
 		}
@@ -148,5 +172,5 @@ func queryMerge(ctx context.Context, params *queryParams, output string) error {
 		return nil
 	}
 
-	return errors.Errorf("unknown output %s", output)
+	return errors.Errorf("unknown output %s", outputFlag)
 }

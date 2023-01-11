@@ -50,7 +50,7 @@ func main() {
 
 	queryCmd := app.Command("query", "Query profile store.")
 	queryParams := addQueryParams(queryCmd)
-	queryOutput := queryCmd.Flag("output", "How to output the result, examples: console pprof=./my.pprof").Default("console").String()
+	queryOutput := queryCmd.Flag("output", "How to output the result, examples: console, raw, pprof=./my.pprof").Default("console").String()
 	queryMergeCmd := queryCmd.Command("merge", "Request merged profile.")
 
 	// parse command line arguments
