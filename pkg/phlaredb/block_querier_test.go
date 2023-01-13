@@ -15,12 +15,12 @@ import (
 
 func TestInMemoryReader(t *testing.T) {
 	path := t.TempDir()
-	st := deduplicatingSlice[schemav1.String, string, *stringsHelper, *schemav1.StringPersister]{}
-	require.NoError(t, st.Init(path, &ParquetConfig{
+	ctx := context.Background()
+	st := newStringsStore(ctx, &ParquetConfig{
 		MaxBufferRowCount: defaultParquetConfig.MaxBufferRowCount / 1024,
 		MaxRowGroupBytes:  defaultParquetConfig.MaxRowGroupBytes / 1024,
 		MaxBlockBytes:     defaultParquetConfig.MaxBlockBytes,
-	}))
+	})
 	rewrites := &rewriter{}
 	rgCount := 5
 	for i := 0; i < rgCount*st.cfg.MaxBufferRowCount; i++ {

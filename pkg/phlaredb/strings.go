@@ -1,6 +1,10 @@
 package phlaredb
 
-import schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+import (
+	"context"
+
+	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+)
 
 type stringConversionTable []int64
 
@@ -8,6 +12,10 @@ func (t stringConversionTable) rewrite(idx *int64) {
 	originalValue := int(*idx)
 	newValue := t[originalValue]
 	*idx = newValue
+}
+
+func newStringsStore(phlarectx context.Context, cfg *ParquetConfig) *deduplicatingStore[schemav1.String, string, *schemav1.StringPersister] {
+	return newDeduplicatingStore[schemav1.String, string, *schemav1.StringPersister](phlarectx, cfg, &stringsHelper{})
 }
 
 type stringsHelper struct{}

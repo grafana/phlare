@@ -76,8 +76,7 @@ type rewriter struct {
 	stacktraces idConversionTable
 }
 
-type Helper[M Models, K comparable] interface {
-	key(*M) K
+type storeHelper[M Models] interface {
 	addToRewriter(*rewriter, idConversionTable)
 	rewrite(*rewriter, *M) error
 	// some Models contain their own IDs within the struct, this allows to set them and keep track of the preexisting ID. It should return the oldID that is supposed to be rewritten.
@@ -90,10 +89,15 @@ type Helper[M Models, K comparable] interface {
 	clone(*M) *M
 }
 
+type deduplicatingStoreHelper[M Models, K comparable] interface {
+	storeHelper[M]
+	key(*M) K
+}
+
 type Table interface {
 	Name() string
 	Size() uint64
-	Init(path string, cfg *ParquetConfig) error
+	Reset(path string) error
 	Flush() (numRows uint64, numRowGroups uint64, err error)
 	Close() error
 }
@@ -116,12 +120,12 @@ type Head struct {
 
 	index           *profilesIndex
 	parquetConfig   *ParquetConfig
-	strings         deduplicatingSlice[schemav1.String, string, *stringsHelper, *schemav1.StringPersister]
-	mappings        deduplicatingSlice[profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
-	functions       deduplicatingSlice[profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
-	locations       deduplicatingSlice[profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
-	stacktraces     deduplicatingSlice[schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
-	profiles        deduplicatingSlice[schemav1.Profile, noKey, *profilesHelper, *schemav1.ProfilePersister]
+	strings         *deduplicatingStore[schemav1.String, string, *schemav1.StringPersister]
+	mappings        *deduplicatingStore[profilev1.Mapping, mappingsKey, *schemav1.MappingPersister]
+	functions       *deduplicatingStore[profilev1.Function, functionsKey, *schemav1.FunctionPersister]
+	locations       *deduplicatingStore[profilev1.Location, locationsKey, *schemav1.LocationPersister]
+	stacktraces     *deduplicatingStore[schemav1.Stacktrace, stacktracesKey, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
+	profiles        *deduplicatingSlice[schemav1.Profile, *schemav1.ProfilePersister]                       // *profilesStore
 	totalSamples    *atomic.Uint64
 	tables          []Table
 	delta           *deltaProfiles
@@ -161,18 +165,20 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 		return nil, err
 	}
 
+	h.strings = newStringsStore(phlarectx, h.parquetConfig)
+	//h.mappings = newStringsStore(phlarectx, h.parquetConfig)
+	//h.functions = newStringsStore(phlarectx, h.parquetConfig)
+	//h.locations = newStringsStore(phlarectx, h.parquetConfig)
+	//h.stacktraces = newStringsStore(phlarectx, h.parquetConfig)
+	h.profiles = newProfilesStore(phlarectx, h.parquetConfig)
+
 	h.tables = []Table{
-		&h.strings,
-		&h.mappings,
-		&h.functions,
-		&h.locations,
-		&h.stacktraces,
-		&h.profiles,
-	}
-	for _, t := range h.tables {
-		if err := t.Init(h.headPath, h.parquetConfig); err != nil {
-			return nil, err
-		}
+		h.strings,
+		h.mappings,
+		h.functions,
+		h.locations,
+		h.stacktraces,
+		h.profiles,
 	}
 
 	index, err := newProfileIndex(32, h.metrics)

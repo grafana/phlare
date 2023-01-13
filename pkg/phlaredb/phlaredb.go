@@ -52,9 +52,14 @@ type Config struct {
 }
 
 type ParquetConfig struct {
+	// This is the maxium row count in a row group before a new row group is created.
 	MaxBufferRowCount int
-	MaxRowGroupBytes  uint64 // This is the maximum row group size in bytes that the raw data uses in memory.
-	MaxBlockBytes     uint64 // This is the size of all parquet tables in memory after which a new block is cut
+	// This is the maximum row group size in bytes that the raw data uses in memory.
+	MaxRowGroupBytes uint64
+	// This is the size of all parquet tables in memory after which a new block is cut
+	MaxBlockBytes uint64
+	// This is a flag that determines if each row group should be flushed to disk after it is considered as full
+	FlushEachRowGroupToDisk *bool
 }
 
 func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
