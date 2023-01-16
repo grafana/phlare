@@ -56,9 +56,11 @@ type store[M Models, P schemav1.Persister[*M]] struct {
 	lock      sync.RWMutex
 	persister P
 
-	path         string
-	rowsFlushed  uint64
-	numRowGroups uint64
+	path               string
+	rowsFlushed        uint64
+	rowGroupBoundaries []uint64
+	// buffer size
+	bufferByteLastBoundary uint64
 }
 
 func newStore[M Models, P schemav1.Persister[*M]](phlarectx context.Context, cfg *ParquetConfig, helper storeHelper[M]) *store[M, P] {
@@ -111,7 +113,7 @@ func (s *store[M, P]) Reset(path string) error {
 	s.appendCh = make(chan *appendElems[M], 32)
 
 	s.rowsFlushed = 0
-	s.numRowGroups = 0
+	s.rowGroupBoundaries = s.rowGroupBoundaries[:]
 	s.buffer.Reset()
 
 	// start goroutine for ingest
@@ -228,7 +230,7 @@ func (s *store[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
 
 	level.Debug(s.logger).Log("msg", "aggregated row group segment into block", "path", path, "segments", len(rowGroups))
 
-	return uint64(s.rowsFlushed), uint64(s.numRowGroups), nil
+	return uint64(s.rowsFlushed), uint64(len(s.rowGroupBoundaries)), nil
 }
 
 // TODO: Remove me, bad idea
@@ -360,6 +362,23 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 
 }
 
+// only flush to disk if explicitly enabled
+func (s *store[M, P]) hasFlushRowGroupsToDisk() bool {
+	if s.cfg != nil && s.cfg.FlushEachRowGroupToDisk != nil {
+		return *s.cfg.FlushEachRowGroupToDisk
+	}
+	return false
+}
+
+// cutRowGroups gets called, when a patrticular row group has been finished, depending on the store configuration it will flush a rowGroup to disk or just mark it within the buffer
+func (s *store[M, P]) cutRowGroup() (n uint64, err error) {
+	if !s.cfg.FlushEachRowGroupToDisk {
+		s.
+	}
+
+	return 0, nil
+}
+
 func (s *store[M, P]) writeRowGroup() (n uint64, err error) {
 	// exit when buffer is empty
 	if s.buffer.NumRows() == 0 {
@@ -390,8 +409,9 @@ func (s *store[M, P]) writeRowGroup() (n uint64, err error) {
 		return 0, err
 	}
 
+	s.rowGroupBoundaries = append(s.rowGroupBoundaries, s.rowsFlushed)
 	s.rowsFlushed += n
-	s.numRowGroups += 1
+	s.bufferByteLastBoundary = uint64(s.buffer.Size())
 	s.buffer.Reset()
 
 	return n, nil
