@@ -314,7 +314,6 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 			var (
 				previousID uint64 // previous id of the element
 				newID      uint64 // new store id after potential deduplication
-				numRows    = uint64(s.buffer.NumRows())
 			)
 			for pos := range elems.elems {
 				// set previous id of the element
@@ -324,7 +323,7 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 				} else {
 					previousID = uint64(pos)
 				}
-				newID = numRows + uint64(pos) // TODO: Not correct with disk written rowgroups
+				newID = s.NumRows() + uint64(pos)
 
 				// this updates a potential index
 				s.updateIndex(elems.elems[pos], newID)
@@ -429,5 +428,5 @@ func (s *store[M, P]) ingest(ctx context.Context, elems []*M, rewriter *rewriter
 }
 
 func (s *store[M, P]) NumRows() uint64 {
-	return uint64(s.buffer.NumRows())
+	return uint64(s.buffer.NumRows()) + s.rowsFlushed
 }
