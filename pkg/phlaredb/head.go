@@ -125,7 +125,7 @@ type Head struct {
 	functions       *deduplicatingStore[profilev1.Function, functionsKey, *schemav1.FunctionPersister]
 	locations       *deduplicatingStore[profilev1.Location, locationsKey, *schemav1.LocationPersister]
 	stacktraces     *deduplicatingStore[schemav1.Stacktrace, stacktracesKey, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
-	profiles        *deduplicatingSlice[schemav1.Profile, *schemav1.ProfilePersister]                       // *profilesStore
+	profiles        *store[schemav1.Profile, *schemav1.ProfilePersister]                                    // *profilesStore
 	totalSamples    *atomic.Uint64
 	tables          []Table
 	delta           *deltaProfiles

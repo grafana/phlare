@@ -10,9 +10,9 @@ func newDeduplicatingStore[M Models, K comparable, P schemav1.Persister[*M]](phl
 	baseStore := newStore[M, P](phlarectx, cfg, helper)
 
 	store := &deduplicatingStore[M, K, P]{
-		deduplicatingSlice: baseStore,
-		helper:             helper,
-		lookup:             make(map[K]int64),
+		store:  baseStore,
+		helper: helper,
+		lookup: make(map[K]int64),
 	}
 
 	// set hooks to the baseStore to do the actual deduplication
@@ -23,7 +23,7 @@ func newDeduplicatingStore[M Models, K comparable, P schemav1.Persister[*M]](phl
 }
 
 type deduplicatingStore[M Models, K comparable, P schemav1.Persister[*M]] struct {
-	*deduplicatingSlice[M, P]
+	*store[M, P]
 
 	lookup map[K]int64
 	helper deduplicatingStoreHelper[M, K]
@@ -49,7 +49,7 @@ func (s *deduplicatingStore[M, K, P]) Reset(path string) error {
 	s.lookup = make(map[K]int64)
 	s.lock.Unlock()
 
-	return s.deduplicatingSlice.Reset(path)
+	return s.store.Reset(path)
 
 }
 
@@ -59,8 +59,8 @@ func (s *deduplicatingStore[M, K, P]) setIndex(key K, pos int64) {
 	s.lookup[key] = pos
 }
 
-func (s *deduplicatingStore[M, K, P]) setIndexByElem(elem *M, pos int64) {
-	s.setIndex(s.helper.key(elem), pos)
+func (s *deduplicatingStore[M, K, P]) setIndexByElem(elem *M, pos uint64) {
+	s.setIndex(s.helper.key(elem), int64(pos))
 }
 
 func (s *deduplicatingStore[M, K, P]) getIndex(key K) (int64, bool) {

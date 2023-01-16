@@ -47,6 +47,7 @@ func (*stringsHelper) size(s *schemav1.String) uint64 {
 }
 
 func (*stringsHelper) setID(oldID, newID uint64, s *schemav1.String) uint64 {
+	s.ID = newID
 	return oldID
 }
 

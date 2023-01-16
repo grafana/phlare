@@ -35,7 +35,7 @@ var defaultParquetConfig = &ParquetConfig{
 	MaxBlockBytes:     10 * 128 * 1024 * 1024,
 }
 
-type deduplicatingSlice[M Models, P schemav1.Persister[*M]] struct {
+type store[M Models, P schemav1.Persister[*M]] struct {
 	logger log.Logger
 	cfg    *ParquetConfig
 	helper storeHelper[M]
@@ -50,7 +50,7 @@ type deduplicatingSlice[M Models, P schemav1.Persister[*M]] struct {
 	filter func(*appendElems[M])
 
 	// updateIndex is a hook which will be called synchronously once a new elemet gets added at the position pos
-	updateIndex func(elem *M, pos int64)
+	updateIndex func(elem *M, pos uint64)
 
 	wg        sync.WaitGroup
 	lock      sync.RWMutex
@@ -61,15 +61,15 @@ type deduplicatingSlice[M Models, P schemav1.Persister[*M]] struct {
 	numRowGroups uint64
 }
 
-func newStore[M Models, P schemav1.Persister[*M]](phlarectx context.Context, cfg *ParquetConfig, helper storeHelper[M]) *deduplicatingSlice[M, P] {
-	var s = &deduplicatingSlice[M, P]{
+func newStore[M Models, P schemav1.Persister[*M]](phlarectx context.Context, cfg *ParquetConfig, helper storeHelper[M]) *store[M, P] {
+	var s = &store[M, P]{
 		logger: phlarecontext.Logger(phlarectx),
 		cfg:    cfg,
 		helper: helper,
 
 		// initialize hooks with noop methods
 		filter:      func(*appendElems[M]) {},
-		updateIndex: func(*M, int64) {},
+		updateIndex: func(*M, uint64) {},
 	}
 
 	// initialize the buffer
@@ -89,15 +89,15 @@ func newStore[M Models, P schemav1.Persister[*M]](phlarectx context.Context, cfg
 	return s
 }
 
-func (s *deduplicatingSlice[M, P]) Name() string {
+func (s *store[M, P]) Name() string {
 	return s.persister.Name()
 }
 
-func (s *deduplicatingSlice[M, P]) Size() uint64 {
+func (s *store[M, P]) Size() uint64 {
 	return uint64(s.buffer.Size())
 }
 
-func (s *deduplicatingSlice[M, P]) Reset(path string) error {
+func (s *store[M, P]) Reset(path string) error {
 	// close previous iteration
 	if err := s.Close(); err != nil {
 		return err
@@ -121,7 +121,7 @@ func (s *deduplicatingSlice[M, P]) Reset(path string) error {
 	return nil
 }
 
-func (s *deduplicatingSlice[M, P]) Close() error {
+func (s *store[M, P]) Close() error {
 	// ask appendCh to close
 	s.lock.Lock()
 	if s.appendCh != nil {
@@ -135,7 +135,7 @@ func (s *deduplicatingSlice[M, P]) Close() error {
 	return nil
 }
 
-func (s *deduplicatingSlice[M, P]) offsetFromPath(p string) uint64 {
+func (s *store[M, P]) offsetFromPath(p string) uint64 {
 	p = filepath.Base(p)
 	p = strings.TrimPrefix(p, s.persister.Name()+".")
 	p = strings.TrimSuffix(p, block.ParquetSuffix)
@@ -176,7 +176,7 @@ func copyRowGroupsFromFile(path string, writer parquet.RowGroupWriter) error {
 	return nil
 }
 
-func (s *deduplicatingSlice[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
+func (s *store[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
 	// close ingest loop
 	if err := s.Close(); err != nil {
 		return 0, 0, err
@@ -232,7 +232,7 @@ func (s *deduplicatingSlice[M, P]) Flush() (numRows uint64, numRowGroups uint64,
 }
 
 // TODO: Remove me, bad idea
-func (s *deduplicatingSlice[M, P]) Slice() []*M {
+func (s *store[M, P]) Slice() []*M {
 	var (
 		mPtr   = make([]*M, s.buffer.Len())
 		mReal  = make([]M, s.buffer.Len())
@@ -253,7 +253,7 @@ func (s *deduplicatingSlice[M, P]) Slice() []*M {
 	return mPtr
 }
 
-func (s *deduplicatingSlice[M, P]) GetRowNum(rowNum uint64) *M {
+func (s *store[M, P]) GetRowNum(rowNum uint64) *M {
 	var (
 		m      M
 		row    = make([]parquet.Row, 1)
@@ -285,7 +285,7 @@ type appendElems[M Models] struct {
 }
 
 // append loop is used to serialize the append and avoid locking
-func (s *deduplicatingSlice[M, P]) appendLoop(ch chan *appendElems[M]) {
+func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 	defer s.wg.Done()
 
 	defer func() {
@@ -354,7 +354,7 @@ func (s *deduplicatingSlice[M, P]) appendLoop(ch chan *appendElems[M]) {
 
 }
 
-func (s *deduplicatingSlice[M, P]) writeRowGroup() (n uint64, err error) {
+func (s *store[M, P]) writeRowGroup() (n uint64, err error) {
 	// exit when buffer is empty
 	if s.buffer.NumRows() == 0 {
 		return 0, nil
@@ -391,7 +391,7 @@ func (s *deduplicatingSlice[M, P]) writeRowGroup() (n uint64, err error) {
 	return n, nil
 }
 
-func (s *deduplicatingSlice[M, P]) ingest(ctx context.Context, elems []*M, rewriter *rewriter) error {
+func (s *store[M, P]) ingest(ctx context.Context, elems []*M, rewriter *rewriter) error {
 	var appendElems = &appendElems[M]{
 		rewritingMap: make(map[int64]int64),
 		done:         make(chan struct{}),
@@ -421,6 +421,6 @@ func (s *deduplicatingSlice[M, P]) ingest(ctx context.Context, elems []*M, rewri
 	return nil
 }
 
-func (s *deduplicatingSlice[M, P]) NumRows() uint64 {
+func (s *store[M, P]) NumRows() uint64 {
 	return uint64(s.buffer.NumRows())
 }

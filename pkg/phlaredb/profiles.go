@@ -357,7 +357,7 @@ const (
 	sampleSize  = uint64(unsafe.Sizeof(schemav1.Sample{}))
 )
 
-func newProfilesStore(phlarectx context.Context, cfg *ParquetConfig) *deduplicatingSlice[schemav1.Profile, *schemav1.ProfilePersister] {
+func newProfilesStore(phlarectx context.Context, cfg *ParquetConfig) *store[schemav1.Profile, *schemav1.ProfilePersister] {
 	return newStore[schemav1.Profile, *schemav1.ProfilePersister](phlarectx, cfg, &profilesHelper{})
 }
 
