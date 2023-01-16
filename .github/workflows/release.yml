@@ -18,6 +18,8 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - name: Set env
+        run: echo "GIT_LAST_COMMIT_DATE=$(git log -1 --date=iso-strict --format=%cd)" >> $GITHUB_ENV
       - run: git fetch --force --tags
       - uses: actions/setup-go@v3
         with:
