@@ -1,12 +1,13 @@
 package phlaredb
 
 import (
+	"context"
 	"encoding/binary"
-	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
 
 	profilev1 "github.com/grafana/phlare/pkg/gen/google/v1"
+	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
 type locationsKey struct {
@@ -15,10 +16,9 @@ type locationsKey struct {
 	LinesHash uint64
 }
 
-const (
-	lineSize     = uint64(unsafe.Sizeof(profilev1.Line{}))
-	locationSize = uint64(unsafe.Sizeof(profilev1.Location{}))
-)
+func newLocationsStore(phlarectx context.Context, cfg *ParquetConfig) *deduplicatingStore[profilev1.Location, locationsKey, *schemav1.LocationPersister] {
+	return newDeduplicatingStore[profilev1.Location, locationsKey, *schemav1.LocationPersister](phlarectx, cfg, &locationsHelper{})
+}
 
 type locationsHelper struct{}
 
@@ -68,10 +68,6 @@ func (*locationsHelper) setID(_, newID uint64, l *profilev1.Location) uint64 {
 	oldID := l.Id
 	l.Id = newID
 	return oldID
-}
-
-func (*locationsHelper) size(l *profilev1.Location) uint64 {
-	return uint64(len(l.Line))*lineSize + locationSize
 }
 
 func (*locationsHelper) clone(l *profilev1.Location) *profilev1.Location {

@@ -82,9 +82,6 @@ type storeHelper[M Models] interface {
 	// some Models contain their own IDs within the struct, this allows to set them and keep track of the preexisting ID. It should return the oldID that is supposed to be rewritten.
 	setID(existingSliceID uint64, newID uint64, element *M) uint64
 
-	// size returns a (rough estimation) of the size of a single element M
-	size(*M) uint64
-
 	// clone copies parts that are not optimally sized from protobuf parsing
 	clone(*M) *M
 }
@@ -166,10 +163,10 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 	}
 
 	h.strings = newStringsStore(phlarectx, h.parquetConfig)
-	//h.mappings = newStringsStore(phlarectx, h.parquetConfig)
-	//h.functions = newStringsStore(phlarectx, h.parquetConfig)
-	//h.locations = newStringsStore(phlarectx, h.parquetConfig)
-	//h.stacktraces = newStringsStore(phlarectx, h.parquetConfig)
+	h.mappings = newMappingsStore(phlarectx, h.parquetConfig)
+	h.functions = newFunctionsStore(phlarectx, h.parquetConfig)
+	h.locations = newLocationsStore(phlarectx, h.parquetConfig)
+	h.stacktraces = newStacktracesStore(phlarectx, h.parquetConfig)
 	h.profiles = newProfilesStore(phlarectx, h.parquetConfig)
 
 	h.tables = []Table{

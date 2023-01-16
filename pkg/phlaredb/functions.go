@@ -1,10 +1,15 @@
 package phlaredb
 
 import (
-	"unsafe"
+	"context"
 
 	profilev1 "github.com/grafana/phlare/pkg/gen/google/v1"
+	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
+
+func newFunctionsStore(phlarectx context.Context, cfg *ParquetConfig) *deduplicatingStore[profilev1.Function, functionsKey, *schemav1.FunctionPersister] {
+	return newDeduplicatingStore[profilev1.Function, functionsKey, *schemav1.FunctionPersister](phlarectx, cfg, &functionsHelper{})
+}
 
 type functionsKey struct {
 	Name       int64
@@ -14,8 +19,6 @@ type functionsKey struct {
 }
 
 type functionsHelper struct{}
-
-const functionSize = uint64(unsafe.Sizeof(profilev1.Function{}))
 
 func (*functionsHelper) key(f *profilev1.Function) functionsKey {
 	return functionsKey{
@@ -41,9 +44,6 @@ func (*functionsHelper) setID(_, newID uint64, f *profilev1.Function) uint64 {
 	var oldID = f.Id
 	f.Id = newID
 	return oldID
-}
-func (*functionsHelper) size(_ *profilev1.Function) uint64 {
-	return functionSize
 }
 
 func (*functionsHelper) clone(f *profilev1.Function) *profilev1.Function {

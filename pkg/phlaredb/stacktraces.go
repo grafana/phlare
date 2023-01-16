@@ -1,17 +1,17 @@
 package phlaredb
 
 import (
+	"context"
 	"encoding/binary"
-	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
 
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
-const (
-	stacktraceSize = uint64(unsafe.Sizeof(schemav1.Stacktrace{}))
-)
+func newStacktracesStore(phlarectx context.Context, cfg *ParquetConfig) *deduplicatingStore[schemav1.Stacktrace, stacktracesKey, *schemav1.StacktracePersister] {
+	return newDeduplicatingStore[schemav1.Stacktrace, stacktracesKey, *schemav1.StacktracePersister](phlarectx, cfg, &stacktracesHelper{})
+}
 
 type stacktracesKey uint64
 
@@ -47,10 +47,6 @@ func (*stacktracesHelper) rewrite(r *rewriter, s *schemav1.Stacktrace) error {
 
 func (*stacktracesHelper) setID(oldID, newID uint64, s *schemav1.Stacktrace) uint64 {
 	return oldID
-}
-
-func (*stacktracesHelper) size(s *schemav1.Stacktrace) uint64 {
-	return stacktraceSize + uint64(len(s.LocationIDs)*8)
 }
 
 func (*stacktracesHelper) clone(s *schemav1.Stacktrace) *schemav1.Stacktrace {

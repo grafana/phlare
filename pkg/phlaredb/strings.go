@@ -20,10 +20,6 @@ func newStringsStore(phlarectx context.Context, cfg *ParquetConfig) *deduplicati
 
 type stringsHelper struct{}
 
-func (*stringsHelper) pool() *sync.Pool {
-	return s.String
-}
-
 func (*stringsHelper) key(s *schemav1.String) string {
 	return s.String
 }

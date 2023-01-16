@@ -372,8 +372,8 @@ func (s *store[M, P]) hasFlushRowGroupsToDisk() bool {
 
 // cutRowGroups gets called, when a patrticular row group has been finished, depending on the store configuration it will flush a rowGroup to disk or just mark it within the buffer
 func (s *store[M, P]) cutRowGroup() (n uint64, err error) {
-	if !s.cfg.FlushEachRowGroupToDisk {
-		s.
+	if !s.hasFlushRowGroupsToDisk() {
+		panic("todo")
 	}
 
 	return 0, nil
