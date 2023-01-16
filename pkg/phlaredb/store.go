@@ -279,7 +279,7 @@ func (s *store[M, P]) GetRowNum(rowNum uint64) *M {
 type appendElems[M Models] struct {
 	elems        []*M
 	rewritingMap map[int64]int64
-	originalPos  []int64
+	originalID   []int64
 	done         chan struct{}
 	err          error
 }
@@ -310,7 +310,31 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 				continue
 			}
 
-			numRows := s.buffer.NumRows()
+			// update previous and new IDs for all elements
+			var (
+				previousID uint64 // previous id of the element
+				newID      uint64 // new store id after potential deduplication
+				numRows    = uint64(s.buffer.NumRows())
+			)
+			for pos := range elems.elems {
+				// set previous id of the element
+				if len(elems.originalID) > 0 {
+					// incase of a filter the original pos is noted down in the append structure
+					previousID = uint64(elems.originalID[pos]) // TODO RENAME TO ID
+				} else {
+					previousID = uint64(pos)
+				}
+				newID = numRows + uint64(pos) // TODO: Not correct with disk written rowgroups
+
+				// this updates a potential index
+				s.updateIndex(elems.elems[pos], newID)
+
+				// update element itself
+				previousID = s.helper.setID(previousID, uint64(newID), elems.elems[pos])
+
+				// update rewrite information
+				elems.rewritingMap[int64(previousID)] = int64(newID)
+			}
 
 			// append rows to buffer
 			_, err := s.buffer.Write(elems.elems)
@@ -318,23 +342,6 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 				elems.err = err
 				close(elems.done)
 				continue
-			}
-
-			// update hashmap and add rewrite information
-			for pos := range elems.elems {
-				var (
-					previousPos = uint64(pos)
-					newPos      = numRows + int64(pos)
-				)
-
-				// prepare slices for updating a potential hashmap
-				s.updateIndex(elems.elems[pos], newPos)
-
-				// when elements get filter an original pos will keeping track of the originating reference
-				if len(elems.originalPos) > 0 {
-					previousPos = uint64(elems.originalPos[pos])
-				}
-				elems.rewritingMap[int64(s.helper.setID(previousPos, uint64(newPos), elems.elems[pos]))] = newPos
 			}
 
 			// close done channel
@@ -395,7 +402,7 @@ func (s *store[M, P]) ingest(ctx context.Context, elems []*M, rewriter *rewriter
 	var appendElems = &appendElems[M]{
 		rewritingMap: make(map[int64]int64),
 		done:         make(chan struct{}),
-		originalPos:  make([]int64, 0, len(elems)),
+		originalID:   make([]int64, 0, len(elems)),
 		elems:        elems,
 	}
 

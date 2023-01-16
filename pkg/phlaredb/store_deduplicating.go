@@ -35,13 +35,13 @@ func (s *deduplicatingStore[M, K, P]) filterAlreadyExistingElems(elems *appendEl
 		if posSlice, exists := s.getIndex(k); exists {
 			elems.rewritingMap[int64(s.helper.setID(uint64(pos), uint64(posSlice), elems.elems[pos]))] = posSlice
 		} else {
-			elems.elems[len(elems.originalPos)] = elems.elems[pos]
-			elems.originalPos = append(elems.originalPos, int64(pos))
+			elems.elems[len(elems.originalID)] = elems.elems[pos]
+			elems.originalID = append(elems.originalID, int64(pos))
 		}
 	}
 
 	// reset slice to only contain missing elements
-	elems.elems = elems.elems[:len(elems.originalPos)]
+	elems.elems = elems.elems[:len(elems.originalID)]
 }
 
 func (s *deduplicatingStore[M, K, P]) Reset(path string) error {
