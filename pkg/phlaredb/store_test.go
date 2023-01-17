@@ -98,3 +98,54 @@ func TestDeduplicatingStore_Ingestion(t *testing.T) {
 		})
 	}
 }
+
+func TestDeduplicatingStore_FlushRowGroupsToDisk(t *testing.T) {
+	var (
+		ctx   = testContext(t)
+		store = newStringsStore(ctx, defaultParquetConfig)
+	)
+
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+	}{
+		{
+			name:    "do not flush to disk",
+			enabled: false,
+		},
+		{
+			name:    "flush to disk",
+			enabled: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store.cfg = &ParquetConfig{
+				MaxRowGroupBytes:        12800000,
+				MaxBufferRowCount:       10,
+				FlushEachRowGroupToDisk: &tc.enabled,
+			}
+			path := t.TempDir()
+			store.Reset(path)
+
+			for i := 0; i < 100; i++ {
+				store.ingest(ctx, []*schemav1.String{stringWithID(i)}, &rewriter{})
+			}
+
+			// TODO List files here
+
+			// ensure the correct number of files are created
+			numRows, numRGs, err := store.Flush()
+
+			require.NoError(t, err)
+			assert.Equal(t, uint64(100), numRows)
+			assert.Equal(t, uint64(10), numRGs)
+
+			// list folder to ensure only aggregted block exists
+			files, err := os.ReadDir(path)
+			require.NoError(t, err)
+			require.Equal(t, []string{"strings.parquet"}, lo.Map(files, func(e os.DirEntry, _ int) string {
+				return e.Name()
+			}))
+		})
+	}
+}

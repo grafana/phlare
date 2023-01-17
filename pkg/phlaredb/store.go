@@ -59,6 +59,7 @@ type store[M Models, P schemav1.Persister[*M]] struct {
 	path               string
 	rowsFlushed        uint64
 	rowGroupBoundaries []uint64
+	rowGroups          []parquet.RowGroup
 	// buffer size
 	bufferByteLastBoundary uint64
 }
@@ -178,15 +179,10 @@ func copyRowGroupsFromFile(path string, writer parquet.RowGroupWriter) error {
 	return nil
 }
 
-func (s *store[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
-	// close ingest loop
-	if err := s.Close(); err != nil {
-		return 0, 0, err
-	}
-
-	// join row groups segments into single parquet file
-
+func (s *store[M, P]) joinRowGroupSegments(path string) (numRows uint64, numRowGroups uint64, err error) {
+	// Short cut if this is only a single written rowgroup
 	// find row group segments
+	// TODO: Use the boundary slice to find the files
 	rowGroups, err := filepath.Glob(filepath.Join(
 		s.path,
 		fmt.Sprintf(
@@ -201,11 +197,6 @@ func (s *store[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
 		return s.offsetFromPath(rowGroups[i]) < s.offsetFromPath(rowGroups[j])
 	})
 
-	// TODO: Ensure we write multiple row groups
-	path := filepath.Join(
-		s.path,
-		s.persister.Name()+block.ParquetSuffix,
-	)
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return 0, 0, err
@@ -231,6 +222,30 @@ func (s *store[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
 	level.Debug(s.logger).Log("msg", "aggregated row group segment into block", "path", path, "segments", len(rowGroups))
 
 	return uint64(s.rowsFlushed), uint64(len(s.rowGroupBoundaries)), nil
+}
+
+func (s *store[M, P]) Flush() (numRows uint64, numRowGroups uint64, err error) {
+	// close ingest loop
+	if err := s.Close(); err != nil {
+		return 0, 0, err
+	}
+
+	path := filepath.Join(
+		s.path,
+		s.persister.Name()+block.ParquetSuffix,
+	)
+
+	// if flushing of indivdiual row groups is enabled, join them up again
+	if s.hasFlushRowGroupsToDisk() {
+		return s.joinRowGroupSegments(path)
+	}
+
+	if _, err := s.cutRowGroup(); err != nil {
+		return 0, 0, err
+	}
+
+	return s.writeRowGroups(path, s.rowGroups)
+
 }
 
 // TODO: Remove me, bad idea
@@ -291,8 +306,8 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 	defer s.wg.Done()
 
 	defer func() {
-		if _, err := s.writeRowGroup(); err != nil {
-			level.Error(s.logger).Log("msg", "failed to write row group split", "err", err)
+		if _, err := s.cutRowGroup(); err != nil {
+			level.Error(s.logger).Log("msg", "cut row group", "err", err)
 		}
 	}()
 
@@ -350,10 +365,10 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 
 			// check if row group is now considered as full
 
-			if s.cfg.MaxRowGroupBytes > 0 && uint64(s.buffer.Size()) >= s.cfg.MaxRowGroupBytes || // has too many bytes
+			if s.cfg.MaxRowGroupBytes > 0 && (uint64(s.buffer.Size())-s.bufferByteLastBoundary) >= s.cfg.MaxRowGroupBytes || // has too many bytes
 				s.cfg.MaxBufferRowCount > 0 && int(s.buffer.NumRows()) >= s.cfg.MaxBufferRowCount { // has too many rows
-				if _, err := s.writeRowGroup(); err != nil {
-					level.Error(s.logger).Log("msg", "failed to write row group segment", "err", err)
+				if _, err := s.cutRowGroup(); err != nil {
+					level.Error(s.logger).Log("msg", "cut row group", "err", err)
 				}
 				continue
 			}
@@ -371,17 +386,26 @@ func (s *store[M, P]) hasFlushRowGroupsToDisk() bool {
 }
 
 // cutRowGroups gets called, when a patrticular row group has been finished, depending on the store configuration it will flush a rowGroup to disk or just mark it within the buffer
+// TODO: writeRowGroups asynchronously
 func (s *store[M, P]) cutRowGroup() (n uint64, err error) {
-	if !s.hasFlushRowGroupsToDisk() {
-		panic("todo")
+	// do nothing with empty buffer
+	bufferRowNums := s.buffer.NumRows()
+	if bufferRowNums == 0 {
+		return 0, nil
 	}
 
-	return 0, nil
-}
+	// sort the buffer
+	sort.Sort(s.buffer)
 
-func (s *store[M, P]) writeRowGroup() (n uint64, err error) {
-	// exit when buffer is empty
-	if s.buffer.NumRows() == 0 {
+	// if not flushing row groups to disk, markdown boundary
+	if !s.hasFlushRowGroupsToDisk() {
+		s.rowGroups = append(s.rowGroups, s.buffer)
+		// TODO: Recycle buffers using a buffer pool
+		s.buffer = parquet.NewGenericBuffer[*M](
+			s.persister.Schema(),
+			parquet.SortingRowGroupConfig(s.persister.SortingColumns()),
+			parquet.ColumnBufferCapacity(s.cfg.MaxBufferRowCount),
+		)
 		return 0, nil
 	}
 
@@ -389,32 +413,43 @@ func (s *store[M, P]) writeRowGroup() (n uint64, err error) {
 		s.path,
 		fmt.Sprintf("%s.%d%s", s.persister.Name(), s.rowsFlushed, block.ParquetSuffix),
 	)
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
+
+	n, _, err = s.writeRowGroups(path, []parquet.RowGroup{s.buffer})
 	if err != nil {
-		return 0, err
-	}
-	defer runutil.CloseWithErrCapture(&err, file, "failed to close rowGroup file")
-
-	level.Debug(s.logger).Log("msg", "writing row group segment", "path", path, "rows", s.buffer.NumRows())
-
-	sort.Sort(s.buffer)
-	s.writer.Reset(file)
-	nInt64, err := s.writer.WriteRowGroup(s.buffer)
-	if err != nil {
-		return 0, err
-	}
-	n = uint64(nInt64)
-
-	if err := s.writer.Close(); err != nil {
-		return 0, err
+		return n, errors.Wrap(err, "write row group segment to disk")
 	}
 
-	s.rowGroupBoundaries = append(s.rowGroupBoundaries, s.rowsFlushed)
-	s.rowsFlushed += n
-	s.bufferByteLastBoundary = uint64(s.buffer.Size())
 	s.buffer.Reset()
 
 	return n, nil
+}
+
+func (s *store[M, P]) writeRowGroups(path string, rowGroups []parquet.RowGroup) (n uint64, numRowGroups uint64, err error) {
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer runutil.CloseWithErrCapture(&err, file, "failed to close rowGroup file")
+	s.writer.Reset(file)
+
+	for rgN, rg := range rowGroups {
+		level.Debug(s.logger).Log("msg", "writing row group", "path", path, "row_group_number", rgN, "rows", s.buffer.NumRows())
+
+		nInt64, err := s.writer.WriteRowGroup(rg)
+		if err != nil {
+			return 0, 0, err
+		}
+		n += uint64(nInt64)
+		numRowGroups += 1
+	}
+
+	if err := s.writer.Close(); err != nil {
+		return 0, 0, err
+	}
+
+	s.rowsFlushed += n
+
+	return n, numRowGroups, nil
 }
 
 func (s *store[M, P]) ingest(ctx context.Context, elems []*M, rewriter *rewriter) error {

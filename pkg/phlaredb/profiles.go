@@ -358,6 +358,11 @@ const (
 )
 
 func newProfilesStore(phlarectx context.Context, cfg *ParquetConfig) *store[schemav1.Profile, *schemav1.ProfilePersister] {
+	// default behaviour should be flushing to disk
+	if cfg.FlushEachRowGroupToDisk == nil {
+		t := true
+		cfg.FlushEachRowGroupToDisk = &t
+	}
 	return newStore[schemav1.Profile, *schemav1.ProfilePersister](phlarectx, cfg, &profilesHelper{})
 }
 
