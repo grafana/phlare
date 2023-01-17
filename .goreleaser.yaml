@@ -112,21 +112,21 @@ builds:
 #       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
 #       - "--label=org.opencontainers.image.version={{.Version}}"
 #   - use: buildx
-    goos: linux
-    goarch: arm
-    goarm: "7"
-    dockerfile: ./cmd/phlare/Dockerfile
-    extra_files:
-      - cmd/phlare/phlare.yaml
-    image_templates:
-      - "grafana/{{ .ProjectName }}:{{ .Version }}-armv7"
-      - "grafana/{{ .ProjectName }}:latest-armv7"
-    build_flag_templates:
-      - "--platform=linux/arm/v7"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
+#     goos: linux
+#     goarch: arm
+#     goarm: "7"
+#     dockerfile: ./cmd/phlare/Dockerfile
+#     extra_files:
+#       - cmd/phlare/phlare.yaml
+#     image_templates:
+#       - "grafana/{{ .ProjectName }}:{{ .Version }}-armv7"
+#       - "grafana/{{ .ProjectName }}:latest-armv7"
+#     build_flag_templates:
+#       - "--platform=linux/arm/v7"
+#       - "--label=org.opencontainers.image.created={{.Date}}"
+#       - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#       - "--label=org.opencontainers.image.version={{.Version}}"
 # docker_manifests:
 #   https://goreleaser.com/customization/docker_manifest/
 #   - name_template: grafana/{{ .ProjectName }}:{{ .Version }}
