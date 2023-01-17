@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -12,7 +13,9 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log/level"
 	gprofile "github.com/google/pprof/profile"
+	"github.com/grafana/dskit/runutil"
 	"github.com/k0kubun/pp/v3"
+	"github.com/klauspost/compress/gzip"
 	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -108,7 +111,7 @@ func addQueryParams(queryCmd flagger) *queryParams {
 	return params
 }
 
-func queryMerge(ctx context.Context, params *queryParams, outputFlag string) error {
+func queryMerge(ctx context.Context, params *queryParams, outputFlag string) (err error) {
 	from, to, err := params.parseFromTo()
 	if err != nil {
 		return err
@@ -164,8 +167,17 @@ func queryMerge(ctx context.Context, params *queryParams, outputFlag string) err
 			return errors.Wrap(err, "failed to marshal protobuf")
 		}
 
-		err = os.WriteFile(filePath, buf, 0644)
+		// open new file, fail when the file already exists
+		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
 		if err != nil {
+			return errors.Wrap(err, "failed to create pprof file")
+		}
+		defer runutil.CloseWithErrCapture(&err, f, "failed to close pprof file")
+
+		gzipWriter := gzip.NewWriter(f)
+		defer runutil.CloseWithErrCapture(&err, gzipWriter, "failed to close pprof gzip writer")
+
+		if _, err := io.Copy(gzipWriter, bytes.NewReader(buf)); err != nil {
 			return errors.Wrap(err, "failed to write pprof")
 		}
 
