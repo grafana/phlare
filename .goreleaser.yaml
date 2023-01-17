@@ -9,8 +9,8 @@ builds:
     goos:
       - linux
     #   - darwin
-    # goarch:
-    #   - amd64
+    goarch:
+      - amd64
     #   - arm64
     #   - arm
     # goarm:
@@ -45,8 +45,8 @@ builds:
       - linux
     #   - windows
     #   - darwin
-    # goarch:
-    #   - amd64
+    goarch:
+      - amd64
     #   - arm64
     #   - arm
     # goarm:

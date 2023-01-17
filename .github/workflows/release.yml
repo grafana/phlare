@@ -5,7 +5,6 @@ on:
     # run only against tags
     tags:
       - "v*"
-
 permissions:
   contents: write
   packages: write
