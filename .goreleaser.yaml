@@ -128,19 +128,19 @@ builds:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
 # docker_manifests:
-  # https://goreleaser.com/customization/docker_manifest/
-  - name_template: grafana/{{ .ProjectName }}:{{ .Version }}
-    image_templates:
-      - grafana/{{ .ProjectName }}:{{ .Version }}-amd64
-      - grafana/{{ .ProjectName }}:{{ .Version }}-arm64v8
-      - grafana/{{ .ProjectName }}:{{ .Version }}-armv6
-      - grafana/{{ .ProjectName }}:{{ .Version }}-armv7
-  - name_template: grafana/{{ .ProjectName }}:latest
-    image_templates:
-      - grafana/{{ .ProjectName }}:latest-amd64
-      - grafana/{{ .ProjectName }}:latest-arm64v8
-      - grafana/{{ .ProjectName }}:latest-armv6
-      - grafana/{{ .ProjectName }}:latest-armv7
+#   https://goreleaser.com/customization/docker_manifest/
+#   - name_template: grafana/{{ .ProjectName }}:{{ .Version }}
+#     image_templates:
+#       - grafana/{{ .ProjectName }}:{{ .Version }}-amd64
+#       - grafana/{{ .ProjectName }}:{{ .Version }}-arm64v8
+#       - grafana/{{ .ProjectName }}:{{ .Version }}-armv6
+#       - grafana/{{ .ProjectName }}:{{ .Version }}-armv7
+#   - name_template: grafana/{{ .ProjectName }}:latest
+#     image_templates:
+#       - grafana/{{ .ProjectName }}:latest-amd64
+#       - grafana/{{ .ProjectName }}:latest-arm64v8
+#       - grafana/{{ .ProjectName }}:latest-armv6
+#       - grafana/{{ .ProjectName }}:latest-armv7
 archives:
   - id: phlare
     builds:
