@@ -178,6 +178,12 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 		h.profiles,
 	}
 
+	for _, t := range h.tables {
+		if err := t.Reset(h.headPath); err != nil {
+			return nil, err
+		}
+	}
+
 	index, err := newProfileIndex(32, h.metrics)
 	if err != nil {
 		return nil, err
