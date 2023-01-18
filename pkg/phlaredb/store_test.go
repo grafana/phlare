@@ -84,7 +84,6 @@ func TestDeduplicatingStore_Ingestion(t *testing.T) {
 
 			// ensure the correct number of files are created
 			numRows, numRGs, err := store.Flush()
-
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedNumRows, numRows)
 			assert.Equal(t, tc.expectedNumRGs, numRGs)
