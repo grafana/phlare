@@ -93,8 +93,19 @@ func (s *store[M, P]) Name() string {
 	return s.persister.Name()
 }
 
-func (s *store[M, P]) Size() uint64 {
-	return uint64(s.buffer.Size())
+func (s *store[M, P]) Size() int64 {
+	return s.buffer.Size()
+}
+
+func (s *store[M, P]) RowGroups() []parquet.RowGroup {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	var rowGroups = make([]parquet.RowGroup, 1, len(s.rowGroups)+1)
+	rowGroups = append(rowGroups, s.rowGroups...)
+	rowGroups = append(rowGroups, s.buffer)
+
+	return rowGroups
 }
 
 // Starts the ingestion loop.
@@ -302,7 +313,7 @@ func (s *store[M, P]) appendLoop(ch chan *appendElems[M]) {
 				} else {
 					previousID = uint64(pos)
 				}
-				newID = s.NumRows() + uint64(pos)
+				newID = uint64(s.NumRows()) + uint64(pos)
 
 				// this updates a potential index
 				s.updateIndex(elems.elems[pos], newID)
@@ -450,8 +461,17 @@ func (s *store[M, P]) ingest(ctx context.Context, elems []*M, rewriter *rewriter
 	return nil
 }
 
-func (s *store[M, P]) NumRows() uint64 {
-	return uint64(s.buffer.NumRows()) + s.rowsFlushed
+func (s *store[M, P]) NumRows() int64 {
+	return s.buffer.NumRows() + int64(s.rowsFlushed)
+}
+
+func (s *store[M, P]) Root() *parquet.Column {
+	panic("Root() is not implemented for head store")
+	return nil
+}
+
+func (s *store[M, P]) Schema() *parquet.Schema {
+	return s.persister.Schema()
 }
 
 type rowGroupOnDisk struct {

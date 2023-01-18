@@ -93,7 +93,7 @@ type deduplicatingStoreHelper[M Models, K comparable] interface {
 
 type Table interface {
 	Name() string
-	Size() uint64
+	Size() int64
 	Reset(path string) error
 	Flush() (numRows uint64, numRowGroups uint64, err error)
 	Close() error
@@ -127,6 +127,7 @@ type Head struct {
 	tables          []Table
 	delta           *deltaProfiles
 	pprofLabelCache labelCache
+	queryX
 }
 
 const (
@@ -191,6 +192,15 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 	h.index = index
 	h.delta = newDeltaProfiles()
 
+	h.queryX = queryX{
+		index:       h.index,
+		strings:     newParquetReaderFromSource[schemav1.String, *schemav1.StringPersister](h.strings),
+		locations:   newParquetReaderFromSource[profilev1.Location, *schemav1.LocationPersister](h.locations),
+		mappings:    newParquetReaderFromSource[profilev1.Mapping, *schemav1.MappingPersister](h.mappings),
+		stacktraces: newParquetReaderFromSource[schemav1.Stacktrace, *schemav1.StacktracePersister](h.stacktraces),
+		profiles:    newParquetReaderFromSource[schemav1.Profile, *schemav1.ProfilePersister](h.profiles),
+	}
+
 	h.pprofLabelCache.init()
 
 	h.wg.Add(1)
@@ -203,7 +213,7 @@ func (h *Head) Size() uint64 {
 	var size uint64
 	// TODO: Estimate size of TSDB index
 	for _, t := range h.tables {
-		size += t.Size()
+		size += uint64(t.Size())
 	}
 
 	return size

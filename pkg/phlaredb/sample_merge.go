@@ -16,7 +16,7 @@ import (
 	query "github.com/grafana/phlare/pkg/phlaredb/query"
 )
 
-func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
+func (b *queryX) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Block")
 	defer sp.Finish()
 	// clone the rows to be able to iterate over them twice
@@ -25,8 +25,8 @@ func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.I
 		return nil, err
 	}
 	it := query.NewMultiRepeatedPageIterator(
-		repeatedColumnIter(ctx, b.profiles.source, "Samples.list.element.StacktraceID", multiRows[0]),
-		repeatedColumnIter(ctx, b.profiles.source, "Samples.list.element.Value", multiRows[1]),
+		repeatedColumnIter(ctx, b.profiles.Source(), "Samples.list.element.StacktraceID", multiRows[0]),
+		repeatedColumnIter(ctx, b.profiles.Source(), "Samples.list.element.Value", multiRows[1]),
 	)
 	defer it.Close()
 
@@ -48,7 +48,7 @@ func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.I
 	return b.resolveSymbols(ctx, stacktraceAggrValues)
 }
 
-func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrByID map[int64]*ingestv1.StacktraceSample) (*ingestv1.MergeProfilesStacktracesResult, error) {
+func (b *queryX) resolveSymbols(ctx context.Context, stacktraceAggrByID map[int64]*ingestv1.StacktraceSample) (*ingestv1.MergeProfilesStacktracesResult, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolveSymbols - Block")
 	defer sp.Finish()
 	locationsByStacktraceID := map[int64][]uint64{}
@@ -61,7 +61,7 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 
 	var (
 		locationIDs = newUniqueIDs[struct{}]()
-		stacktraces = repeatedColumnIter(ctx, b.stacktraces.source, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
+		stacktraces = repeatedColumnIter(ctx, b.stacktraces.Source(), "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
 	)
 
 	for stacktraces.Next() {
@@ -177,11 +177,11 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 	}, nil
 }
 
-func (b *singleBlockQuerier) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*commonv1.Series, error) {
+func (b *queryX) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*commonv1.Series, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByLabels - Block")
 	defer sp.Finish()
 
-	it := repeatedColumnIter(ctx, b.profiles.source, "Samples.list.element.Value", rows)
+	it := repeatedColumnIter(ctx, b.profiles.Source(), "Samples.list.element.Value", rows)
 
 	defer it.Close()
 

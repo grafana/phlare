@@ -7,31 +7,21 @@ import (
 )
 
 type Source interface {
-	// Name() returns the name of the table.
-	Name() string
-	Root() *pq.Column
-	// Columns() returns the columns defintions.
-	// Columns() []*pq.Column
-	// RowGroups() returns the current available row groups.
-	RowGroups() []pq.RowGroup
+	Name() string             // Name() returns the name of the table.
+	Root() *pq.Column         // Root() returns the root column of the table including all column indexes
+	Schema() *pq.Schema       // Schema() returns the schema of the table.
+	RowGroups() []pq.RowGroup // RowGroups() returns the current available row groups.
 	NumRows() int64
 	Size() int64
 }
 
 func GetColumnIndexByPath(source Source, s string) (index, depth int) {
 	colSelector := strings.Split(s, ".")
-	n := source.Root()
-	for len(colSelector) > 0 {
-		n = n.Column(colSelector[0])
-		if n == nil {
-			return -1, -1
-		}
-
-		colSelector = colSelector[1:]
-		depth++
+	leafColumn, found := source.Schema().Lookup(colSelector...)
+	if !found {
+		return -1, -1
 	}
-
-	return n.Index(), depth
+	return leafColumn.ColumnIndex, leafColumn.MaxDefinitionLevel
 }
 
 func HasColumn(source Source, s string) bool {

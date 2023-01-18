@@ -268,7 +268,192 @@ func (mm *minMax) InRange(start, end model.Time) bool {
 	return block.InRange(mm.min, mm.max, start, end)
 }
 
+type Indexer interface{}
+
+type queryX struct {
+	index       IndexReader
+	strings     parquetReaderI[schemav1.String]
+	functions   parquetReaderI[profilev1.Function]
+	locations   parquetReaderI[profilev1.Location]
+	mappings    parquetReaderI[profilev1.Mapping]
+	stacktraces parquetReaderI[schemav1.Stacktrace]
+	profiles    parquetReaderI[schemav1.Profile]
+}
+
+func (b *queryX) forMatchingProfiles(ctx context.Context, matchers []*labels.Matcher, start, end model.Time,
+	fn func(lbs phlaremodel.Labels, profile *schemav1.Profile, samples []schemav1.Sample) error,
+) error {
+	postings, err := PostingsForMatchers(b.index, nil, matchers...)
+	if err != nil {
+		return err
+	}
+
+	var (
+		lbls         = make(phlaremodel.Labels, 0, 6)
+		chks         = make([]index.ChunkMeta, 1)
+		lblsPerIndex = make(map[uint32]labelsInfo)
+	)
+
+	// get all relevant labels/fingerprints
+	for postings.Next() {
+		fp, err := b.index.Series(postings.At(), &lbls, &chks)
+		if err != nil {
+			return err
+		}
+		if lblsExisting, exists := lblsPerIndex[chks[0].SeriesIndex]; exists {
+			// Compare to check if there is a clash
+			if phlaremodel.CompareLabelPairs(lbls, lblsExisting.lbs) != 0 {
+				panic("label hash conflict")
+			}
+		} else {
+			lblsPerIndex[chks[0].SeriesIndex] = labelsInfo{
+				fp:  model.Fingerprint(fp),
+				lbs: lbls,
+			}
+			lbls = make(phlaremodel.Labels, 0, 6)
+		}
+	}
+
+	rowNums := query.NewJoinIterator(
+		0,
+		[]query.Iterator{
+			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerIndex), "SeriesIndex"),                              // get all profiles with matching seriesRef
+			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(start.UnixNano(), end.UnixNano()), "TimeNanos"), // get all profiles within the time window
+			b.profiles.columnIter(ctx, "ID", nil, "ID"),                                                                          // get all IDs
+			// TODO: Provide option to ignore samples
+			b.profiles.columnIter(ctx, "Samples.list.element.StacktraceID", nil, "StacktraceIDs"),
+			b.profiles.columnIter(ctx, "Samples.list.element.Value", nil, "SampleValues"),
+		},
+		nil,
+	)
+	defer rowNums.Close()
+	var (
+		samples       reconstructSamples
+		profile       schemav1.Profile
+		schemaSamples []schemav1.Sample
+		series        [][]parquet.Value
+	)
+
+	// retrieve the full profiles
+	for rowNums.Next() {
+		result := rowNums.At()
+
+		series = result.Columns(series, "ID", "TimeNanos", "SeriesIndex")
+		var err error
+		profile.ID, err = uuid.FromBytes(series[0][0].ByteArray())
+		if err != nil {
+			return err
+		}
+		profile.TimeNanos = series[1][0].Int64()
+		profile.SeriesIndex = series[2][0].Uint32()
+
+		samples.buffer = result.Columns(samples.buffer, "StacktraceIDs", "SampleValues")
+
+		labelsInfo, matched := lblsPerIndex[profile.SeriesIndex]
+		if !matched {
+			return nil
+		}
+		profile.SeriesFingerprint = labelsInfo.fp
+
+		schemaSamples = samples.samples(schemaSamples)
+
+		if err := fn(labelsInfo.lbs, &profile, schemaSamples); err != nil {
+			return err
+		}
+	}
+
+	return rowNums.Err()
+}
+
+func (b *queryX) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block")
+	defer sp.Finish()
+	matchers, err := parser.ParseMetricSelector(params.LabelSelector)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "failed to parse label selectors: "+err.Error())
+	}
+	matchers = append(matchers, phlaremodel.SelectorFromProfileType(params.Type))
+
+	postings, err := PostingsForMatchers(b.index, nil, matchers...)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		lbls       = make(phlaremodel.Labels, 0, 6)
+		chks       = make([]index.ChunkMeta, 1)
+		lblsPerRef = make(map[int64]labelsInfo)
+	)
+
+	// get all relevant labels/fingerprints
+	for postings.Next() {
+		fp, err := b.index.Series(postings.At(), &lbls, &chks)
+		if err != nil {
+			return nil, err
+		}
+		if lblsExisting, exists := lblsPerRef[int64(chks[0].SeriesIndex)]; exists {
+			// Compare to check if there is a clash
+			if phlaremodel.CompareLabelPairs(lbls, lblsExisting.lbs) != 0 {
+				panic("label hash conflict")
+			}
+		} else {
+			lblsPerRef[int64(chks[0].SeriesIndex)] = labelsInfo{
+				fp:  model.Fingerprint(fp),
+				lbs: lbls,
+			}
+			lbls = make(phlaremodel.Labels, 0, 6)
+		}
+	}
+	pIt := query.NewJoinIterator(
+		0,
+		[]query.Iterator{
+			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
+			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
+		},
+		nil,
+	)
+	iters := make([]iter.Iterator[Profile], 0, len(lblsPerRef))
+	buf := make([][]parquet.Value, 2)
+	defer pIt.Close()
+
+	currSeriesIndex := int64(-1)
+	var currentSeriesSlice []Profile
+	for pIt.Next() {
+		res := pIt.At()
+		buf = res.Columns(buf, "SeriesIndex", "TimeNanos")
+		seriesIndex := buf[0][0].Int64()
+		if seriesIndex != currSeriesIndex {
+			currSeriesIndex++
+			if len(currentSeriesSlice) > 0 {
+				iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
+			}
+			currentSeriesSlice = make([]Profile, 0, 100)
+		}
+		currentSeriesSlice = append(currentSeriesSlice, BlockProfile{
+			labels: lblsPerRef[seriesIndex].lbs,
+			fp:     lblsPerRef[seriesIndex].fp,
+			ts:     model.TimeFromUnixNano(buf[1][0].Int64()),
+			RowNum: res.RowNumber[0],
+		})
+	}
+	if len(currentSeriesSlice) > 0 {
+		iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
+	}
+
+	return iter.NewSortProfileIterator(iters), nil
+}
+
+func (_ *queryX) Sort(in []Profile) []Profile {
+	// Sort by RowNumber to avoid seeking back and forth in the file.
+	sort.Slice(in, func(i, j int) bool {
+		return in[i].(BlockProfile).RowNum < in[j].(BlockProfile).RowNum
+	})
+	return in
+}
+
 type singleBlockQuerier struct {
+	queryX
+
 	logger  log.Logger
 	metrics *blocksMetrics
 
@@ -280,7 +465,6 @@ type singleBlockQuerier struct {
 	openLock              sync.Mutex
 	opened                bool
 	tsBoundaryPerRowGroup []minMax
-	index                 *index.Reader
 	strings               inMemoryparquetReader[schemav1.String, *schemav1.StringPersister]
 	functions             inMemoryparquetReader[profilev1.Function, *schemav1.FunctionPersister]
 	locations             inMemoryparquetReader[profilev1.Location, *schemav1.LocationPersister]
@@ -305,6 +489,13 @@ func newSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 		&q.stacktraces,
 		&q.profiles,
 	}
+	q.queryX.strings = &q.strings
+	q.queryX.functions = &q.functions
+	q.queryX.locations = &q.locations
+	q.queryX.mappings = &q.mappings
+	q.queryX.stacktraces = &q.stacktraces
+	q.queryX.profiles = &q.profiles
+
 	return q
 }
 
@@ -424,91 +615,6 @@ type labelsInfo struct {
 	lbs phlaremodel.Labels
 }
 
-func (b *singleBlockQuerier) forMatchingProfiles(ctx context.Context, matchers []*labels.Matcher, start, end model.Time,
-	fn func(lbs phlaremodel.Labels, profile *schemav1.Profile, samples []schemav1.Sample) error,
-) error {
-	postings, err := PostingsForMatchers(b.index, nil, matchers...)
-	if err != nil {
-		return err
-	}
-
-	var (
-		lbls         = make(phlaremodel.Labels, 0, 6)
-		chks         = make([]index.ChunkMeta, 1)
-		lblsPerIndex = make(map[uint32]labelsInfo)
-	)
-
-	// get all relevant labels/fingerprints
-	for postings.Next() {
-		fp, err := b.index.Series(postings.At(), &lbls, &chks)
-		if err != nil {
-			return err
-		}
-		if lblsExisting, exists := lblsPerIndex[chks[0].SeriesIndex]; exists {
-			// Compare to check if there is a clash
-			if phlaremodel.CompareLabelPairs(lbls, lblsExisting.lbs) != 0 {
-				panic("label hash conflict")
-			}
-		} else {
-			lblsPerIndex[chks[0].SeriesIndex] = labelsInfo{
-				fp:  model.Fingerprint(fp),
-				lbs: lbls,
-			}
-			lbls = make(phlaremodel.Labels, 0, 6)
-		}
-	}
-
-	rowNums := query.NewJoinIterator(
-		0,
-		[]query.Iterator{
-			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerIndex), "SeriesIndex"),                              // get all profiles with matching seriesRef
-			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(start.UnixNano(), end.UnixNano()), "TimeNanos"), // get all profiles within the time window
-			b.profiles.columnIter(ctx, "ID", nil, "ID"),                                                                          // get all IDs
-			// TODO: Provide option to ignore samples
-			b.profiles.columnIter(ctx, "Samples.list.element.StacktraceID", nil, "StacktraceIDs"),
-			b.profiles.columnIter(ctx, "Samples.list.element.Value", nil, "SampleValues"),
-		},
-		nil,
-	)
-	defer rowNums.Close()
-	var (
-		samples       reconstructSamples
-		profile       schemav1.Profile
-		schemaSamples []schemav1.Sample
-		series        [][]parquet.Value
-	)
-
-	// retrieve the full profiles
-	for rowNums.Next() {
-		result := rowNums.At()
-
-		series = result.Columns(series, "ID", "TimeNanos", "SeriesIndex")
-		var err error
-		profile.ID, err = uuid.FromBytes(series[0][0].ByteArray())
-		if err != nil {
-			return err
-		}
-		profile.TimeNanos = series[1][0].Int64()
-		profile.SeriesIndex = series[2][0].Uint32()
-
-		samples.buffer = result.Columns(samples.buffer, "StacktraceIDs", "SampleValues")
-
-		labelsInfo, matched := lblsPerIndex[profile.SeriesIndex]
-		if !matched {
-			return nil
-		}
-		profile.SeriesFingerprint = labelsInfo.fp
-
-		schemaSamples = samples.samples(schemaSamples)
-
-		if err := fn(labelsInfo.lbs, &profile, schemaSamples); err != nil {
-			return err
-		}
-	}
-
-	return rowNums.Err()
-}
-
 type Profile interface {
 	Timestamp() model.Time
 	Fingerprint() model.Fingerprint
@@ -549,92 +655,12 @@ func (p BlockProfile) Fingerprint() model.Fingerprint {
 }
 
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block")
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block Open")
 	defer sp.Finish()
 	if err := b.open(ctx); err != nil {
 		return nil, err
 	}
-	matchers, err := parser.ParseMetricSelector(params.LabelSelector)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "failed to parse label selectors: "+err.Error())
-	}
-	matchers = append(matchers, phlaremodel.SelectorFromProfileType(params.Type))
-
-	postings, err := PostingsForMatchers(b.index, nil, matchers...)
-	if err != nil {
-		return nil, err
-	}
-
-	var (
-		lbls       = make(phlaremodel.Labels, 0, 6)
-		chks       = make([]index.ChunkMeta, 1)
-		lblsPerRef = make(map[int64]labelsInfo)
-	)
-
-	// get all relevant labels/fingerprints
-	for postings.Next() {
-		fp, err := b.index.Series(postings.At(), &lbls, &chks)
-		if err != nil {
-			return nil, err
-		}
-		if lblsExisting, exists := lblsPerRef[int64(chks[0].SeriesIndex)]; exists {
-			// Compare to check if there is a clash
-			if phlaremodel.CompareLabelPairs(lbls, lblsExisting.lbs) != 0 {
-				panic("label hash conflict")
-			}
-		} else {
-			lblsPerRef[int64(chks[0].SeriesIndex)] = labelsInfo{
-				fp:  model.Fingerprint(fp),
-				lbs: lbls,
-			}
-			lbls = make(phlaremodel.Labels, 0, 6)
-		}
-	}
-	pIt := query.NewJoinIterator(
-		0,
-		[]query.Iterator{
-			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
-			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
-		},
-		nil,
-	)
-	iters := make([]iter.Iterator[Profile], 0, len(lblsPerRef))
-	buf := make([][]parquet.Value, 2)
-	defer pIt.Close()
-
-	currSeriesIndex := int64(-1)
-	var currentSeriesSlice []Profile
-	for pIt.Next() {
-		res := pIt.At()
-		buf = res.Columns(buf, "SeriesIndex", "TimeNanos")
-		seriesIndex := buf[0][0].Int64()
-		if seriesIndex != currSeriesIndex {
-			currSeriesIndex++
-			if len(currentSeriesSlice) > 0 {
-				iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
-			}
-			currentSeriesSlice = make([]Profile, 0, 100)
-		}
-		currentSeriesSlice = append(currentSeriesSlice, BlockProfile{
-			labels: lblsPerRef[seriesIndex].lbs,
-			fp:     lblsPerRef[seriesIndex].fp,
-			ts:     model.TimeFromUnixNano(buf[1][0].Int64()),
-			RowNum: res.RowNumber[0],
-		})
-	}
-	if len(currentSeriesSlice) > 0 {
-		iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
-	}
-
-	return iter.NewSortProfileIterator(iters), nil
-}
-
-func (b *singleBlockQuerier) Sort(in []Profile) []Profile {
-	// Sort by RowNumber to avoid seeking back and forth in the file.
-	sort.Slice(in, func(i, j int) bool {
-		return in[i].(BlockProfile).RowNum < in[j].(BlockProfile).RowNum
-	})
-	return in
+	return b.queryX.SelectMatchingProfiles(ctx, params)
 }
 
 type reconstructSamples struct {
@@ -789,6 +815,12 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 	return g.Wait()
 }
 
+type parquetReaderI[M Models] interface {
+	columnIter(ctx context.Context, columnName string, predicate query.Predicate, alias string) query.Iterator
+	retrieveRows(ctx context.Context, rowNumIterator iter.Iterator[int64]) iter.Iterator[ResultWithRowNum[M]]
+	Source() query.Source
+}
+
 type parquetReader[M Models, P schemav1.PersisterName] struct {
 	persister P
 	source    query.Source
@@ -804,6 +836,8 @@ type parquetFileSourceWrapper struct {
 func (w *parquetFileSourceWrapper) Name() string {
 	return w.File.Schema().Name()
 }
+
+func (r *parquetReader[M, P]) Source() query.Source { return r.source }
 
 func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
 	r.metrics = contextBlockMetrics(ctx)
@@ -1077,6 +1111,14 @@ func (r *inMemoryparquetReader[M, P]) retrieveRows(ctx context.Context, rowNumIt
 		cache:          r.cache,
 		rowNumIterator: rowNumIterator,
 	}
+}
+
+func (r *inMemoryparquetReader[M, P]) columnIter(ctx context.Context, columnName string, predicate query.Predicate, alias string) query.Iterator {
+	return query.NewErrIterator(errors.New("not implemented"))
+}
+
+func (r *inMemoryparquetReader[M, P]) Source() query.Source {
+	return &parquetFileSourceWrapper{r.file}
 }
 
 type cacheIterator[M any] struct {
