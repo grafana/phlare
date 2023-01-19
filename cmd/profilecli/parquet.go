@@ -9,6 +9,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/olekukonko/tablewriter"
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/format"
 )
 
 func parquetInspect(ctx context.Context, path string) error {
@@ -36,7 +37,7 @@ func parquetInspect(ctx context.Context, path string) error {
 		fmt.Fprintln(out, "\t\t Columns:")
 		table := tablewriter.NewWriter(out)
 		table.SetHeader([]string{
-			"Col", "Type", "NumVal", "TotalCompressedSize", "TotalUncompressedSize", "Compression", "%", "PageCount", "AvgPageSize",
+			"Col", "Type", "NumVal", "TotalCompressedSize", "TotalUncompressedSize", "Compression", "%", "PageCount", "AvgPageSize", "Encoding", "Codec",
 		})
 		for j, ds := range rg.Columns {
 			offsets := pf.OffsetIndexes()[j]
@@ -57,10 +58,20 @@ func parquetInspect(ctx context.Context, path string) error {
 					fmt.Sprintf("%.2f", float64(ds.MetaData.TotalCompressedSize)/float64(rg.TotalByteSize)*100),
 					fmt.Sprintf("%d", len(offsets.PageLocations)),
 					humanize.Bytes(uint64(avgPageSize)),
+					encodings(ds.MetaData.Encoding),
+					ds.MetaData.Codec.String(),
 				})
 		}
 		table.Render()
 	}
 
 	return nil
+}
+
+func encodings(encs []format.Encoding) string {
+	var enc []string
+	for _, e := range encs {
+		enc = append(enc, e.String())
+	}
+	return strings.Join(enc, ",")
 }
