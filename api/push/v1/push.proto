@@ -3,9 +3,65 @@ syntax = "proto3";
 package push.v1;
 
 import "types/v1/types.proto";
+import "google/v1/profile.proto";
 
 service PusherService {
-  rpc Push(PushRequest) returns (PushResponse) {}
+  rpc PushProfile(stream PushProfileRequest) returns (stream PushProfileResponse) {}
+}
+
+message PushProfileRequest {
+
+  // on the first message, the client sends the profile and samples.
+  Profile profile = 1;
+  repeated HahshedSample Samples = 2;
+
+  // To answer symbol requests
+  Symbols symbols = 3;
+
+}
+
+message Symbols {
+
+ repeated Stacktrace stacktraces =1;
+
+ repeated googlev1.Mapping mapping = 2;
+ // Useful program location
+ repeated googlev1.Location location = 3;
+ // Functions referenced by locations
+ repeated googlev1.Function function = 4;
+ // A common table for strings referenced by various messages.
+ // string_table[0] must always be "".
+ repeated string string_table = 5;
+}
+
+
+message Stacktrace{
+  repeated int64 locations = 1;
+}
+
+message PushProfileResponse {
+  repeated int64 requested_hashes = 1;
+}
+
+message Profile {
+  string ID = 1;
+  repeated types.v1.LabelPair labels = 2;
+  googlev1.ValueType sample_type = 1;
+  int64 time_nanos = 9;
+  // Duration of the profile, if a duration makes sense.
+  int64 duration_nanos = 10;
+  // The kind of events between sampled ocurrences.
+  // e.g [ "cpu","cycles" ] or [ "heap","bytes" ]
+  ValueType period_type = 11;
+  // The number of events between sampled occurrences.
+  int64 period = 12;
+  // Freeform text associated to the profile.
+  repeated int64 comment = 13; // Indices into string table.
+}
+
+message HahshedSample {
+  int64 count = 1;
+  int64 stracktrace_hash = 2;
 }
 
 message PushResponse {}
