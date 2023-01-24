@@ -354,7 +354,13 @@ func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect
 		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
 		g.Go(func() error {
-			merge, err := q.MergeByStacktraces(ctx, iter.NewSliceIterator(selectedProfiles))
+			merge, err := q.MergeByStacktraces(ctx, iter.NewSliceIterator(selectedProfiles), MergeStacktraceOptions{
+				// todo map to query request
+				Hide: HideOptions{
+					Fraction: 0.005,
+					Strategy: TOP,
+				},
+			})
 			if err != nil {
 				return err
 			}
@@ -524,7 +530,13 @@ func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiS
 		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
 		g.Go(func() error {
-			merge, err := q.MergePprof(ctx, iter.NewSliceIterator(selectedProfiles))
+			merge, err := q.MergePprof(ctx, iter.NewSliceIterator(selectedProfiles), MergeStacktraceOptions{
+				// todo map to query request
+				Hide: HideOptions{
+					Fraction: 0.005,
+					Strategy: TOP,
+				},
+			})
 			if err != nil {
 				return err
 			}

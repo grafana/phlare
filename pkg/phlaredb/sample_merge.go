@@ -18,7 +18,56 @@ import (
 	query "github.com/grafana/phlare/pkg/phlaredb/query"
 )
 
-func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
+// MergeStacktraceOptions is the options to use when merging stacktraces
+type MergeStacktraceOptions struct {
+	// HideOptions is the options to use when hiding stacktraces
+	Hide HideOptions
+}
+
+type HideOptions struct {
+	// Fraction hides stracktraces below/above of the profile's total * fraction
+	Fraction float32
+	// FractionStrategy is the strategy to use when Hiding the stacktraces
+	Strategy HideStrategy
+}
+
+type HideStrategy int
+
+const (
+	// Only include the stacktraces where the value is above the total's fraction.
+	TOP HideStrategy = 0
+	// Only include the stacktraces where the value is below the total's fraction.
+	BOTTOM HideStrategy = 1
+	others              = "others"
+)
+
+func hideStacktraces[T any, ID comparable](stacktraceAggrByID map[ID]T, total int64, getValue func(T) int64, opt HideOptions) int64 {
+	if opt.Fraction == 0 {
+		return 0
+	}
+	if opt.Fraction < 0 || opt.Fraction > 1 {
+		return 0
+	}
+	// calculate threshold
+	threshold := int64(float32(total) * opt.Fraction)
+
+	// hide stacktraces
+	var hidden int64
+	for id, sample := range stacktraceAggrByID {
+		v := getValue(sample)
+		if opt.Strategy == TOP && v < threshold {
+			hidden += v
+			delete(stacktraceAggrByID, id)
+		}
+		if opt.Strategy == BOTTOM && v > threshold {
+			hidden += v
+			delete(stacktraceAggrByID, id)
+		}
+	}
+	return hidden
+}
+
+func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile], opt MergeStacktraceOptions) (*ingestv1.MergeProfilesStacktracesResult, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Block")
 	defer sp.Finish()
 	// clone the rows to be able to iterate over them twice
@@ -33,24 +82,68 @@ func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.I
 	defer it.Close()
 
 	stacktraceAggrValues := map[int64]*ingestv1.StacktraceSample{}
-
+	total := int64(0)
 	for it.Next() {
 		values := it.At().Values
 		for i := 0; i < len(values[0]); i++ {
-			sample, ok := stacktraceAggrValues[values[0][i].Int64()]
+			id, value := values[0][i].Int64(), values[1][i].Int64()
+			total += value
+			sample, ok := stacktraceAggrValues[id]
 			if ok {
-				sample.Value += values[1][i].Int64()
+				sample.Value += value
 				continue
 			}
-			stacktraceAggrValues[values[0][i].Int64()] = &ingestv1.StacktraceSample{
-				Value: values[1][i].Int64(),
+			stacktraceAggrValues[id] = &ingestv1.StacktraceSample{
+				Value: value,
 			}
 		}
 	}
-	return b.resolveSymbols(ctx, stacktraceAggrValues)
+	hidden := hideStacktraces(stacktraceAggrValues, total, func(s *ingestv1.StacktraceSample) int64 { return s.Value }, opt.Hide)
+	result, err := b.resolveSymbols(ctx, stacktraceAggrValues)
+	if err != nil {
+		return nil, err
+	}
+	AddHiddenNodeToStacktraces(result, hidden)
+	return result, nil
 }
 
-func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*profile.Profile, error) {
+func AddHiddenNodeToStacktraces(result *ingestv1.MergeProfilesStacktracesResult, hidden int64) {
+	if hidden == 0 {
+		return
+	}
+	result.FunctionNames = append(result.FunctionNames, others)
+	result.Stacktraces = append(result.Stacktraces, &ingestv1.StacktraceSample{
+		Value:       hidden,
+		FunctionIds: []int32{int32(len(result.FunctionNames) - 1)},
+	})
+}
+
+func AddHiddenNodeToPprof(result *profile.Profile, hidden int64) {
+	if hidden == 0 {
+		return
+	}
+	hiddenFunction := &profile.Function{
+		Name: others,
+	}
+	hiddenLocation := &profile.Location{
+		Mapping: result.Mapping[0],
+		Line: []profile.Line{
+			{Function: hiddenFunction},
+		},
+	}
+	result.Sample = append(result.Sample, &profile.Sample{
+		Value: []int64{hidden},
+		Location: []*profile.Location{
+			hiddenLocation,
+		},
+	})
+	result.Location = append(result.Location, hiddenLocation)
+	hiddenLocation.ID = uint64(len(result.Location) - 1)
+	result.Function = append(result.Function, hiddenFunction)
+	hiddenFunction.ID = uint64(len(result.Function) - 1)
+}
+
+func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[Profile], opt MergeStacktraceOptions) (*profile.Profile, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Block")
 	defer sp.Finish()
 	// clone the rows to be able to iterate over them twice
@@ -64,7 +157,10 @@ func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[
 	)
 	defer it.Close()
 
-	stacktraceAggrValues := map[int64]*profile.Sample{}
+	var (
+		stacktraceAggrValues = map[int64]*profile.Sample{}
+		total                = int64(0)
+	)
 
 	for it.Next() {
 		values := it.At().Values
@@ -79,7 +175,13 @@ func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[
 			}
 		}
 	}
-	return b.resolvePprofSymbols(ctx, stacktraceAggrValues)
+	hidden := hideStacktraces(stacktraceAggrValues, total, func(s *profile.Sample) int64 { return s.Value[0] }, opt.Hide)
+	result, err := b.resolvePprofSymbols(ctx, stacktraceAggrValues)
+	if err != nil {
+		return nil, err
+	}
+	AddHiddenNodeToPprof(result, hidden)
+	return result, nil
 }
 
 func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktraceAggrByID map[int64]*profile.Sample) (*profile.Profile, error) {

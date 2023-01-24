@@ -519,9 +519,9 @@ type Profile interface {
 type Querier interface {
 	InRange(start, end model.Time) bool
 	SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error)
-	MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error)
+	MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile], opt MergeStacktraceOptions) (*ingestv1.MergeProfilesStacktracesResult, error)
 	MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error)
-	MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*profile.Profile, error)
+	MergePprof(ctx context.Context, rows iter.Iterator[Profile], opt MergeStacktraceOptions) (*profile.Profile, error)
 
 	// Sorts profiles for retrieval.
 	Sort([]Profile) []Profile

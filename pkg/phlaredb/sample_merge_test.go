@@ -156,7 +156,7 @@ func TestMergeSampleByStacktraces(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			stacktraces, err := q.queriers[0].MergeByStacktraces(ctx, profiles)
+			stacktraces, err := q.queriers[0].MergeByStacktraces(ctx, profiles, MergeStacktraceOptions{})
 			require.NoError(t, err)
 			sort.Slice(tc.expected.Stacktraces, func(i, j int) bool {
 				return len(tc.expected.Stacktraces[i].FunctionIds) < len(tc.expected.Stacktraces[j].FunctionIds)
@@ -288,7 +288,7 @@ func TestHeadMergeSampleByStacktraces(t *testing.T) {
 				End:   int64(model.TimeFromUnixNano(int64(1 * time.Minute))),
 			})
 			require.NoError(t, err)
-			stacktraces, err := db.head.MergeByStacktraces(ctx, profiles)
+			stacktraces, err := db.head.MergeByStacktraces(ctx, profiles, MergeStacktraceOptions{})
 			require.NoError(t, err)
 
 			sort.Slice(tc.expected.Stacktraces, func(i, j int) bool {
@@ -585,7 +585,7 @@ func TestMergePprof(t *testing.T) {
 	require.NoError(t, err)
 
 	q.queriers[0].Sort(profiles)
-	result, err := q.queriers[0].MergePprof(ctx, iter.NewSliceIterator(profiles))
+	result, err := q.queriers[0].MergePprof(ctx, iter.NewSliceIterator(profiles), MergeStacktraceOptions{})
 	require.NoError(t, err)
 
 	data, err := proto.Marshal(generateProfile(t))
@@ -631,7 +631,7 @@ func TestHeadMergePprof(t *testing.T) {
 	require.NoError(t, err)
 
 	db.Head().Sort(profiles)
-	result, err := db.Head().MergePprof(ctx, iter.NewSliceIterator(profiles))
+	result, err := db.Head().MergePprof(ctx, iter.NewSliceIterator(profiles), MergeStacktraceOptions{})
 	require.NoError(t, err)
 
 	data, err := proto.Marshal(generateProfile(t))
