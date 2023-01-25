@@ -19,7 +19,7 @@ GOPRIVATE=github.com/grafana/frostdb
 
 # Boiler plate for building Docker containers.
 # All this must go at top of file I'm afraid.
-IMAGE_PREFIX ?= us.gcr.io/kubernetes-dev/
+IMAGE_PREFIX ?= grafana/
 
 IMAGE_TAG ?= $(shell ./tools/image-tag)
 GIT_REVISION := $(shell git rev-parse --short HEAD)
