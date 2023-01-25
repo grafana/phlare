@@ -49,17 +49,17 @@ func hideStacktraces[T any, ID comparable](stacktraceAggrByID map[ID]T, total in
 		return 0
 	}
 	// calculate threshold
-	threshold := int64(float32(total) * opt.Fraction)
+	threshold := float32(total) * opt.Fraction
 
 	// hide stacktraces
 	var hidden int64
 	for id, sample := range stacktraceAggrByID {
 		v := getValue(sample)
-		if opt.Strategy == TOP && v < threshold {
+		if opt.Strategy == TOP && float32(v) < threshold {
 			hidden += v
 			delete(stacktraceAggrByID, id)
 		}
-		if opt.Strategy == BOTTOM && v > threshold {
+		if opt.Strategy == BOTTOM && float32(v) > threshold {
 			hidden += v
 			delete(stacktraceAggrByID, id)
 		}
@@ -165,6 +165,7 @@ func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[
 	for it.Next() {
 		values := it.At().Values
 		for i := 0; i < len(values[0]); i++ {
+			total += values[1][i].Int64()
 			sample, ok := stacktraceAggrValues[values[0][i].Int64()]
 			if ok {
 				sample.Value[0] += values[1][i].Int64()

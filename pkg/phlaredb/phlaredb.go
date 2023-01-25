@@ -357,7 +357,7 @@ func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect
 			merge, err := q.MergeByStacktraces(ctx, iter.NewSliceIterator(selectedProfiles), MergeStacktraceOptions{
 				// todo map to query request
 				Hide: HideOptions{
-					Fraction: 0.005,
+					Fraction: 0.01,
 					Strategy: TOP,
 				},
 			})
@@ -533,7 +533,7 @@ func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiS
 			merge, err := q.MergePprof(ctx, iter.NewSliceIterator(selectedProfiles), MergeStacktraceOptions{
 				// todo map to query request
 				Hide: HideOptions{
-					Fraction: 0.005,
+					Fraction: 0.01,
 					Strategy: TOP,
 				},
 			})

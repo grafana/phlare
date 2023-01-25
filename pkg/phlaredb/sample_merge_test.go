@@ -644,6 +644,24 @@ func TestHeadMergePprof(t *testing.T) {
 	compareProfile(t, expected, result)
 }
 
+func TestHideStacktraces(t *testing.T) {
+	stacktraces := map[int64]int64 {
+		1: 100,
+		2: 50,
+		3: 1,
+		4:2,
+	}
+	hidden := hideStacktraces(stacktraces, 153, func(s int64) int64 {return s}, HideOptions{
+		Fraction: 0.1,
+		Strategy: TOP,
+	})
+	require.Equal(t, int64(3), hidden)
+	require.Equal(t, map[int64]int64 {
+		1: 100,
+		2: 50,
+	}, stacktraces)
+}
+
 func generateProfile(t *testing.T) *googlev1.Profile {
 	t.Helper()
 
