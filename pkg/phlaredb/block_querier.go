@@ -39,6 +39,7 @@ import (
 	query "github.com/grafana/phlare/pkg/phlaredb/query"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/grafana/phlare/pkg/phlaredb/tsdb/index"
+	"github.com/grafana/phlare/pkg/util"
 )
 
 type tableReader interface {
@@ -100,7 +101,7 @@ func (b *BlockQuerier) BlockMetas(ctx context.Context) (metas []*block.Meta, _ e
 	metas = make([]*block.Meta, len(names))
 	for pos := range names {
 		func(pos int) {
-			g.Go(func() error {
+			g.Go(util.RecoverPanic(func() error {
 				path := filepath.Join(names[pos].String(), block.MetaFilename)
 				metaReader, err := b.bucketReader.Get(ctx, path)
 				if err != nil {
@@ -127,7 +128,7 @@ func (b *BlockQuerier) BlockMetas(ctx context.Context) (metas []*block.Meta, _ e
 					return nil
 				}
 				return nil
-			})
+			}))
 		}(pos)
 	}
 
@@ -763,7 +764,7 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 		sp.Finish()
 	}()
 	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
+	g.Go(util.RecoverPanic(func() error {
 		// open tsdb index
 		indexBytes, err := newByteSliceFromBucketReader(ctx, q.bucketReader, block.IndexFilename)
 		if err != nil {
@@ -775,17 +776,17 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 			return errors.Wrap(err, "opening tsdb index")
 		}
 		return nil
-	})
+	}))
 
 	// open parquet files
 	for _, tableReader := range q.tables {
 		tableReader := tableReader
-		g.Go(func() error {
+		g.Go(util.RecoverPanic(func() error {
 			if err := tableReader.open(contextWithBlockMetrics(ctx, q.metrics), q.bucketReader); err != nil {
 				return err
 			}
 			return nil
-		})
+		}))
 	}
 
 	return g.Wait()

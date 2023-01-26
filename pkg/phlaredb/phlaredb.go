@@ -37,6 +37,7 @@ import (
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
+	"github.com/grafana/phlare/pkg/util"
 	diskutil "github.com/grafana/phlare/pkg/util/disk"
 )
 
@@ -353,7 +354,7 @@ func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect
 		// Sort profiles for better read locality.
 		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
-		g.Go(func() error {
+		g.Go(util.RecoverPanic(func() error {
 			merge, err := q.MergeByStacktraces(ctx, iter.NewSliceIterator(selectedProfiles))
 			if err != nil {
 				return err
@@ -362,7 +363,7 @@ func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect
 			defer lock.Unlock()
 			result = append(result, merge)
 			return nil
-		})
+		}))
 	}
 
 	// Signals the end of the profile streaming by sending an empty response.
@@ -438,7 +439,7 @@ func (f *PhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.Bidi
 		// Sort profiles for better read locality.
 		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
-		g.Go(func() error {
+		g.Go(util.RecoverPanic(func() error {
 			merge, err := q.MergeByLabels(ctx, iter.NewSliceIterator(selectedProfiles), by...)
 			if err != nil {
 				return err
@@ -448,7 +449,7 @@ func (f *PhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.Bidi
 			})
 
 			return nil
-		})
+		}))
 	}
 
 	// Signals the end of the profile streaming by sending an empty request.
@@ -523,7 +524,7 @@ func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiS
 		// Sort profiles for better read locality.
 		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
-		g.Go(func() error {
+		g.Go(util.RecoverPanic(func() error {
 			merge, err := q.MergePprof(ctx, iter.NewSliceIterator(selectedProfiles))
 			if err != nil {
 				return err
@@ -532,7 +533,7 @@ func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiS
 			defer lock.Unlock()
 			result = append(result, merge)
 			return nil
-		})
+		}))
 	}
 
 	// Signals the end of the profile streaming by sending an empty response.
