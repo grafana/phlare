@@ -16,10 +16,6 @@ import (
 	"github.com/grafana/dskit/services"
 	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
-	"google.golang.org/genproto/googleapis/api/httpbody"
-	"google.golang.org/protobuf/encoding/protojson"
-	"gopkg.in/yaml.v2"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -27,6 +23,9 @@ import (
 	"github.com/weaveworks/common/server"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/protobuf/encoding/protojson"
+	"gopkg.in/yaml.v2"
 
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
@@ -37,11 +36,15 @@ import (
 	"github.com/grafana/phlare/api/openapiv2"
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/distributor"
+	frontend "github.com/grafana/phlare/pkg/frontend"
+	"github.com/grafana/phlare/pkg/frontend/frontendpb/frontendpbconnect"
 	"github.com/grafana/phlare/pkg/ingester"
 	objstoreclient "github.com/grafana/phlare/pkg/objstore/client"
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/querier"
+	"github.com/grafana/phlare/pkg/scheduler"
+	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
@@ -49,24 +52,24 @@ import (
 
 // The various modules that make up Phlare.
 const (
-	All          string = "all"
-	Agent        string = "agent"
-	Distributor  string = "distributor"
-	Server       string = "server"
-	Ring         string = "ring"
-	Ingester     string = "ingester"
-	MemberlistKV string = "memberlist-kv"
-	Querier      string = "querier"
-	GRPCGateway  string = "grpc-gateway"
-	Storage      string = "storage"
-	UsageReport  string = "usage-stats"
+	All            string = "all"
+	Agent          string = "agent"
+	Distributor    string = "distributor"
+	Server         string = "server"
+	Ring           string = "ring"
+	Ingester       string = "ingester"
+	MemberlistKV   string = "memberlist-kv"
+	Querier        string = "querier"
+	GRPCGateway    string = "grpc-gateway"
+	Storage        string = "storage"
+	UsageReport    string = "usage-stats"
+	QueryFrontend  string = "query-frontend"
+	QueryScheduler string = "query-scheduler"
 
 	// RuntimeConfig            string = "runtime-config"
 	// Overrides                string = "overrides"
 	// OverridesExporter        string = "overrides-exporter"
 	// TenantConfigs            string = "tenant-configs"
-	// IngesterQuerier          string = "ingester-querier"
-	// QueryFrontend            string = "query-frontend"
 	// QueryFrontendTripperware string = "query-frontend-tripperware"
 	// RulerStorage             string = "ruler-storage"
 	// Ruler                    string = "ruler"
@@ -74,13 +77,105 @@ const (
 	// Compactor                string = "compactor"
 	// IndexGateway             string = "index-gateway"
 	// IndexGatewayRing         string = "index-gateway-ring"
-	// QueryScheduler           string = "query-scheduler"
 )
 
 var objectStoreTypeStats = usagestats.NewString("store_object_type")
 
+func (f *Phlare) initQueryFrontend() (services.Service, error) {
+	frontend, err := frontend.NewFrontend(f.Cfg.Frontend, log.With(f.logger, "component", "frontend"), f.reg)
+	if err != nil {
+		return nil, err
+	}
+	// todo register querier service and use roundtripper
+	//
+	// frontend := &frontendService{Frontend: front}
+	// // if querier is active we should probably use that as the service.
+	// querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, frontend, f.auth, connect.WithInterceptors(connect.UnaryInterceptorFunc(
+	// 	func(next connect.UnaryFunc) connect.UnaryFunc { return next }, // todo remove me if not needed
+	// )))
+
+	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontend)
+	return frontend, nil
+}
+
+func (f *Phlare) initQueryScheduler() (services.Service, error) {
+	s, err := scheduler.NewScheduler(f.Cfg.QueryScheduler, nil, log.With(f.logger, "component", "scheduler"), f.reg)
+	if err != nil {
+		return nil, errors.Wrap(err, "query-scheduler init")
+	}
+	schedulerpbconnect.RegisterSchedulerForFrontendHandler(f.Server.HTTP, s)
+	schedulerpbconnect.RegisterSchedulerForQuerierHandler(f.Server.HTTP, s)
+	return s, nil
+}
+
+// type frontendService struct {
+// 	// *frontendv2.Frontend
+// }
+// type GRPCRoundTripper interface {
+// 	RoundTripGRPC(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error)
+// }
+
+// func roundtripConnect[Req any, Res any](rt GRPCRoundTripper, ctx context.Context, in *connect.Request[Req]) (*connect.Response[Res], error) {
+// 	req := &httpgrpc.HTTPRequest{
+// 		Method:  http.MethodPost,
+// 		Url:     in.Spec().Procedure, // todo add peer info
+// 		Headers: []*httpgrpc.Header{},
+// 	}
+// 	for k, v := range in.Header() {
+// 		req.Headers = append(req.Headers, &httpgrpc.Header{Key: k, Values: v})
+// 	}
+// 	var err error
+// 	msg := in.Any() // todo protoVT
+// 	req.Body, err = proto.Marshal(msg.(proto.Message))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	res, err := rt.RoundTripGRPC(ctx, req)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	if res.Code/100 != 2 {
+// 		return nil, connect.NewError(connect.Code(res.Code), errors.New(string(res.Body)))
+// 	}
+// 	result := &connect.Response[Res]{}
+
+// 	err = proto.Unmarshal(res.Body, result.Any().(proto.Message))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return result, nil
+// }
+
+// func (f *frontendService) ProfileTypes(ctx context.Context, in *connect.Request[querierv1.ProfileTypesRequest]) (*connect.Response[querierv1.ProfileTypesResponse], error) {
+// 	return roundtripConnect[querierv1.ProfileTypesRequest, querierv1.ProfileTypesResponse](f, ctx, in)
+// }
+
+// func (f *frontendService) LabelValues(ctx context.Context, in *connect.Request[querierv1.LabelValuesRequest]) (*connect.Response[querierv1.LabelValuesResponse], error) {
+// 	return roundtripConnect[querierv1.LabelValuesRequest, querierv1.LabelValuesResponse](f, ctx, in)
+// }
+
+// func (f *frontendService) LabelNames(ctx context.Context, in *connect.Request[querierv1.LabelNamesRequest]) (*connect.Response[querierv1.LabelNamesResponse], error) {
+// 	return roundtripConnect[querierv1.LabelNamesRequest, querierv1.LabelNamesResponse](f, ctx, in)
+// }
+
+// func (f *frontendService) Series(ctx context.Context, in *connect.Request[querierv1.SeriesRequest]) (*connect.Response[querierv1.SeriesResponse], error) {
+// 	return roundtripConnect[querierv1.SeriesRequest, querierv1.SeriesResponse](f, ctx, in)
+// }
+
+// func (f *frontendService) SelectMergeStacktraces(ctx context.Context, in *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
+// 	return roundtripConnect[querierv1.SelectMergeStacktracesRequest, querierv1.SelectMergeStacktracesResponse](f, ctx, in)
+// }
+
+// func (f *frontendService) SelectMergeProfile(ctx context.Context, in *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {
+// 	return roundtripConnect[querierv1.SelectMergeProfileRequest, googlev1.Profile](f, ctx, in)
+// }
+
+// func (f *frontendService) SelectSeries(ctx context.Context, in *connect.Request[querierv1.SelectSeriesRequest]) (*connect.Response[querierv1.SelectSeriesResponse], error) {
+// 	return roundtripConnect[querierv1.SelectSeriesRequest, querierv1.SelectSeriesResponse](f, ctx, in)
+// }
+
 func (f *Phlare) initQuerier() (services.Service, error) {
-	q, err := querier.New(f.Cfg.Querier, f.ring, nil, f.logger, f.auth)
+	q, err := querier.New(f.Cfg.Querier, f.ring, nil, log.With(f.logger, "component", "querier"), f.auth)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +207,7 @@ func (f *Phlare) initGRPCGateway() (services.Service, error) {
 }
 
 func (f *Phlare) initDistributor() (services.Service, error) {
-	d, err := distributor.New(f.Cfg.Distributor, f.ring, nil, f.reg, f.logger, f.auth)
+	d, err := distributor.New(f.Cfg.Distributor, f.ring, nil, f.reg, log.With(f.logger, "component", "distributor"), f.auth)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +220,7 @@ func (f *Phlare) initDistributor() (services.Service, error) {
 }
 
 func (f *Phlare) initAgent() (services.Service, error) {
-	a, err := agent.New(&f.Cfg.AgentConfig, f.logger, f.getPusherClient)
+	a, err := agent.New(&f.Cfg.AgentConfig, log.With(f.logger, "component", "agent"), f.getPusherClient)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +259,7 @@ func (f *Phlare) initMemberlistKV() (services.Service, error) {
 }
 
 func (f *Phlare) initRing() (_ services.Service, err error) {
-	f.ring, err = ring.New(f.Cfg.Ingester.LifecyclerConfig.RingConfig, "ingester", "ring", f.logger, prometheus.WrapRegistererWithPrefix("phlare_", f.reg))
+	f.ring, err = ring.New(f.Cfg.Ingester.LifecyclerConfig.RingConfig, "ingester", "ring", log.With(f.logger, "component", "ring"), prometheus.WrapRegistererWithPrefix("phlare_", f.reg))
 	if err != nil {
 		return nil, err
 	}

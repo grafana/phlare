@@ -34,12 +34,14 @@ import (
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/grafana/phlare/pkg/distributor"
+	frontend "github.com/grafana/phlare/pkg/frontend"
 	"github.com/grafana/phlare/pkg/ingester"
 	"github.com/grafana/phlare/pkg/objstore"
 	objstoreclient "github.com/grafana/phlare/pkg/objstore/client"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb"
 	"github.com/grafana/phlare/pkg/querier"
+	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/tenant"
 	"github.com/grafana/phlare/pkg/tracing"
 	"github.com/grafana/phlare/pkg/usagestats"
@@ -47,15 +49,17 @@ import (
 )
 
 type Config struct {
-	Target       flagext.StringSliceCSV `yaml:"target,omitempty"`
-	AgentConfig  agent.Config           `yaml:",inline"`
-	Server       server.Config          `yaml:"server,omitempty"`
-	Distributor  distributor.Config     `yaml:"distributor,omitempty"`
-	Querier      querier.Config         `yaml:"querier,omitempty"`
-	Ingester     ingester.Config        `yaml:"ingester,omitempty"`
-	MemberlistKV memberlist.KVConfig    `yaml:"memberlist"`
-	PhlareDB     phlaredb.Config        `yaml:"phlaredb,omitempty"`
-	Tracing      tracing.Config         `yaml:"tracing"`
+	Target         flagext.StringSliceCSV `yaml:"target,omitempty"`
+	AgentConfig    agent.Config           `yaml:",inline"`
+	Server         server.Config          `yaml:"server,omitempty"`
+	Distributor    distributor.Config     `yaml:"distributor,omitempty"`
+	Querier        querier.Config         `yaml:"querier,omitempty"`
+	Frontend       frontend.Config        `yaml:"frontend,omitempty"`
+	QueryScheduler scheduler.Config       `yaml:"query_scheduler"`
+	Ingester       ingester.Config        `yaml:"ingester,omitempty"`
+	MemberlistKV   memberlist.KVConfig    `yaml:"memberlist"`
+	PhlareDB       phlaredb.Config        `yaml:"phlaredb,omitempty"`
+	Tracing        tracing.Config         `yaml:"tracing"`
 
 	Storage StorageConfig `yaml:"storage"`
 
@@ -103,6 +107,8 @@ func (c *Config) RegisterFlagsWithContext(ctx context.Context, f *flag.FlagSet) 
 	c.PhlareDB.RegisterFlags(f)
 	c.Tracing.RegisterFlags(f)
 	c.Storage.RegisterFlagsWithContext(ctx, f)
+	c.Frontend.RegisterFlags(f, log.NewLogfmtLogger(os.Stderr))
+	c.QueryScheduler.RegisterFlags(f, log.NewLogfmtLogger(os.Stderr))
 	c.Analytics.RegisterFlags(f)
 }
 
@@ -248,19 +254,23 @@ func (f *Phlare) setupModuleManager() error {
 	mm.RegisterModule(Querier, f.initQuerier)
 	mm.RegisterModule(Agent, f.initAgent)
 	mm.RegisterModule(UsageReport, f.initUsageReport)
+	mm.RegisterModule(QueryFrontend, f.initQueryFrontend)
+	mm.RegisterModule(QueryScheduler, f.initQueryScheduler)
 	mm.RegisterModule(All, nil)
 
 	// Add dependencies
 	deps := map[string][]string{
-		All:          {Agent, Ingester, Distributor, Querier},
-		UsageReport:  {Storage, MemberlistKV},
-		Distributor:  {Ring, Server, UsageReport},
-		Querier:      {Ring, Server, UsageReport},
-		Agent:        {Server},
-		Ingester:     {Server, MemberlistKV, Storage, UsageReport},
-		Ring:         {Server, MemberlistKV},
-		MemberlistKV: {Server},
-		Server:       {GRPCGateway},
+		All:            {Agent, Ingester, Distributor, Querier, QueryFrontend, QueryScheduler},
+		UsageReport:    {Storage, MemberlistKV},
+		Distributor:    {Ring, Server, UsageReport},
+		Querier:        {Ring, Server, UsageReport},
+		QueryFrontend:  {Server, UsageReport},
+		QueryScheduler: {Server, UsageReport}, // todo: add overrides
+		Agent:          {Server},
+		Ingester:       {Server, MemberlistKV, Storage, UsageReport},
+		Ring:           {Server, MemberlistKV},
+		MemberlistKV:   {Server},
+		Server:         {GRPCGateway},
 
 		// Querier:                  {Store, Ring, Server, IngesterQuerier, TenantConfigs, UsageReport},
 		// QueryFrontendTripperware: {Server, Overrides, TenantConfigs},

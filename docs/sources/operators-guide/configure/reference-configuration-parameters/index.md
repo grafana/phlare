@@ -161,6 +161,257 @@ client:
 # The querier block configures the querier.
 [querier: <querier>]
 
+frontend:
+  # Address of the query-scheduler component, in host:port format. The host
+  # should resolve to all query-scheduler instances. This option should be set
+  # only when query-scheduler component is in use and
+  # -query-scheduler.service-discovery-mode is set to 'dns'.
+  # CLI flag: -query-frontend.scheduler-address
+  [scheduler_address: <string> | default = ""]
+
+  # How often to resolve the scheduler-address, in order to look for new
+  # query-scheduler instances.
+  # CLI flag: -query-frontend.scheduler-dns-lookup-period
+  [scheduler_dns_lookup_period: <duration> | default = 10s]
+
+  # Number of concurrent workers forwarding queries to single query-scheduler.
+  # CLI flag: -query-frontend.scheduler-worker-concurrency
+  [scheduler_worker_concurrency: <int> | default = 5]
+
+  # Configures the gRPC client used to communicate between the query-frontends
+  # and the query-schedulers.
+  # The CLI flags prefix for this block configuration is: query-frontend
+  [grpc_client_config: <grpc_client>]
+
+  # List of network interface names to look up when finding the instance IP
+  # address. This address is sent to query-scheduler and querier, which uses it
+  # to send the query response back to query-frontend.
+  # CLI flag: -query-frontend.instance-interface-names
+  [instance_interface_names: <list of strings> | default = [<private network interfaces>]]
+
+  # IP address to advertise to the querier (via scheduler) (default is
+  # auto-detected from network interfaces).
+  # CLI flag: -query-frontend.instance-addr
+  [address: <string> | default = ""]
+
+  # Port to advertise to querier (via scheduler) (defaults to
+  # server.grpc-listen-port).
+  # CLI flag: -query-frontend.instance-port
+  [port: <int> | default = 0]
+
+query_scheduler:
+  # Maximum number of outstanding requests per tenant per query-scheduler.
+  # In-flight requests above this limit will fail with HTTP response status code
+  # 429.
+  # CLI flag: -query-scheduler.max-outstanding-requests-per-tenant
+  [max_outstanding_requests_per_tenant: <int> | default = 100]
+
+  # If a querier disconnects without sending notification about graceful
+  # shutdown, the query-scheduler will keep the querier in the tenant's shard
+  # until the forget delay has passed. This feature is useful to reduce the
+  # blast radius when shuffle-sharding is enabled.
+  # CLI flag: -query-scheduler.querier-forget-delay
+  [querier_forget_delay: <duration> | default = 0s]
+
+  # This configures the gRPC client used to report errors back to the
+  # query-frontend.
+  # The CLI flags prefix for this block configuration is: query-scheduler
+  [grpc_client_config: <grpc_client>]
+
+  # Service discovery mode that query-frontends and queriers use to find
+  # query-scheduler instances. When query-scheduler ring-based service discovery
+  # is enabled, this option needs be set on query-schedulers, query-frontends
+  # and queriers. Supported values are: dns, ring.
+  # CLI flag: -query-scheduler.service-discovery-mode
+  [service_discovery_mode: <string> | default = "dns"]
+
+  # The hash ring configuration. The query-schedulers hash ring is used for
+  # service discovery.
+  ring:
+    # The key-value store used to share the hash ring across multiple instances.
+    # When query-scheduler ring-based service discovery is enabled, this option
+    # needs be set on query-schedulers, query-frontends and queriers.
+    kvstore:
+      # Backend storage to use for the ring. Supported values are: consul, etcd,
+      # inmemory, memberlist, multi.
+      # CLI flag: -query-scheduler.ring.store
+      [store: <string> | default = "memberlist"]
+
+      # The prefix for the keys in the store. Should end with a /.
+      # CLI flag: -query-scheduler.ring.prefix
+      [prefix: <string> | default = "collectors/"]
+
+      consul:
+        # Hostname and port of Consul.
+        # CLI flag: -query-scheduler.ring.consul.hostname
+        [host: <string> | default = "localhost:8500"]
+
+        # ACL Token used to interact with Consul.
+        # CLI flag: -query-scheduler.ring.consul.acl-token
+        [acl_token: <string> | default = ""]
+
+        # HTTP timeout when talking to Consul
+        # CLI flag: -query-scheduler.ring.consul.client-timeout
+        [http_client_timeout: <duration> | default = 20s]
+
+        # Enable consistent reads to Consul.
+        # CLI flag: -query-scheduler.ring.consul.consistent-reads
+        [consistent_reads: <boolean> | default = false]
+
+        # Rate limit when watching key or prefix in Consul, in requests per
+        # second. 0 disables the rate limit.
+        # CLI flag: -query-scheduler.ring.consul.watch-rate-limit
+        [watch_rate_limit: <float> | default = 1]
+
+        # Burst size used in rate limit. Values less than 1 are treated as 1.
+        # CLI flag: -query-scheduler.ring.consul.watch-burst-size
+        [watch_burst_size: <int> | default = 1]
+
+        # Maximum duration to wait before retrying a Compare And Swap (CAS)
+        # operation.
+        # CLI flag: -query-scheduler.ring.consul.cas-retry-delay
+        [cas_retry_delay: <duration> | default = 1s]
+
+      etcd:
+        # The etcd endpoints to connect to.
+        # CLI flag: -query-scheduler.ring.etcd.endpoints
+        [endpoints: <list of strings> | default = []]
+
+        # The dial timeout for the etcd connection.
+        # CLI flag: -query-scheduler.ring.etcd.dial-timeout
+        [dial_timeout: <duration> | default = 10s]
+
+        # The maximum number of retries to do for failed ops.
+        # CLI flag: -query-scheduler.ring.etcd.max-retries
+        [max_retries: <int> | default = 10]
+
+        # Enable TLS.
+        # CLI flag: -query-scheduler.ring.etcd.tls-enabled
+        [tls_enabled: <boolean> | default = false]
+
+        # Path to the client certificate file, which will be used for
+        # authenticating with the server. Also requires the key path to be
+        # configured.
+        # CLI flag: -query-scheduler.ring.etcd.tls-cert-path
+        [tls_cert_path: <string> | default = ""]
+
+        # Path to the key file for the client certificate. Also requires the
+        # client certificate to be configured.
+        # CLI flag: -query-scheduler.ring.etcd.tls-key-path
+        [tls_key_path: <string> | default = ""]
+
+        # Path to the CA certificates file to validate server certificate
+        # against. If not set, the host's root CA certificates are used.
+        # CLI flag: -query-scheduler.ring.etcd.tls-ca-path
+        [tls_ca_path: <string> | default = ""]
+
+        # Override the expected name on the server certificate.
+        # CLI flag: -query-scheduler.ring.etcd.tls-server-name
+        [tls_server_name: <string> | default = ""]
+
+        # Skip validating server certificate.
+        # CLI flag: -query-scheduler.ring.etcd.tls-insecure-skip-verify
+        [tls_insecure_skip_verify: <boolean> | default = false]
+
+        # Override the default cipher suite list (separated by commas). Allowed
+        # values:
+        # 
+        # Secure Ciphers:
+        # - TLS_RSA_WITH_AES_128_CBC_SHA
+        # - TLS_RSA_WITH_AES_256_CBC_SHA
+        # - TLS_RSA_WITH_AES_128_GCM_SHA256
+        # - TLS_RSA_WITH_AES_256_GCM_SHA384
+        # - TLS_AES_128_GCM_SHA256
+        # - TLS_AES_256_GCM_SHA384
+        # - TLS_CHACHA20_POLY1305_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        # - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        # - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        # - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+        # - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        # - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        # - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        # - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        # 
+        # Insecure Ciphers:
+        # - TLS_RSA_WITH_RC4_128_SHA
+        # - TLS_RSA_WITH_3DES_EDE_CBC_SHA
+        # - TLS_RSA_WITH_AES_128_CBC_SHA256
+        # - TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
+        # - TLS_ECDHE_RSA_WITH_RC4_128_SHA
+        # - TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+        # - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+        # - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+        # CLI flag: -query-scheduler.ring.etcd.tls-cipher-suites
+        [tls_cipher_suites: <string> | default = ""]
+
+        # Override the default minimum TLS version. Allowed values:
+        # VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
+        # CLI flag: -query-scheduler.ring.etcd.tls-min-version
+        [tls_min_version: <string> | default = ""]
+
+        # Etcd username.
+        # CLI flag: -query-scheduler.ring.etcd.username
+        [username: <string> | default = ""]
+
+        # Etcd password.
+        # CLI flag: -query-scheduler.ring.etcd.password
+        [password: <string> | default = ""]
+
+      multi:
+        # Primary backend storage used by multi-client.
+        # CLI flag: -query-scheduler.ring.multi.primary
+        [primary: <string> | default = ""]
+
+        # Secondary backend storage used by multi-client.
+        # CLI flag: -query-scheduler.ring.multi.secondary
+        [secondary: <string> | default = ""]
+
+        # Mirror writes to secondary store.
+        # CLI flag: -query-scheduler.ring.multi.mirror-enabled
+        [mirror_enabled: <boolean> | default = false]
+
+        # Timeout for storing value to secondary store.
+        # CLI flag: -query-scheduler.ring.multi.mirror-timeout
+        [mirror_timeout: <duration> | default = 2s]
+
+    # Period at which to heartbeat to the ring. 0 = disabled.
+    # CLI flag: -query-scheduler.ring.heartbeat-period
+    [heartbeat_period: <duration> | default = 15s]
+
+    # The heartbeat timeout after which query-schedulers are considered
+    # unhealthy within the ring. When query-scheduler ring-based service
+    # discovery is enabled, this option needs be set on query-schedulers,
+    # query-frontends and queriers.
+    # CLI flag: -query-scheduler.ring.heartbeat-timeout
+    [heartbeat_timeout: <duration> | default = 1m]
+
+    # Instance ID to register in the ring.
+    # CLI flag: -query-scheduler.ring.instance-id
+    [instance_id: <string> | default = "<hostname>"]
+
+    # List of network interface names to look up when finding the instance IP
+    # address.
+    # CLI flag: -query-scheduler.ring.instance-interface-names
+    [instance_interface_names: <list of strings> | default = [<private network interfaces>]]
+
+    # Port to advertise in the ring (defaults to -server.grpc-listen-port).
+    # CLI flag: -query-scheduler.ring.instance-port
+    [instance_port: <int> | default = 0]
+
+    # IP address to advertise in the ring. Default is auto-detected.
+    # CLI flag: -query-scheduler.ring.instance-addr
+    [instance_addr: <string> | default = ""]
+
+  # The maximum number of query-scheduler instances to use, regardless how many
+  # replicas are running. This option can be set only when
+  # -query-scheduler.service-discovery-mode is set to 'ring'. 0 to use all
+  # available query-scheduler instances.
+  # CLI flag: -query-scheduler.max-used-instances
+  [max_used_instances: <int> | default = 0]
+
 # The ingester block configures the ingester.
 [ingester: <ingester>]
 
@@ -761,6 +1012,122 @@ pool_config:
 # Time to wait before sending more than the minimum successful query requests.
 # CLI flag: -querier.extra-query-delay
 [extra_query_delay: <duration> | default = 0s]
+```
+
+### grpc_client
+
+The `grpc_client` block configures the gRPC client used to communicate between two Mimir components. The supported CLI flags `<prefix>` used to reference this configuration block are:
+
+- `query-frontend`
+- `query-scheduler`
+
+&nbsp;
+
+```yaml
+# gRPC client max receive message size (bytes).
+# CLI flag: -<prefix>.grpc-client-config.grpc-max-recv-msg-size
+[max_recv_msg_size: <int> | default = 104857600]
+
+# gRPC client max send message size (bytes).
+# CLI flag: -<prefix>.grpc-client-config.grpc-max-send-msg-size
+[max_send_msg_size: <int> | default = 104857600]
+
+# Use compression when sending messages. Supported values are: 'gzip', 'snappy'
+# and '' (disable compression)
+# CLI flag: -<prefix>.grpc-client-config.grpc-compression
+[grpc_compression: <string> | default = ""]
+
+# Rate limit for gRPC client; 0 means disabled.
+# CLI flag: -<prefix>.grpc-client-config.grpc-client-rate-limit
+[rate_limit: <float> | default = 0]
+
+# Rate limit burst for gRPC client.
+# CLI flag: -<prefix>.grpc-client-config.grpc-client-rate-limit-burst
+[rate_limit_burst: <int> | default = 0]
+
+# Enable backoff and retry when we hit ratelimits.
+# CLI flag: -<prefix>.grpc-client-config.backoff-on-ratelimits
+[backoff_on_ratelimits: <boolean> | default = false]
+
+backoff_config:
+  # Minimum delay when backing off.
+  # CLI flag: -<prefix>.grpc-client-config.backoff-min-period
+  [min_period: <duration> | default = 100ms]
+
+  # Maximum delay when backing off.
+  # CLI flag: -<prefix>.grpc-client-config.backoff-max-period
+  [max_period: <duration> | default = 10s]
+
+  # Number of times to backoff and retry before failing.
+  # CLI flag: -<prefix>.grpc-client-config.backoff-retries
+  [max_retries: <int> | default = 10]
+
+# Enable TLS in the GRPC client. This flag needs to be enabled when any other
+# TLS flag is set. If set to false, insecure connection to gRPC server will be
+# used.
+# CLI flag: -<prefix>.grpc-client-config.tls-enabled
+[tls_enabled: <boolean> | default = false]
+
+# Path to the client certificate file, which will be used for authenticating
+# with the server. Also requires the key path to be configured.
+# CLI flag: -<prefix>.grpc-client-config.tls-cert-path
+[tls_cert_path: <string> | default = ""]
+
+# Path to the key file for the client certificate. Also requires the client
+# certificate to be configured.
+# CLI flag: -<prefix>.grpc-client-config.tls-key-path
+[tls_key_path: <string> | default = ""]
+
+# Path to the CA certificates file to validate server certificate against. If
+# not set, the host's root CA certificates are used.
+# CLI flag: -<prefix>.grpc-client-config.tls-ca-path
+[tls_ca_path: <string> | default = ""]
+
+# Override the expected name on the server certificate.
+# CLI flag: -<prefix>.grpc-client-config.tls-server-name
+[tls_server_name: <string> | default = ""]
+
+# Skip validating server certificate.
+# CLI flag: -<prefix>.grpc-client-config.tls-insecure-skip-verify
+[tls_insecure_skip_verify: <boolean> | default = false]
+
+# Override the default cipher suite list (separated by commas). Allowed values:
+# 
+# Secure Ciphers:
+# - TLS_RSA_WITH_AES_128_CBC_SHA
+# - TLS_RSA_WITH_AES_256_CBC_SHA
+# - TLS_RSA_WITH_AES_128_GCM_SHA256
+# - TLS_RSA_WITH_AES_256_GCM_SHA384
+# - TLS_AES_128_GCM_SHA256
+# - TLS_AES_256_GCM_SHA384
+# - TLS_CHACHA20_POLY1305_SHA256
+# - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+# - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+# - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+# - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+# - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+# - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+# - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+# - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+# 
+# Insecure Ciphers:
+# - TLS_RSA_WITH_RC4_128_SHA
+# - TLS_RSA_WITH_3DES_EDE_CBC_SHA
+# - TLS_RSA_WITH_AES_128_CBC_SHA256
+# - TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
+# - TLS_ECDHE_RSA_WITH_RC4_128_SHA
+# - TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+# - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+# CLI flag: -<prefix>.grpc-client-config.tls-cipher-suites
+[tls_cipher_suites: <string> | default = ""]
+
+# Override the default minimum TLS version. Allowed values: VersionTLS10,
+# VersionTLS11, VersionTLS12, VersionTLS13
+# CLI flag: -<prefix>.grpc-client-config.tls-min-version
+[tls_min_version: <string> | default = ""]
 ```
 
 ### memberlist

@@ -86,10 +86,10 @@ func populateLabels(lset labels.Labels, cfg ScrapeConfig) (res, orig labels.Labe
 	}
 
 	preRelabelLabels := lb.Labels(nil)
-	lset = relabel.Process(preRelabelLabels, cfg.RelabelConfigs...)
+	lset,keep := relabel.Process(preRelabelLabels, cfg.RelabelConfigs...)
 
 	// Check if the target was dropped.
-	if lset == nil {
+	if !keep{
 		return nil, preRelabelLabels, nil
 	}
 	if v := lset.Get(model.AddressLabel); v == "" {
