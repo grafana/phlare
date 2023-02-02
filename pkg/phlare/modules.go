@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/bufbuild/connect-go"
 	grpchealth "github.com/bufbuild/connect-grpchealth-go"
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
@@ -29,8 +30,10 @@ import (
 
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
+	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingesterv1connect "github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
+	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/api/openapiv2"
@@ -43,11 +46,14 @@ import (
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/querier"
+	"github.com/grafana/phlare/pkg/querier/worker"
 	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
+	"github.com/grafana/phlare/pkg/util/connectgrpc"
+	"github.com/grafana/phlare/pkg/util/httpgrpc"
 )
 
 // The various modules that make up Phlare.
@@ -82,24 +88,36 @@ const (
 var objectStoreTypeStats = usagestats.NewString("store_object_type")
 
 func (f *Phlare) initQueryFrontend() (services.Service, error) {
+	if f.Cfg.Frontend.Addr == "" {
+		addr, err := util.GetFirstAddressOf(f.Cfg.Frontend.InfNames)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get frontend address")
+		}
+
+		f.Cfg.Frontend.Addr = addr
+	}
+
+	if f.Cfg.Frontend.Port == 0 {
+		f.Cfg.Frontend.Port = f.Cfg.Server.HTTPListenPort
+	}
+
 	frontend, err := frontend.NewFrontend(f.Cfg.Frontend, log.With(f.logger, "component", "frontend"), f.reg)
 	if err != nil {
 		return nil, err
 	}
-	// todo register querier service and use roundtripper
-	//
-	// frontend := &frontendService{Frontend: front}
-	// // if querier is active we should probably use that as the service.
-	// querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, frontend, f.auth, connect.WithInterceptors(connect.UnaryInterceptorFunc(
-	// 	func(next connect.UnaryFunc) connect.UnaryFunc { return next }, // todo remove me if not needed
-	// )))
-
-	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontend)
+	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, &querierRoundTripper{frontend}, f.auth)
+	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontend, f.auth)
 	return frontend, nil
 }
 
+type fakeLimits struct{}
+
+func (fakeLimits) MaxQueriersPerUser(user string) int { return 0 }
+
 func (f *Phlare) initQueryScheduler() (services.Service, error) {
-	s, err := scheduler.NewScheduler(f.Cfg.QueryScheduler, nil, log.With(f.logger, "component", "scheduler"), f.reg)
+	f.Cfg.QueryScheduler.ServiceDiscovery.SchedulerRing.ListenPort = f.Cfg.Server.HTTPListenPort
+
+	s, err := scheduler.NewScheduler(f.Cfg.QueryScheduler, &fakeLimits{}, log.With(f.logger, "component", "scheduler"), f.reg)
 	if err != nil {
 		return nil, errors.Wrap(err, "query-scheduler init")
 	}
@@ -108,83 +126,102 @@ func (f *Phlare) initQueryScheduler() (services.Service, error) {
 	return s, nil
 }
 
-// type frontendService struct {
-// 	// *frontendv2.Frontend
-// }
-// type GRPCRoundTripper interface {
-// 	RoundTripGRPC(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error)
-// }
+type querierRoundTripper struct {
+	connectgrpc.GRPCRoundTripper
+}
 
-// func roundtripConnect[Req any, Res any](rt GRPCRoundTripper, ctx context.Context, in *connect.Request[Req]) (*connect.Response[Res], error) {
-// 	req := &httpgrpc.HTTPRequest{
-// 		Method:  http.MethodPost,
-// 		Url:     in.Spec().Procedure, // todo add peer info
-// 		Headers: []*httpgrpc.Header{},
-// 	}
-// 	for k, v := range in.Header() {
-// 		req.Headers = append(req.Headers, &httpgrpc.Header{Key: k, Values: v})
-// 	}
-// 	var err error
-// 	msg := in.Any() // todo protoVT
-// 	req.Body, err = proto.Marshal(msg.(proto.Message))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	res, err := rt.RoundTripGRPC(ctx, req)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	if res.Code/100 != 2 {
-// 		return nil, connect.NewError(connect.Code(res.Code), errors.New(string(res.Body)))
-// 	}
-// 	result := &connect.Response[Res]{}
+func (f *querierRoundTripper) ProfileTypes(ctx context.Context, in *connect.Request[querierv1.ProfileTypesRequest]) (*connect.Response[querierv1.ProfileTypesResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.ProfileTypesRequest, querierv1.ProfileTypesResponse](f, ctx, in)
+}
 
-// 	err = proto.Unmarshal(res.Body, result.Any().(proto.Message))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return result, nil
-// }
+func (f *querierRoundTripper) LabelValues(ctx context.Context, in *connect.Request[querierv1.LabelValuesRequest]) (*connect.Response[querierv1.LabelValuesResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.LabelValuesRequest, querierv1.LabelValuesResponse](f, ctx, in)
+}
 
-// func (f *frontendService) ProfileTypes(ctx context.Context, in *connect.Request[querierv1.ProfileTypesRequest]) (*connect.Response[querierv1.ProfileTypesResponse], error) {
-// 	return roundtripConnect[querierv1.ProfileTypesRequest, querierv1.ProfileTypesResponse](f, ctx, in)
-// }
+func (f *querierRoundTripper) LabelNames(ctx context.Context, in *connect.Request[querierv1.LabelNamesRequest]) (*connect.Response[querierv1.LabelNamesResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.LabelNamesRequest, querierv1.LabelNamesResponse](f, ctx, in)
+}
 
-// func (f *frontendService) LabelValues(ctx context.Context, in *connect.Request[querierv1.LabelValuesRequest]) (*connect.Response[querierv1.LabelValuesResponse], error) {
-// 	return roundtripConnect[querierv1.LabelValuesRequest, querierv1.LabelValuesResponse](f, ctx, in)
-// }
+func (f *querierRoundTripper) Series(ctx context.Context, in *connect.Request[querierv1.SeriesRequest]) (*connect.Response[querierv1.SeriesResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.SeriesRequest, querierv1.SeriesResponse](f, ctx, in)
+}
 
-// func (f *frontendService) LabelNames(ctx context.Context, in *connect.Request[querierv1.LabelNamesRequest]) (*connect.Response[querierv1.LabelNamesResponse], error) {
-// 	return roundtripConnect[querierv1.LabelNamesRequest, querierv1.LabelNamesResponse](f, ctx, in)
-// }
+func (f *querierRoundTripper) SelectMergeStacktraces(ctx context.Context, in *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.SelectMergeStacktracesRequest, querierv1.SelectMergeStacktracesResponse](f, ctx, in)
+}
 
-// func (f *frontendService) Series(ctx context.Context, in *connect.Request[querierv1.SeriesRequest]) (*connect.Response[querierv1.SeriesResponse], error) {
-// 	return roundtripConnect[querierv1.SeriesRequest, querierv1.SeriesResponse](f, ctx, in)
-// }
+func (f *querierRoundTripper) SelectMergeProfile(ctx context.Context, in *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {
+	return connectgrpc.RoundTripUnary[querierv1.SelectMergeProfileRequest, googlev1.Profile](f, ctx, in)
+}
 
-// func (f *frontendService) SelectMergeStacktraces(ctx context.Context, in *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
-// 	return roundtripConnect[querierv1.SelectMergeStacktracesRequest, querierv1.SelectMergeStacktracesResponse](f, ctx, in)
-// }
+func (f *querierRoundTripper) SelectSeries(ctx context.Context, in *connect.Request[querierv1.SelectSeriesRequest]) (*connect.Response[querierv1.SelectSeriesResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.SelectSeriesRequest, querierv1.SelectSeriesResponse](f, ctx, in)
+}
 
-// func (f *frontendService) SelectMergeProfile(ctx context.Context, in *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {
-// 	return roundtripConnect[querierv1.SelectMergeProfileRequest, googlev1.Profile](f, ctx, in)
-// }
+type querierHandler struct {
+	querierv1connect.QuerierServiceHandler
+}
 
-// func (f *frontendService) SelectSeries(ctx context.Context, in *connect.Request[querierv1.SelectSeriesRequest]) (*connect.Response[querierv1.SelectSeriesResponse], error) {
-// 	return roundtripConnect[querierv1.SelectSeriesRequest, querierv1.SelectSeriesResponse](f, ctx, in)
-// }
+// todo this could be generated.
+func (q *querierHandler) Handle(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error) {
+	// todo tracing from httpgrpc headers to ctx
+	switch req.Url {
+	case "/querier.v1.QuerierService/ProfileTypes":
+		return connectgrpc.HandleUnary(ctx, req, q.ProfileTypes)
+	case "/querier.v1.QuerierService/LabelValues":
+		return connectgrpc.HandleUnary(ctx, req, q.LabelValues)
+	case "/querier.v1.QuerierService/LabelNames":
+		return connectgrpc.HandleUnary(ctx, req, q.LabelNames)
+	case "/querier.v1.QuerierService/Series":
+		return connectgrpc.HandleUnary(ctx, req, q.Series)
+	case "/querier.v1.QuerierService/SelectMergeStacktraces":
+		return connectgrpc.HandleUnary(ctx, req, q.SelectMergeStacktraces)
+	case "/querier.v1.QuerierService/SelectMergeProfile":
+		return connectgrpc.HandleUnary(ctx, req, q.SelectMergeProfile)
+	case "/querier.v1.QuerierService/SelectSeries":
+		return connectgrpc.HandleUnary(ctx, req, q.SelectSeries)
+	default:
+		return nil, httpgrpc.Errorf(http.StatusNotFound, "url %s not found", req.Url)
+	}
+}
 
 func (f *Phlare) initQuerier() (services.Service, error) {
-	q, err := querier.New(f.Cfg.Querier, f.ring, nil, log.With(f.logger, "component", "querier"), f.auth)
+	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, log.With(f.logger, "component", "querier"), f.auth)
 	if err != nil {
 		return nil, err
 	}
-	// Those API are not meant to stay but allows us for testing through Grafana.
-	f.Server.HTTP.Handle("/pyroscope/render", http.HandlerFunc(q.RenderHandler))
-	f.Server.HTTP.Handle("/pyroscope/label-values", http.HandlerFunc(q.LabelValuesHandler))
-	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, q, f.auth)
+	if !f.isModuleActive(QueryFrontend) {
+		querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querierSvc, f.auth)
+	}
+	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, &querierHandler{querierSvc}, log.With(f.logger, "component", "querier-worker"), f.reg)
+	if err != nil {
+		return nil, err
+	}
 
-	return q, nil
+	sm, err := services.NewManager(querierSvc, worker)
+	if err != nil {
+		return nil, err
+	}
+	w := services.NewFailureWatcher()
+	w.WatchManager(sm)
+
+	return services.NewBasicService(func(ctx context.Context) error {
+		err := sm.StartAsync(ctx)
+		if err != nil {
+			return err
+		}
+		return sm.AwaitHealthy(ctx)
+	}, func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			return nil
+		case err := <-w.Chan():
+			return err
+		}
+	}, func(failureCase error) error {
+		sm.StopAsync()
+		return sm.AwaitStopped(context.Background())
+	}), nil
 }
 
 func (f *Phlare) getPusherClient() pushv1connect.PusherServiceClient {
@@ -254,6 +291,10 @@ func (f *Phlare) initMemberlistKV() (services.Service, error) {
 	f.MemberlistKV = memberlist.NewKVInitService(&f.Cfg.MemberlistKV, f.logger, dnsProvider, f.reg)
 
 	f.Cfg.Ingester.LifecyclerConfig.RingConfig.KVStore.MemberlistKV = f.MemberlistKV.GetMemberlistKV
+	f.Cfg.QueryScheduler.ServiceDiscovery.SchedulerRing.KVStore.MemberlistKV = f.MemberlistKV.GetMemberlistKV
+
+	f.Cfg.Frontend.QuerySchedulerDiscovery = f.Cfg.QueryScheduler.ServiceDiscovery
+	f.Cfg.Worker.QuerySchedulerDiscovery = f.Cfg.QueryScheduler.ServiceDiscovery
 
 	return f.MemberlistKV, nil
 }
@@ -314,6 +355,14 @@ func (f *Phlare) initServer() (services.Service, error) {
 	// Not all default middleware works with http2 so we'll add then manually.
 	// see https://github.com/grafana/phlare/issues/231
 	f.Cfg.Server.DoNotAddDefaultHTTPMiddleware = true
+
+	// Disable timeouts if query-scheduler is enabled since it requires long streaming RPCs.
+	if f.isModuleActive(QueryScheduler) {
+		// todo: however we should have API timeout for queries when running a single binary.
+		f.Cfg.Server.HTTPServerIdleTimeout = 0
+		f.Cfg.Server.HTTPServerWriteTimeout = 0
+		f.Cfg.Server.HTTPServerReadTimeout = 0
+	}
 
 	serv, err := server.New(f.Cfg.Server)
 	if err != nil {

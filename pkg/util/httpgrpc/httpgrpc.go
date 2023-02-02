@@ -3,10 +3,10 @@ package httpgrpc
 import (
 	"fmt"
 
-	spb "github.com/gogo/googleapis/google/rpc"
-	"github.com/gogo/protobuf/types"
-	"github.com/gogo/status"
+	"github.com/golang/protobuf/ptypes"
 	log "github.com/sirupsen/logrus"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Errorf returns a HTTP gRPC error than is correctly forwarded over
@@ -21,16 +21,12 @@ func Errorf(code int, tmpl string, args ...interface{}) error {
 
 // ErrorFromHTTPResponse converts an HTTP response into a grpc error
 func ErrorFromHTTPResponse(resp *HTTPResponse) error {
-	a, err := types.MarshalAny(resp)
+	s := status.New(codes.Code(resp.Code), string(resp.Body))
+	s, err := s.WithDetails(resp)
 	if err != nil {
 		return err
 	}
-
-	return status.ErrorProto(&spb.Status{
-		Code:    resp.Code,
-		Message: string(resp.Body),
-		Details: []*types.Any{a},
-	})
+	return status.ErrorProto(s.Proto())
 }
 
 // HTTPResponseFromError converts a grpc error into an HTTP response
@@ -46,7 +42,7 @@ func HTTPResponseFromError(err error) (*HTTPResponse, bool) {
 	}
 
 	var resp HTTPResponse
-	if err := types.UnmarshalAny(status.Details[0], &resp); err != nil {
+	if err := ptypes.UnmarshalAny(status.Details[0], &resp); err != nil {
 		log.Errorf("Got error containing non-response: %v", err)
 		return nil, false
 	}
