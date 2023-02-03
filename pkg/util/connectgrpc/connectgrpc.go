@@ -8,6 +8,7 @@ import (
 	"github.com/bufbuild/connect-go"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/grafana/phlare/pkg/tenant"
 	"github.com/grafana/phlare/pkg/util/httpgrpc"
 )
 
@@ -20,6 +21,9 @@ func HandleUnary[Req any, Res any](ctx context.Context, req *httpgrpc.HTTPReques
 	}
 	connectResp, err := u(ctx, connectReq) // todo handle error from connect status code.
 	if err != nil {
+		if errors.Is(err, tenant.ErrNoTenantID) {
+			err = connect.NewError(connect.CodeUnauthenticated, err)
+		}
 		var connectErr *connect.Error
 		if errors.As(err, &connectErr) {
 			return &httpgrpc.HTTPResponse{
@@ -28,6 +32,7 @@ func HandleUnary[Req any, Res any](ctx context.Context, req *httpgrpc.HTTPReques
 				Headers: connectHeaderToHTTPHeader(connectErr.Meta()),
 			}, nil
 		}
+
 		return nil, err
 	}
 	return encodeResponse(connectResp)
