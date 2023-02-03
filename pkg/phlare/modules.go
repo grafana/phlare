@@ -3,10 +3,8 @@ package phlare
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/bufbuild/connect-go"
 	grpchealth "github.com/bufbuild/connect-grpchealth-go"
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
@@ -30,10 +28,8 @@ import (
 
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
-	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingesterv1connect "github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
-	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/api/openapiv2"
@@ -52,8 +48,6 @@ import (
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
-	"github.com/grafana/phlare/pkg/util/connectgrpc"
-	"github.com/grafana/phlare/pkg/util/httpgrpc"
 )
 
 // The various modules that make up Phlare.
@@ -101,13 +95,13 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 		f.Cfg.Frontend.Port = f.Cfg.Server.HTTPListenPort
 	}
 
-	frontend, err := frontend.NewFrontend(f.Cfg.Frontend, log.With(f.logger, "component", "frontend"), f.reg)
+	frontendSvc, err := frontend.NewFrontend(f.Cfg.Frontend, log.With(f.logger, "component", "frontend"), f.reg)
 	if err != nil {
 		return nil, err
 	}
-	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, &querierRoundTripper{frontend}, f.auth)
-	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontend, f.auth)
-	return frontend, nil
+	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querier.NewGRPCRoundTripper(frontendSvc), f.auth)
+	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
+	return frontendSvc, nil
 }
 
 type fakeLimits struct{}
@@ -126,65 +120,6 @@ func (f *Phlare) initQueryScheduler() (services.Service, error) {
 	return s, nil
 }
 
-type querierRoundTripper struct {
-	connectgrpc.GRPCRoundTripper
-}
-
-func (f *querierRoundTripper) ProfileTypes(ctx context.Context, in *connect.Request[querierv1.ProfileTypesRequest]) (*connect.Response[querierv1.ProfileTypesResponse], error) {
-	return connectgrpc.RoundTripUnary[querierv1.ProfileTypesRequest, querierv1.ProfileTypesResponse](f, ctx, in)
-}
-
-func (f *querierRoundTripper) LabelValues(ctx context.Context, in *connect.Request[querierv1.LabelValuesRequest]) (*connect.Response[querierv1.LabelValuesResponse], error) {
-	return connectgrpc.RoundTripUnary[querierv1.LabelValuesRequest, querierv1.LabelValuesResponse](f, ctx, in)
-}
-
-func (f *querierRoundTripper) LabelNames(ctx context.Context, in *connect.Request[querierv1.LabelNamesRequest]) (*connect.Response[querierv1.LabelNamesResponse], error) {
-	return connectgrpc.RoundTripUnary[querierv1.LabelNamesRequest, querierv1.LabelNamesResponse](f, ctx, in)
-}
-
-func (f *querierRoundTripper) Series(ctx context.Context, in *connect.Request[querierv1.SeriesRequest]) (*connect.Response[querierv1.SeriesResponse], error) {
-	return connectgrpc.RoundTripUnary[querierv1.SeriesRequest, querierv1.SeriesResponse](f, ctx, in)
-}
-
-func (f *querierRoundTripper) SelectMergeStacktraces(ctx context.Context, in *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
-	return connectgrpc.RoundTripUnary[querierv1.SelectMergeStacktracesRequest, querierv1.SelectMergeStacktracesResponse](f, ctx, in)
-}
-
-func (f *querierRoundTripper) SelectMergeProfile(ctx context.Context, in *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {
-	return connectgrpc.RoundTripUnary[querierv1.SelectMergeProfileRequest, googlev1.Profile](f, ctx, in)
-}
-
-func (f *querierRoundTripper) SelectSeries(ctx context.Context, in *connect.Request[querierv1.SelectSeriesRequest]) (*connect.Response[querierv1.SelectSeriesResponse], error) {
-	return connectgrpc.RoundTripUnary[querierv1.SelectSeriesRequest, querierv1.SelectSeriesResponse](f, ctx, in)
-}
-
-type querierHandler struct {
-	querierv1connect.QuerierServiceHandler
-}
-
-// todo this could be generated.
-func (q *querierHandler) Handle(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error) {
-	// todo tracing from httpgrpc headers to ctx
-	switch req.Url {
-	case "/querier.v1.QuerierService/ProfileTypes":
-		return connectgrpc.HandleUnary(ctx, req, q.ProfileTypes)
-	case "/querier.v1.QuerierService/LabelValues":
-		return connectgrpc.HandleUnary(ctx, req, q.LabelValues)
-	case "/querier.v1.QuerierService/LabelNames":
-		return connectgrpc.HandleUnary(ctx, req, q.LabelNames)
-	case "/querier.v1.QuerierService/Series":
-		return connectgrpc.HandleUnary(ctx, req, q.Series)
-	case "/querier.v1.QuerierService/SelectMergeStacktraces":
-		return connectgrpc.HandleUnary(ctx, req, q.SelectMergeStacktraces)
-	case "/querier.v1.QuerierService/SelectMergeProfile":
-		return connectgrpc.HandleUnary(ctx, req, q.SelectMergeProfile)
-	case "/querier.v1.QuerierService/SelectSeries":
-		return connectgrpc.HandleUnary(ctx, req, q.SelectSeries)
-	default:
-		return nil, httpgrpc.Errorf(http.StatusNotFound, "url %s not found", req.Url)
-	}
-}
-
 func (f *Phlare) initQuerier() (services.Service, error) {
 	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, log.With(f.logger, "component", "querier"), f.auth)
 	if err != nil {
@@ -193,7 +128,7 @@ func (f *Phlare) initQuerier() (services.Service, error) {
 	if !f.isModuleActive(QueryFrontend) {
 		querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querierSvc, f.auth)
 	}
-	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, &querierHandler{querierSvc}, log.With(f.logger, "component", "querier-worker"), f.reg)
+	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, querier.NewGRPCHandler(querierSvc), log.With(f.logger, "component", "querier-worker"), f.reg)
 	if err != nil {
 		return nil, err
 	}

@@ -42,6 +42,10 @@ type GRPCRoundTripper interface {
 	RoundTripGRPC(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error)
 }
 
+type GRPCHandler interface {
+	Handle(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error)
+}
+
 func RoundTripUnary[Req any, Res any](rt GRPCRoundTripper, ctx context.Context, in *connect.Request[Req]) (*connect.Response[Res], error) {
 	req, err := encodeRequest(in)
 	if err != nil {
