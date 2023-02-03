@@ -5,7 +5,7 @@ package httpgrpc;
 option go_package = "github.com/phlare/pkg/util/httpgrpc";
 
 service HTTP {
-  rpc Handle(HTTPRequest) returns (HTTPResponse) {};
+  rpc Handle(HTTPRequest) returns (HTTPResponse) {}
 }
 
 message HTTPRequest {
