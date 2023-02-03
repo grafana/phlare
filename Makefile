@@ -231,7 +231,7 @@ $(BIN)/kind: Makefile go.mod
 
 $(BIN)/tk: Makefile go.mod $(BIN)/jb
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/grafana/tanka/cmd/tk@v0.22.1
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/grafana/tanka/cmd/tk@v0.24.0
 
 $(BIN)/jb: Makefile go.mod
 	@mkdir -p $(@D)

@@ -180,7 +180,8 @@ frontend:
 
   # Configures the gRPC client used to communicate between the query-frontends
   # and the query-schedulers.
-  # The CLI flags prefix for this block configuration is: query-frontend
+  # The CLI flags prefix for this block configuration is:
+  # query-frontend.grpc-client-config
   [grpc_client_config: <grpc_client>]
 
   # List of network interface names to look up when finding the instance IP
@@ -194,10 +195,26 @@ frontend:
   # CLI flag: -query-frontend.instance-addr
   [address: <string> | default = ""]
 
-  # Port to advertise to querier (via scheduler) (defaults to
-  # server.grpc-listen-port).
-  # CLI flag: -query-frontend.instance-port
-  [port: <int> | default = 0]
+frontend_worker:
+  # Address of the query-scheduler component, in host:port format. The host
+  # should resolve to all query-scheduler instances.
+  # CLI flag: -querier.scheduler-address
+  [scheduler_address: <string> | default = ""]
+
+  # How often to query DNS for query-frontend or query-scheduler address.
+  # CLI flag: -querier.dns-lookup-period
+  [dns_lookup_duration: <duration> | default = 10s]
+
+  # Querier ID, sent to the query-frontend to identify requests from the same
+  # querier. Defaults to hostname.
+  # CLI flag: -querier.id
+  [id: <string> | default = ""]
+
+  # Configures the gRPC client used to communicate between the queriers and the
+  # query-frontends / query-schedulers.
+  # The CLI flags prefix for this block configuration is:
+  # querier.frontend-client
+  [grpc_client_config: <grpc_client>]
 
 query_scheduler:
   # Maximum number of outstanding requests per tenant per query-scheduler.
@@ -215,7 +232,8 @@ query_scheduler:
 
   # This configures the gRPC client used to report errors back to the
   # query-frontend.
-  # The CLI flags prefix for this block configuration is: query-scheduler
+  # The CLI flags prefix for this block configuration is:
+  # query-scheduler.grpc-client-config
   [grpc_client_config: <grpc_client>]
 
   # Service discovery mode that query-frontends and queriers use to find
@@ -223,7 +241,7 @@ query_scheduler:
   # is enabled, this option needs be set on query-schedulers, query-frontends
   # and queriers. Supported values are: dns, ring.
   # CLI flag: -query-scheduler.service-discovery-mode
-  [service_discovery_mode: <string> | default = "dns"]
+  [service_discovery_mode: <string> | default = "ring"]
 
   # The hash ring configuration. The query-schedulers hash ring is used for
   # service discovery.
@@ -1018,77 +1036,78 @@ pool_config:
 
 The `grpc_client` block configures the gRPC client used to communicate between two Mimir components. The supported CLI flags `<prefix>` used to reference this configuration block are:
 
-- `query-frontend`
-- `query-scheduler`
+- `querier.frontend-client`
+- `query-frontend.grpc-client-config`
+- `query-scheduler.grpc-client-config`
 
 &nbsp;
 
 ```yaml
 # gRPC client max receive message size (bytes).
-# CLI flag: -<prefix>.grpc-client-config.grpc-max-recv-msg-size
+# CLI flag: -<prefix>.grpc-max-recv-msg-size
 [max_recv_msg_size: <int> | default = 104857600]
 
 # gRPC client max send message size (bytes).
-# CLI flag: -<prefix>.grpc-client-config.grpc-max-send-msg-size
+# CLI flag: -<prefix>.grpc-max-send-msg-size
 [max_send_msg_size: <int> | default = 104857600]
 
 # Use compression when sending messages. Supported values are: 'gzip', 'snappy'
 # and '' (disable compression)
-# CLI flag: -<prefix>.grpc-client-config.grpc-compression
+# CLI flag: -<prefix>.grpc-compression
 [grpc_compression: <string> | default = ""]
 
 # Rate limit for gRPC client; 0 means disabled.
-# CLI flag: -<prefix>.grpc-client-config.grpc-client-rate-limit
+# CLI flag: -<prefix>.grpc-client-rate-limit
 [rate_limit: <float> | default = 0]
 
 # Rate limit burst for gRPC client.
-# CLI flag: -<prefix>.grpc-client-config.grpc-client-rate-limit-burst
+# CLI flag: -<prefix>.grpc-client-rate-limit-burst
 [rate_limit_burst: <int> | default = 0]
 
 # Enable backoff and retry when we hit ratelimits.
-# CLI flag: -<prefix>.grpc-client-config.backoff-on-ratelimits
+# CLI flag: -<prefix>.backoff-on-ratelimits
 [backoff_on_ratelimits: <boolean> | default = false]
 
 backoff_config:
   # Minimum delay when backing off.
-  # CLI flag: -<prefix>.grpc-client-config.backoff-min-period
+  # CLI flag: -<prefix>.backoff-min-period
   [min_period: <duration> | default = 100ms]
 
   # Maximum delay when backing off.
-  # CLI flag: -<prefix>.grpc-client-config.backoff-max-period
+  # CLI flag: -<prefix>.backoff-max-period
   [max_period: <duration> | default = 10s]
 
   # Number of times to backoff and retry before failing.
-  # CLI flag: -<prefix>.grpc-client-config.backoff-retries
+  # CLI flag: -<prefix>.backoff-retries
   [max_retries: <int> | default = 10]
 
 # Enable TLS in the GRPC client. This flag needs to be enabled when any other
 # TLS flag is set. If set to false, insecure connection to gRPC server will be
 # used.
-# CLI flag: -<prefix>.grpc-client-config.tls-enabled
+# CLI flag: -<prefix>.tls-enabled
 [tls_enabled: <boolean> | default = false]
 
 # Path to the client certificate file, which will be used for authenticating
 # with the server. Also requires the key path to be configured.
-# CLI flag: -<prefix>.grpc-client-config.tls-cert-path
+# CLI flag: -<prefix>.tls-cert-path
 [tls_cert_path: <string> | default = ""]
 
 # Path to the key file for the client certificate. Also requires the client
 # certificate to be configured.
-# CLI flag: -<prefix>.grpc-client-config.tls-key-path
+# CLI flag: -<prefix>.tls-key-path
 [tls_key_path: <string> | default = ""]
 
 # Path to the CA certificates file to validate server certificate against. If
 # not set, the host's root CA certificates are used.
-# CLI flag: -<prefix>.grpc-client-config.tls-ca-path
+# CLI flag: -<prefix>.tls-ca-path
 [tls_ca_path: <string> | default = ""]
 
 # Override the expected name on the server certificate.
-# CLI flag: -<prefix>.grpc-client-config.tls-server-name
+# CLI flag: -<prefix>.tls-server-name
 [tls_server_name: <string> | default = ""]
 
 # Skip validating server certificate.
-# CLI flag: -<prefix>.grpc-client-config.tls-insecure-skip-verify
+# CLI flag: -<prefix>.tls-insecure-skip-verify
 [tls_insecure_skip_verify: <boolean> | default = false]
 
 # Override the default cipher suite list (separated by commas). Allowed values:
@@ -1121,12 +1140,12 @@ backoff_config:
 # - TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
 # - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
 # - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
-# CLI flag: -<prefix>.grpc-client-config.tls-cipher-suites
+# CLI flag: -<prefix>.tls-cipher-suites
 [tls_cipher_suites: <string> | default = ""]
 
 # Override the default minimum TLS version. Allowed values: VersionTLS10,
 # VersionTLS11, VersionTLS12, VersionTLS13
-# CLI flag: -<prefix>.grpc-client-config.tls-min-version
+# CLI flag: -<prefix>.tls-min-version
 [tls_min_version: <string> | default = ""]
 ```
 
