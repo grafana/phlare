@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/bufbuild/connect-go"
+
 	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
