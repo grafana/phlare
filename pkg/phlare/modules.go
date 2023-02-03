@@ -12,6 +12,7 @@ import (
 	"github.com/grafana/dskit/kv/codec"
 	"github.com/grafana/dskit/kv/memberlist"
 	"github.com/grafana/dskit/ring"
+	"github.com/grafana/dskit/runtimeconfig"
 	"github.com/grafana/dskit/services"
 	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
@@ -52,19 +53,22 @@ import (
 
 // The various modules that make up Phlare.
 const (
-	All            string = "all"
-	Agent          string = "agent"
-	Distributor    string = "distributor"
-	Server         string = "server"
-	Ring           string = "ring"
-	Ingester       string = "ingester"
-	MemberlistKV   string = "memberlist-kv"
-	Querier        string = "querier"
-	GRPCGateway    string = "grpc-gateway"
-	Storage        string = "storage"
-	UsageReport    string = "usage-stats"
-	QueryFrontend  string = "query-frontend"
-	QueryScheduler string = "query-scheduler"
+	All               string = "all"
+	Agent             string = "agent"
+	Distributor       string = "distributor"
+	Server            string = "server"
+	Ring              string = "ring"
+	Ingester          string = "ingester"
+	MemberlistKV      string = "memberlist-kv"
+	Querier           string = "querier"
+	GRPCGateway       string = "grpc-gateway"
+	Storage           string = "storage"
+	UsageReport       string = "usage-stats"
+	QueryFrontend     string = "query-frontend"
+	QueryScheduler    string = "query-scheduler"
+	RuntimeConfig     string = "runtime-config"
+	Overrides         string = "overrides"
+	OverridesExporter string = "overrides-exporter"
 
 	// RuntimeConfig            string = "runtime-config"
 	// Overrides                string = "overrides"
@@ -102,6 +106,59 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querier.NewGRPCRoundTripper(frontendSvc), f.auth)
 	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
 	return frontendSvc, nil
+}
+
+func (f *Phlare) initRuntimeConfig() (services.Service, error) {
+	if len(f.Cfg.RuntimeConfig.LoadPath) == 0 {
+		// no need to initialize module if load path is empty
+		return nil, nil
+	}
+	f.Cfg.RuntimeConfig.Loader = loadRuntimeConfig
+
+	// make sure to set default limits before we start loading configuration into memory
+	validation.SetDefaultLimitsForYAMLUnmarshalling(f.Cfg.LimitsConfig)
+
+	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("cortex_", f.Registerer), util_log.Logger)
+	if err == nil {
+		// TenantLimits just delegates to RuntimeConfig and doesn't have any state or need to do
+		// anything in the start/stopping phase. Thus we can create it as part of runtime config
+		// setup without any service instance of its own.
+		f.TenantLimits = newTenantLimits(serv)
+	}
+
+	f.RuntimeConfig = serv
+	f.API.RegisterRuntimeConfig(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig), validation.UserLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits))
+
+	return serv, err
+}
+
+func (f *Phlare) initOverrides() (serv services.Service, err error) {
+	f.Overrides, err = validation.NewOverrides(f.Cfg.LimitsConfig, f.TenantLimits)
+	// overrides don't have operational state, nor do they need to do anything more in starting/stopping phase,
+	// so there is no need to return any service.
+	return nil, err
+}
+
+func (f *Phlare) initOverridesExporter() (services.Service, error) {
+	f.Cfg.OverridesExporter.Ring.Common.ListenPort = f.Cfg.Server.GRPCListenPort
+
+	overridesExporter, err := exporter.NewOverridesExporter(
+		f.Cfg.OverridesExporter,
+		&f.Cfg.LimitsConfig,
+		f.TenantLimits,
+		util_log.Logger,
+		f.Registerer,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to instantiate overrides-exporter")
+	}
+	if f.Registerer != nil {
+		f.Registerer.MustRegister(overridesExporter)
+	}
+
+	f.API.RegisterOverridesExporter(overridesExporter)
+
+	return overridesExporter, nil
 }
 
 type fakeLimits struct{}

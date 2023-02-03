@@ -18,6 +18,7 @@ import (
 	"github.com/grafana/dskit/kv/memberlist"
 	"github.com/grafana/dskit/modules"
 	"github.com/grafana/dskit/ring"
+	"github.com/grafana/dskit/runtimeconfig"
 	"github.com/grafana/dskit/services"
 	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,18 +52,21 @@ import (
 )
 
 type Config struct {
-	Target         flagext.StringSliceCSV `yaml:"target,omitempty"`
-	AgentConfig    agent.Config           `yaml:",inline"`
-	Server         server.Config          `yaml:"server,omitempty"`
-	Distributor    distributor.Config     `yaml:"distributor,omitempty"`
-	Querier        querier.Config         `yaml:"querier,omitempty"`
-	Frontend       frontend.Config        `yaml:"frontend,omitempty"`
-	Worker         worker.Config          `yaml:"frontend_worker"`
-	QueryScheduler scheduler.Config       `yaml:"query_scheduler"`
-	Ingester       ingester.Config        `yaml:"ingester,omitempty"`
-	MemberlistKV   memberlist.KVConfig    `yaml:"memberlist"`
-	PhlareDB       phlaredb.Config        `yaml:"phlaredb,omitempty"`
-	Tracing        tracing.Config         `yaml:"tracing"`
+	Target            flagext.StringSliceCSV `yaml:"target,omitempty"`
+	AgentConfig       agent.Config           `yaml:",inline"`
+	Server            server.Config          `yaml:"server,omitempty"`
+	Distributor       distributor.Config     `yaml:"distributor,omitempty"`
+	Querier           querier.Config         `yaml:"querier,omitempty"`
+	Frontend          frontend.Config        `yaml:"frontend,omitempty"`
+	Worker            worker.Config          `yaml:"frontend_worker"`
+	LimitsConfig      validation.Limits      `yaml:"limits"`
+	QueryScheduler    scheduler.Config       `yaml:"query_scheduler"`
+	Ingester          ingester.Config        `yaml:"ingester,omitempty"`
+	MemberlistKV      memberlist.KVConfig    `yaml:"memberlist"`
+	PhlareDB          phlaredb.Config        `yaml:"phlaredb,omitempty"`
+	Tracing           tracing.Config         `yaml:"tracing"`
+	OverridesExporter exporter.Config        `yaml:"overrides_exporter"`
+	RuntimeConfig     runtimeconfig.Config   `yaml:"runtime_config"`
 
 	Storage StorageConfig `yaml:"storage"`
 
@@ -261,6 +265,9 @@ func (f *Phlare) setupModuleManager() error {
 	mm.RegisterModule(GRPCGateway, f.initGRPCGateway, modules.UserInvisibleModule)
 	mm.RegisterModule(MemberlistKV, f.initMemberlistKV, modules.UserInvisibleModule)
 	mm.RegisterModule(Ring, f.initRing, modules.UserInvisibleModule)
+	mm.RegisterModule(RuntimeConfig, f.initRuntimeConfig, modules.UserInvisibleModule)
+	mm.RegisterModule(Overrides, f.initOverrides, modules.UserInvisibleModule)
+	mm.RegisterModule(OverridesExporter, f.initOverridesExporter)
 	mm.RegisterModule(Ingester, f.initIngester)
 	mm.RegisterModule(Server, f.initServer, modules.UserInvisibleModule)
 	mm.RegisterModule(Distributor, f.initDistributor)
@@ -273,28 +280,22 @@ func (f *Phlare) setupModuleManager() error {
 
 	// Add dependencies
 	deps := map[string][]string{
-		All:            {Agent, Ingester, Distributor, QueryScheduler, QueryFrontend, Querier},
-		UsageReport:    {Storage, MemberlistKV},
+		All: {Agent, Ingester, Distributor, QueryScheduler, QueryFrontend, Querier},
+
+		Agent:          {Server},
 		Distributor:    {Ring, Server, UsageReport},
 		Querier:        {Server, MemberlistKV, Ring, UsageReport},
 		QueryFrontend:  {Server, MemberlistKV, UsageReport},
 		QueryScheduler: {Server, MemberlistKV, UsageReport}, // todo: add overrides
-		Agent:          {Server},
 		Ingester:       {Server, MemberlistKV, Storage, UsageReport},
-		Ring:           {Server, MemberlistKV},
-		MemberlistKV:   {Server},
-		Server:         {GRPCGateway},
 
-		// Querier:                  {Store, Ring, Server, IngesterQuerier, TenantConfigs, UsageReport},
-		// QueryFrontendTripperware: {Server, Overrides, TenantConfigs},
-		// QueryFrontend:            {QueryFrontendTripperware, UsageReport},
-		// QueryScheduler:           {Server, Overrides, MemberlistKV, UsageReport},
-		// Ruler:                    {Ring, Server, Store, RulerStorage, IngesterQuerier, Overrides, TenantConfigs, UsageReport},
-		// TableManager:             {Server, UsageReport},
-		// Compactor:                {Server, Overrides, MemberlistKV, UsageReport},
-		// IndexGateway:             {Server, Store, Overrides, UsageReport, MemberlistKV, IndexGatewayRing},
-		// IngesterQuerier:          {Ring},
-		// IndexGatewayRing:         {RuntimeConfig, Server, MemberlistKV},
+		UsageReport:       {Storage, MemberlistKV},
+		Overrides:         {RuntimeConfig},
+		OverridesExporter: {Overrides, MemberlistKV},
+		RuntimeConfig:     {Server},
+		Ring:              {Server, MemberlistKV},
+		MemberlistKV:      {Server},
+		Server:            {GRPCGateway},
 	}
 
 	for mod, targets := range deps {

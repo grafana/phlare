@@ -10,7 +10,7 @@ import (
 	"github.com/grafana/phlare/pkg/util/connectgrpc"
 )
 
-// todo this could be generated.
+// todo: this could be generated but first we need more operational experience in case we need to change it.
 type grpcRoundTripper struct {
 	connectgrpc.GRPCRoundTripper
 }
