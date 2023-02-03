@@ -19,7 +19,7 @@ func HandleUnary[Req any, Res any](ctx context.Context, req *httpgrpc.HTTPReques
 	if err != nil {
 		return nil, err
 	}
-	connectResp, err := u(ctx, connectReq) // todo handle error from connect status code.
+	connectResp, err := u(ctx, connectReq)
 	if err != nil {
 		if errors.Is(err, tenant.ErrNoTenantID) {
 			err = connect.NewError(connect.CodeUnauthenticated, err)

@@ -19,7 +19,6 @@ func NewGRPCHandler(svc querierv1connect.QuerierServiceHandler) connectgrpc.GRPC
 }
 
 func (q *grpcHandler) Handle(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error) {
-	// todo tracing from httpgrpc headers to ctx
 	switch req.Url {
 	case "/querier.v1.QuerierService/ProfileTypes":
 		return connectgrpc.HandleUnary(ctx, req, q.ProfileTypes)
