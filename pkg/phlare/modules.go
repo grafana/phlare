@@ -118,7 +118,7 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	// make sure to set default limits before we start loading configuration into memory
 	validation.SetDefaultLimitsForYAMLUnmarshalling(f.Cfg.LimitsConfig)
 
-	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("cortex_", f.Registerer), util_log.Logger)
+	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("cortex_", f.reg), f.logger)
 	if err == nil {
 		// TenantLimits just delegates to RuntimeConfig and doesn't have any state or need to do
 		// anything in the start/stopping phase. Thus we can create it as part of runtime config
