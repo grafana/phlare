@@ -99,6 +99,5 @@ func YAMLFlag(args []string, name string) Source {
 		}
 
 		return YAML(f.Value.String(), expandEnv)(dst)
-
 	}
 }
