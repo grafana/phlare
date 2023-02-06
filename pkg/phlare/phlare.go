@@ -29,7 +29,6 @@ import (
 	"github.com/weaveworks/common/server"
 	"github.com/weaveworks/common/signals"
 	wwtracing "github.com/weaveworks/common/tracing"
-	"google.golang.org/grpc/health/grpc_health_v1"
 
 	pushv1connect "github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
 	"github.com/grafana/phlare/pkg/agent"
@@ -73,8 +72,9 @@ type Config struct {
 	MultitenancyEnabled bool              `yaml:"multitenancy_enabled,omitempty"`
 	Analytics           usagestats.Config `yaml:"analytics"`
 
-	ConfigFile  string `yaml:"-"`
-	ShowVersion bool   `yaml:"-"`
+	ConfigFile      string `yaml:"-"`
+	ShowVersion     bool   `yaml:"-"`
+	ConfigExpandEnv bool   `yaml:"-"`
 }
 
 func newDefaultConfig() *Config {
@@ -105,6 +105,7 @@ func (c *Config) RegisterFlagsWithContext(ctx context.Context, f *flag.FlagSet) 
 		"The alias 'all' can be used in the list to load a number of core modules and will enable single-binary mode. ")
 	f.BoolVar(&c.MultitenancyEnabled, "auth.multitenancy-enabled", false, "When set to true, incoming HTTP requests must specify tenant ID in HTTP X-Scope-OrgId header. When set to false, tenant ID anonymous is used instead.")
 	f.BoolVar(&c.ShowVersion, "version", false, "Show the version of phlare and exit")
+	f.BoolVar(&c.ConfigExpandEnv, "config.expand-env", false, "Expands ${var} in config according to the values of the environment variables.")
 
 	c.registerServerFlagsWithChangedDefaultValues(f)
 	c.AgentConfig.RegisterFlags(f)
@@ -157,9 +158,9 @@ func (c *Config) Validate() error {
 
 func (c *Config) ApplyDynamicConfig() cfg.Source {
 	c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store = "memberlist"
-	c.Frontend.QuerySchedulerDiscovery.SchedulerRing.KVStore.Store = "memberlist"
-	c.Worker.QuerySchedulerDiscovery.SchedulerRing.KVStore.Store = "memberlist"
-	c.QueryScheduler.ServiceDiscovery.SchedulerRing.KVStore.Store = "memberlist"
+	c.Frontend.QuerySchedulerDiscovery.SchedulerRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
+	c.Worker.QuerySchedulerDiscovery.SchedulerRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
+	c.QueryScheduler.ServiceDiscovery.SchedulerRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
 	c.Worker.MaxConcurrentRequests = 4 // todo we might want this as a config flags.
 
 	return func(dst cfg.Cloneable) error {
@@ -328,7 +329,7 @@ func (f *Phlare) Run() error {
 	}
 	f.Server.HTTP.Path("/ready").Methods("GET").Handler(f.readyHandler(sm))
 
-	grpc_health_v1.RegisterHealthServer(f.Server.GRPC, grpcutil.NewHealthCheck(sm))
+	RegisterHealthServer(f.Server.HTTP, grpcutil.WithManager(sm))
 	healthy := func() { level.Info(f.logger).Log("msg", "Phlare started", "version", version.Info()) }
 
 	serviceFailed := func(service services.Service) {

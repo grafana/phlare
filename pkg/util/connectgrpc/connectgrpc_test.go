@@ -8,11 +8,12 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/gorilla/mux"
-	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
-	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
+	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 )
 
 type fakeQuerier struct {
@@ -42,7 +43,7 @@ func Test_DecodeGRPC(t *testing.T) {
 	req := &querierv1.LabelValuesRequest{
 		Name: "foo",
 	}
-	client.LabelValues(context.Background(), connect.NewRequest(req))
+	_, _ = client.LabelValues(context.Background(), connect.NewRequest(req))
 
 	encoded, err := encodeRequest(f.req)
 	require.NoError(t, err)

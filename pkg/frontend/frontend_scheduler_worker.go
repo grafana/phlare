@@ -7,6 +7,7 @@ package frontend
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -278,6 +279,10 @@ func (w *frontendSchedulerWorker) runOne(ctx context.Context, client schedulerpb
 		}
 
 		loopErr = w.schedulerLoop(loop)
+		if loopErr == io.EOF {
+			level.Debug(w.log).Log("msg", "scheduler loop closed", "addr", w.schedulerAddr)
+			return true
+		}
 		if closeErr := loop.CloseSend(); closeErr != nil {
 			level.Debug(w.log).Log("msg", "failed to close frontend loop", "err", loopErr, "addr", w.schedulerAddr)
 		}

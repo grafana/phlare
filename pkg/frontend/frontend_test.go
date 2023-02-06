@@ -33,8 +33,6 @@ import (
 	"go.uber.org/atomic"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 
 	"github.com/grafana/phlare/pkg/frontend/frontendpb"
 	"github.com/grafana/phlare/pkg/frontend/frontendpb/frontendpbconnect"
@@ -52,7 +50,7 @@ func setupFrontend(t *testing.T, reg prometheus.Registerer, schedulerReplyFunc f
 	return setupFrontendWithConcurrencyAndServerOptions(t, reg, schedulerReplyFunc, testFrontendWorkerConcurrency)
 }
 
-func setupFrontendWithConcurrencyAndServerOptions(t *testing.T, reg prometheus.Registerer, schedulerReplyFunc func(f *Frontend, msg *schedulerpb.FrontendToScheduler) *schedulerpb.SchedulerToFrontend, concurrency int, opts ...grpc.ServerOption) (*Frontend, *mockScheduler) {
+func setupFrontendWithConcurrencyAndServerOptions(t *testing.T, reg prometheus.Registerer, schedulerReplyFunc func(f *Frontend, msg *schedulerpb.FrontendToScheduler) *schedulerpb.SchedulerToFrontend, concurrency int) (*Frontend, *mockScheduler) {
 	s := httptest.NewUnstartedServer(nil)
 	mux := mux.NewRouter()
 	s.Config.Handler = h2c.NewHandler(mux, &http2.Server{})
@@ -446,13 +444,7 @@ func TestWithClosingGrpcServer(t *testing.T) {
 
 	f, _ := setupFrontendWithConcurrencyAndServerOptions(t, nil, func(f *Frontend, msg *schedulerpb.FrontendToScheduler) *schedulerpb.SchedulerToFrontend {
 		return &schedulerpb.SchedulerToFrontend{Status: schedulerpb.SchedulerToFrontendStatus_TOO_MANY_REQUESTS_PER_TENANT}
-	}, frontendConcurrency, grpc.KeepaliveParams(keepalive.ServerParameters{
-		MaxConnectionIdle:     100 * time.Millisecond,
-		MaxConnectionAge:      100 * time.Millisecond,
-		MaxConnectionAgeGrace: 100 * time.Millisecond,
-		Time:                  1 * time.Second,
-		Timeout:               1 * time.Second,
-	}))
+	}, frontendConcurrency)
 
 	// Connection will be established on the first roundtrip.
 	resp, err := f.RoundTripGRPC(user.InjectOrgID(context.Background(), userID), &httpgrpc.HTTPRequest{})

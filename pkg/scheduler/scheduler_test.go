@@ -8,6 +8,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/gorilla/mux"
 	"github.com/grafana/dskit/flagext"
@@ -35,13 +37,14 @@ import (
 	"github.com/grafana/phlare/pkg/frontend/frontendpb"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
+	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/httpgrpc"
 	"github.com/grafana/phlare/pkg/util/httpgrpcutil"
 )
 
 const testMaxOutstandingPerTenant = 5
 
-func setupScheduler(t *testing.T, reg prometheus.Registerer) (*Scheduler, schedulerpb.SchedulerForFrontendClient, schedulerpb.SchedulerForQuerierClient) {
+func setupScheduler(t *testing.T, reg prometheus.Registerer, opts ...connect.HandlerOption) (*Scheduler, schedulerpb.SchedulerForFrontendClient, schedulerpb.SchedulerForQuerierClient) {
 	cfg := Config{}
 	flagext.DefaultValues(&cfg)
 	cfg.MaxOutstandingPerTenant = testMaxOutstandingPerTenant
@@ -52,19 +55,15 @@ func setupScheduler(t *testing.T, reg prometheus.Registerer) (*Scheduler, schedu
 	server := httptest.NewUnstartedServer(nil)
 	mux := mux.NewRouter()
 	server.Config.Handler = h2c.NewHandler(mux, &http2.Server{})
-
 	server.Start()
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	schedulerpbconnect.RegisterSchedulerForFrontendHandler(mux, s)
-	schedulerpbconnect.RegisterSchedulerForQuerierHandler(mux, s)
+	schedulerpbconnect.RegisterSchedulerForFrontendHandler(mux, s, opts...)
+	schedulerpbconnect.RegisterSchedulerForQuerierHandler(mux, s, opts...)
 
 	require.NoError(t, services.StartAndAwaitRunning(context.Background(), s))
 	t.Cleanup(func() {
 		_ = services.StopAndAwaitTerminated(context.Background(), s)
-	})
-
-	t.Cleanup(func() {
 		server.Close()
 	})
 
@@ -76,6 +75,16 @@ func setupScheduler(t *testing.T, reg prometheus.Registerer) (*Scheduler, schedu
 	})
 
 	return s, schedulerpb.NewSchedulerForFrontendClient(c), schedulerpb.NewSchedulerForQuerierClient(c)
+}
+
+func Test_Timeout(t *testing.T) {
+	s, _, querierClient := setupScheduler(t, nil, connect.WithInterceptors(util.WithTimeout(1*time.Second)))
+
+	ql, err := querierClient.QuerierLoop(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, ql.Send(&schedulerpb.QuerierToScheduler{QuerierID: "querier-1"}))
+	time.Sleep(2 * time.Second)
+	require.Equal(t, float64(0), s.requestQueue.GetConnectedQuerierWorkersMetric())
 }
 
 func TestSchedulerBasicEnqueue(t *testing.T) {
@@ -234,8 +243,7 @@ func TestCancelRequestInProgress(t *testing.T) {
 
 	// Report back end of request processing. This should return error, since the QuerierLoop call has finished on scheduler.
 	// Note: testing on querierLoop.Context() cancellation didn't work :(
-	err = querierLoop.Send(&schedulerpb.QuerierToScheduler{})
-	require.Error(t, err)
+	test.Poll(t, time.Second, io.EOF, func() interface{} { return querierLoop.Send(&schedulerpb.QuerierToScheduler{}) })
 
 	verifyNoPendingRequestsLeft(t, scheduler)
 }
@@ -258,7 +266,7 @@ func TestTracingContext(t *testing.T) {
 	}
 
 	sp, _ := opentracing.StartSpanFromContext(context.Background(), "client")
-	opentracing.GlobalTracer().Inject(sp.Context(), opentracing.HTTPHeaders, (*httpgrpcutil.HttpgrpcHeadersCarrier)(req.HttpRequest))
+	_ = opentracing.GlobalTracer().Inject(sp.Context(), opentracing.HTTPHeaders, (*httpgrpcutil.HttpgrpcHeadersCarrier)(req.HttpRequest))
 
 	frontendToScheduler(t, frontendLoop, req)
 

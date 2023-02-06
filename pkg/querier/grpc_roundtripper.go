@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/bufbuild/connect-go"
+
 	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	"github.com/grafana/phlare/pkg/util/connectgrpc"
 )
 
-// todo: this could be generated but first we need more operational experience in case we need to change it.
+// todo: this could be generated.
 type grpcRoundTripper struct {
 	connectgrpc.GRPCRoundTripper
 }

@@ -9,7 +9,6 @@ package stats;
 
 option go_package = "stats";
 
-
 message Stats {
   // The sum of all wall time spent in the querier to execute the query.
   int64 wall_time = 1;

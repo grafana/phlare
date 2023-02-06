@@ -23,8 +23,8 @@ const (
 var modes = []string{ModeDNS, ModeRing}
 
 type Config struct {
-	Mode             string     `yaml:"service_discovery_mode" category:"experimental"`
-	SchedulerRing    RingConfig `yaml:"ring" doc:"description=The hash ring configuration. The query-schedulers hash ring is used for service discovery."`
+	Mode             string     `yaml:"service_discovery_mode" category:"experimental" doc:"hidden"`
+	SchedulerRing    RingConfig `yaml:"ring" doc:"hidden"`
 	MaxUsedInstances int        `yaml:"max_used_instances" category:"experimental"`
 }
 

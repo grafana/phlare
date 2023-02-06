@@ -8,8 +8,9 @@ package httpgrpcutil
 import (
 	"errors"
 
-	"github.com/grafana/phlare/pkg/util/httpgrpc"
 	"github.com/opentracing/opentracing-go"
+
+	"github.com/grafana/phlare/pkg/util/httpgrpc"
 )
 
 // Used to transfer trace information from/to HTTP request.

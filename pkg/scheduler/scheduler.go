@@ -374,8 +374,49 @@ func (s *Scheduler) cancelRequestAndRemoveFromPending(frontendAddr string, query
 	delete(s.pendingRequests, key)
 }
 
+// BidiStreamCloser is a wrapper around BidiStream that allows to close it.
+// Once closed, it will return io.EOF on Receive and Send.
+type BidiStreamCloser[Req, Res any] struct {
+	stream *connect.BidiStream[Req, Res]
+	lock   sync.Mutex
+}
+
+func (c *BidiStreamCloser[Req, Res]) Close() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.stream != nil {
+		c.stream = nil
+	}
+}
+
+func (c *BidiStreamCloser[Req, Res]) Receive() (*Req, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.stream == nil {
+		return nil, io.EOF
+	}
+
+	return c.stream.Receive()
+}
+
+func (b *BidiStreamCloser[Req, Res]) Send(msg *Res) error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	if b.stream == nil {
+		return io.EOF
+	}
+	return b.stream.Send(msg)
+}
+
 // QuerierLoop is started by querier to receive queries from scheduler.
-func (s *Scheduler) QuerierLoop(ctx context.Context, querier *connect.BidiStream[schedulerpb.QuerierToScheduler, schedulerpb.SchedulerToQuerier]) error {
+func (s *Scheduler) QuerierLoop(ctx context.Context, bidi *connect.BidiStream[schedulerpb.QuerierToScheduler, schedulerpb.SchedulerToQuerier]) error {
+	querier := &BidiStreamCloser[schedulerpb.QuerierToScheduler, schedulerpb.SchedulerToQuerier]{
+		stream: bidi,
+	}
+	defer querier.Close()
 	resp, err := querier.Receive()
 	if err != nil {
 		return err
@@ -441,7 +482,7 @@ func (s *Scheduler) NotifyQuerierShutdown(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(&schedulerpb.NotifyQuerierShutdownResponse{}), nil
 }
 
-func (s *Scheduler) forwardRequestToQuerier(querier *connect.BidiStream[schedulerpb.QuerierToScheduler, schedulerpb.SchedulerToQuerier], req *schedulerRequest) error {
+func (s *Scheduler) forwardRequestToQuerier(querier *BidiStreamCloser[schedulerpb.QuerierToScheduler, schedulerpb.SchedulerToQuerier], req *schedulerRequest) error {
 	// Make sure to cancel request at the end to cleanup resources.
 	defer s.cancelRequestAndRemoveFromPending(req.frontendAddress, req.queryID)
 

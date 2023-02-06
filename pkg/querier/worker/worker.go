@@ -27,8 +27,8 @@ import (
 )
 
 type Config struct {
-	SchedulerAddress string            `yaml:"scheduler_address"`
-	DNSLookupPeriod  time.Duration     `yaml:"dns_lookup_duration" category:"advanced"`
+	SchedulerAddress string            `yaml:"scheduler_address" doc:"hidden"`
+	DNSLookupPeriod  time.Duration     `yaml:"dns_lookup_duration" category:"advanced" doc:"hidden"`
 	QuerierID        string            `yaml:"id" category:"advanced"`
 	GRPCClientConfig grpcclient.Config `yaml:"grpc_client_config" doc:"description=Configures the gRPC client used to communicate between the queriers and the query-frontends / query-schedulers."`
 
@@ -38,8 +38,6 @@ type Config struct {
 }
 
 func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
-	f.StringVar(&cfg.SchedulerAddress, "querier.scheduler-address", "", fmt.Sprintf("Address of the query-scheduler component, in host:port format. The host should resolve to all query-scheduler instances. "))
-	f.DurationVar(&cfg.DNSLookupPeriod, "querier.dns-lookup-period", 10*time.Second, "How often to query DNS for query-frontend or query-scheduler address.")
 	f.StringVar(&cfg.QuerierID, "querier.id", "", "Querier ID, sent to the query-frontend to identify requests from the same querier. Defaults to hostname.")
 
 	cfg.GRPCClientConfig.RegisterFlagsWithPrefix("querier.frontend-client", f)
