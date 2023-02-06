@@ -124,10 +124,16 @@ func (sp *schedulerProcessor) processQueriesOnSingleStream(workerCtx context.Con
 
 		if err := sp.querierLoop(c, address, inflightQuery); err != nil {
 			// Do not log an error is the query-scheduler is shutting down.
-			if s, ok := status.FromError(err); !ok || !strings.Contains(s.Message(), schedulerpb.ErrSchedulerIsNotRunning.Error()) {
+			if s, ok := status.FromError(err); !ok ||
+				(!strings.Contains(s.Message(), schedulerpb.ErrSchedulerIsNotRunning.Error()) &&
+					!strings.Contains(s.Message(), context.DeadlineExceeded.Error()) &&
+					!strings.Contains(s.Message(), "stream terminated")) {
 				level.Error(sp.log).Log("msg", "error processing requests from scheduler", "err", err, "addr", address)
 			}
-
+			if strings.Contains(err.Error(), context.DeadlineExceeded.Error()) || strings.Contains(err.Error(), "stream terminated") {
+				backoff.Reset()
+				continue
+			}
 			backoff.Wait()
 			continue
 		}

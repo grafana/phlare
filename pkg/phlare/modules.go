@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bufbuild/connect-go"
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -115,8 +116,28 @@ func (f *Phlare) initQueryScheduler() (services.Service, error) {
 		return nil, errors.Wrap(err, "query-scheduler init")
 	}
 	schedulerpbconnect.RegisterSchedulerForFrontendHandler(f.Server.HTTP, s)
-	schedulerpbconnect.RegisterSchedulerForQuerierHandler(f.Server.HTTP, s)
+	schedulerpbconnect.RegisterSchedulerForQuerierHandler(f.Server.HTTP, s, f.schedulerQuerierTimeout())
 	return s, nil
+}
+
+// schedulerQuerierTimeout returns a HandlerOption that sets the timeout for the
+// communication between the scheduler and the querier.
+// This is required because connect streaming handler does not propagate timeouts
+// through the context.
+// Adding a timeout options to the handler enforce the timeout to be propagated
+// and cancel the stream if the timeout is reached.
+// Querier expects this and will gracefully reconnects.
+func (f *Phlare) schedulerQuerierTimeout() connect.HandlerOption {
+	opts := []connect.HandlerOption{}
+	timeout := f.Cfg.Server.HTTPServerReadTimeout
+	if f.Cfg.Server.HTTPServerWriteTimeout < timeout {
+		timeout = f.Cfg.Server.HTTPServerWriteTimeout
+	}
+
+	if timeout > 0 {
+		opts = append(opts, connect.WithInterceptors(util.WithTimeout(timeout)))
+	}
+	return connect.WithHandlerOptions(opts...)
 }
 
 func (f *Phlare) initQuerier() (services.Service, error) {
@@ -287,14 +308,6 @@ func (f *Phlare) initServer() (services.Service, error) {
 	// Not all default middleware works with http2 so we'll add then manually.
 	// see https://github.com/grafana/phlare/issues/231
 	f.Cfg.Server.DoNotAddDefaultHTTPMiddleware = true
-
-	// Disable timeouts if query-scheduler is enabled since it requires long streaming RPCs.
-	if f.isModuleActive(QueryScheduler) {
-		// todo: however we should have API timeout for queries when running a single binary.
-		f.Cfg.Server.HTTPServerIdleTimeout = 0
-		f.Cfg.Server.HTTPServerWriteTimeout = 0
-		f.Cfg.Server.HTTPServerReadTimeout = 0
-	}
 
 	serv, err := server.New(f.Cfg.Server)
 	if err != nil {
