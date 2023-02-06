@@ -8,6 +8,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -62,9 +63,6 @@ func setupScheduler(t *testing.T, reg prometheus.Registerer) (*Scheduler, schedu
 	require.NoError(t, services.StartAndAwaitRunning(context.Background(), s))
 	t.Cleanup(func() {
 		_ = services.StopAndAwaitTerminated(context.Background(), s)
-	})
-
-	t.Cleanup(func() {
 		server.Close()
 	})
 
@@ -234,8 +232,7 @@ func TestCancelRequestInProgress(t *testing.T) {
 
 	// Report back end of request processing. This should return error, since the QuerierLoop call has finished on scheduler.
 	// Note: testing on querierLoop.Context() cancellation didn't work :(
-	err = querierLoop.Send(&schedulerpb.QuerierToScheduler{})
-	require.Error(t, err)
+	test.Poll(t, time.Second, io.EOF, func() interface{} { return querierLoop.Send(&schedulerpb.QuerierToScheduler{}) })
 
 	verifyNoPendingRequestsLeft(t, scheduler)
 }
