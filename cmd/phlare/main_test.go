@@ -17,6 +17,21 @@ func TestFlagParsing(t *testing.T) {
 		stdoutExcluded string // string that must NOT be included in stdout
 		stderrExcluded string // string that must NOT be included in stderr
 	}{
+		"help-short": {
+			arguments:      []string{"-h"},
+			stdoutMessage:  "Usage of", // Usage must be on stdout, not stderr.
+			stderrExcluded: "Usage of",
+		},
+		"help": {
+			arguments:      []string{"-help"},
+			stdoutMessage:  "Usage of", // Usage must be on stdout, not stderr.
+			stderrExcluded: "Usage of",
+		},
+		"help-all": {
+			arguments:      []string{"-help-all"},
+			stdoutMessage:  "Usage of", // Usage must be on stdout, not stderr.
+			stderrExcluded: "Usage of",
+		},
 		"user visible module listing": {
 			arguments:      []string{"-modules"},
 			stdoutMessage:  "ingester *\n",

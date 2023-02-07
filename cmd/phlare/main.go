@@ -10,15 +10,21 @@ import (
 
 	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/grafana/phlare/pkg/phlare"
+	"github.com/grafana/phlare/pkg/usage"
 	_ "github.com/grafana/phlare/pkg/util/build"
 )
 
 type mainFlags struct {
 	printModules bool
+	printHelp    bool
+	printHelpAll bool
 }
 
 func (mf *mainFlags) registerFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&mf.printModules, "modules", false, "List available values that can be used as target.")
+	fs.BoolVar(&mf.printHelp, "h", false, "Print basic help.")
+	fs.BoolVar(&mf.printHelp, "help", false, "Print basic help.")
+	fs.BoolVar(&mf.printHelpAll, "help-all", false, "Print help, also including advanced and experimental parameters.")
 }
 
 func main() {
@@ -59,6 +65,20 @@ func main() {
 		return
 	}
 
+	if mf.printHelp || mf.printHelpAll {
+		// Print available parameters to stdout, so that users can grep/less them easily.
+		flag.CommandLine.SetOutput(os.Stdout)
+		// Because we parse main flags separately, we need to create a dummy flagset to print help.
+		var dummy mainFlags
+		dummy.registerFlags(flag.CommandLine)
+		if err := usage.Usage(mf.printHelpAll, &dummy, &config); err != nil {
+			fmt.Fprintf(os.Stderr, "error printing usage: %s\n", err)
+			os.Exit(1)
+		}
+
+		return
+	}
+
 	err = f.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed running phlare: %v\n", err)
@@ -71,7 +91,7 @@ func parseMainFlags(args []string) (mainFlags, []string) {
 	leftArgs := make([]string, 0, len(args))
 
 	// Continue parsing flags if there is an error.
-	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	fs := flag.NewFlagSet("main-flags", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	// Register main flags and parse them first.
