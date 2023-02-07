@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -127,38 +128,40 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	}
 
 	f.RuntimeConfig = serv
-	f.API.RegisterRuntimeConfig(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig), validation.UserLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits))
+	// f.API.RegisterRuntimeConfig(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig), validation.UserLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits))
 
 	return serv, err
 }
 
 func (f *Phlare) initOverrides() (serv services.Service, err error) {
-	f.Overrides, err = validation.NewOverrides(f.Cfg.LimitsConfig, f.TenantLimits)
-	// overrides don't have operational state, nor do they need to do anything more in starting/stopping phase,
-	// so there is no need to return any service.
-	return nil, err
+	// f.Overrides, err = validation.NewOverrides(f.Cfg.LimitsConfig, f.TenantLimits)
+	// // overrides don't have operational state, nor do they need to do anything more in starting/stopping phase,
+	// // so there is no need to return any service.
+	// return nil, err
+	return nil, nil
 }
 
 func (f *Phlare) initOverridesExporter() (services.Service, error) {
-	f.Cfg.OverridesExporter.Ring.Common.ListenPort = f.Cfg.Server.GRPCListenPort
+	// f.Cfg.OverridesExporter.Ring.Common.ListenPort = f.Cfg.Server.GRPCListenPort
 
-	overridesExporter, err := exporter.NewOverridesExporter(
-		f.Cfg.OverridesExporter,
-		&f.Cfg.LimitsConfig,
-		f.TenantLimits,
-		util_log.Logger,
-		f.Registerer,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to instantiate overrides-exporter")
-	}
-	if f.Registerer != nil {
-		f.Registerer.MustRegister(overridesExporter)
-	}
+	// overridesExporter, err := exporter.NewOverridesExporter(
+	// 	f.Cfg.OverridesExporter,
+	// 	&f.Cfg.LimitsConfig,
+	// 	f.TenantLimits,
+	// 	util_log.Logger,
+	// 	f.Registerer,
+	// )
+	// if err != nil {
+	// 	return nil, errors.Wrap(err, "failed to instantiate overrides-exporter")
+	// }
+	// if f.Registerer != nil {
+	// 	f.Registerer.MustRegister(overridesExporter)
+	// }
 
-	f.API.RegisterOverridesExporter(overridesExporter)
+	// f.API.RegisterOverridesExporter(overridesExporter)
 
-	return overridesExporter, nil
+	// return overridesExporter, nil
+	return nil, nil
 }
 
 type fakeLimits struct{}
