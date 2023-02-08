@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grafana/phlare/pkg/test"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestFlagParsing(t *testing.T) {
@@ -40,6 +41,13 @@ func TestFlagParsing(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_ = os.Setenv("TARGET", "ingester")
+			oldDefaultRegistry := prometheus.DefaultRegisterer
+			defer func() {
+				prometheus.DefaultRegisterer = oldDefaultRegistry
+			}()
+			// We need to reset the default registry to avoid
+			// "duplicate metrics collector registration attempted" errors.
+			prometheus.DefaultRegisterer = prometheus.NewRegistry()
 			testSingle(t, tc.arguments, tc.stdoutMessage, tc.stderrMessage, tc.stdoutExcluded, tc.stderrExcluded)
 		})
 	}
