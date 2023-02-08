@@ -98,7 +98,7 @@ func parseMainFlags(args []string) (mainFlags, []string) {
 	mf.registerFlags(fs)
 	// Try to find all main flags in the arguments.
 	// As Parsing stops on the first error, e.g. unknown flag, we simply
-	// try remaining parameters until we find config flag, or there are no params left.
+	// try remaining parameters until we find main flag, or there are no params left.
 	// Put all other flags into leftArgs.
 	for i := range args {
 		if err := fs.Parse(args[i:]); err != nil {
