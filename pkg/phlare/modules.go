@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/bufbuild/connect-go"
-	"github.com/cortexproject/cortex/pkg/util/validation"
 	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -50,6 +49,7 @@ import (
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
+	"github.com/grafana/phlare/pkg/validation"
 )
 
 // The various modules that make up Phlare.
@@ -71,10 +71,6 @@ const (
 	Overrides         string = "overrides"
 	OverridesExporter string = "overrides-exporter"
 
-	// RuntimeConfig            string = "runtime-config"
-	// Overrides                string = "overrides"
-	// OverridesExporter        string = "overrides-exporter"
-	// TenantConfigs            string = "tenant-configs"
 	// QueryFrontendTripperware string = "query-frontend-tripperware"
 	// RulerStorage             string = "ruler-storage"
 	// Ruler                    string = "ruler"
@@ -119,7 +115,7 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	// make sure to set default limits before we start loading configuration into memory
 	validation.SetDefaultLimitsForYAMLUnmarshalling(f.Cfg.LimitsConfig)
 
-	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("cortex_", f.reg), f.logger)
+	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("phlare_", f.reg), log.With(f.logger, "component", "runtime-config"))
 	if err == nil {
 		// TenantLimits just delegates to RuntimeConfig and doesn't have any state or need to do
 		// anything in the start/stopping phase. Thus we can create it as part of runtime config
@@ -128,17 +124,17 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	}
 
 	f.RuntimeConfig = serv
-	// f.API.RegisterRuntimeConfig(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig), validation.UserLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits))
 
+	f.Server.HTTP.Methods("GET").Path("/runtime_config").Handler(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig))
+	f.Server.HTTP.Methods("GET").Path("/api/v1/user_limits").Handler(middleware.AuthenticateUser.Wrap(validation.UserLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits)))
 	return serv, err
 }
 
 func (f *Phlare) initOverrides() (serv services.Service, err error) {
-	// f.Overrides, err = validation.NewOverrides(f.Cfg.LimitsConfig, f.TenantLimits)
-	// // overrides don't have operational state, nor do they need to do anything more in starting/stopping phase,
-	// // so there is no need to return any service.
-	// return nil, err
-	return nil, nil
+	f.Overrides, err = validation.NewOverrides(f.Cfg.LimitsConfig, f.TenantLimits)
+	// overrides don't have operational state, nor do they need to do anything more in starting/stopping phase,
+	// so there is no need to return any service.
+	return nil, err
 }
 
 func (f *Phlare) initOverridesExporter() (services.Service, error) {
@@ -164,6 +160,7 @@ func (f *Phlare) initOverridesExporter() (services.Service, error) {
 	return nil, nil
 }
 
+// todo move to limits
 type fakeLimits struct{}
 
 func (fakeLimits) MaxQueriersPerUser(user string) int { return 0 }

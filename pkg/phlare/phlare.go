@@ -48,22 +48,23 @@ import (
 	"github.com/grafana/phlare/pkg/tracing"
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
+	"github.com/grafana/phlare/pkg/validation"
 )
 
 type Config struct {
-	Target      flagext.StringSliceCSV `yaml:"target,omitempty"`
-	AgentConfig agent.Config           `yaml:",inline"`
-	Server      server.Config          `yaml:"server,omitempty"`
-	Distributor distributor.Config     `yaml:"distributor,omitempty"`
-	Querier     querier.Config         `yaml:"querier,omitempty"`
-	Frontend    frontend.Config        `yaml:"frontend,omitempty"`
-	Worker      worker.Config          `yaml:"frontend_worker"`
-	// LimitsConfig      validation.Limits      `yaml:"limits"`
-	QueryScheduler scheduler.Config    `yaml:"query_scheduler"`
-	Ingester       ingester.Config     `yaml:"ingester,omitempty"`
-	MemberlistKV   memberlist.KVConfig `yaml:"memberlist"`
-	PhlareDB       phlaredb.Config     `yaml:"phlaredb,omitempty"`
-	Tracing        tracing.Config      `yaml:"tracing"`
+	Target         flagext.StringSliceCSV `yaml:"target,omitempty"`
+	AgentConfig    agent.Config           `yaml:",inline"`
+	Server         server.Config          `yaml:"server,omitempty"`
+	Distributor    distributor.Config     `yaml:"distributor,omitempty"`
+	Querier        querier.Config         `yaml:"querier,omitempty"`
+	Frontend       frontend.Config        `yaml:"frontend,omitempty"`
+	Worker         worker.Config          `yaml:"frontend_worker"`
+	LimitsConfig   validation.Limits      `yaml:"limits"`
+	QueryScheduler scheduler.Config       `yaml:"query_scheduler"`
+	Ingester       ingester.Config        `yaml:"ingester,omitempty"`
+	MemberlistKV   memberlist.KVConfig    `yaml:"memberlist"`
+	PhlareDB       phlaredb.Config        `yaml:"phlaredb,omitempty"`
+	Tracing        tracing.Config         `yaml:"tracing"`
 	// OverridesExporter exporter.Config        `yaml:"overrides_exporter"`
 	RuntimeConfig runtimeconfig.Config `yaml:"runtime_config"`
 
@@ -117,6 +118,7 @@ func (c *Config) RegisterFlagsWithContext(ctx context.Context, f *flag.FlagSet) 
 	c.Storage.RegisterFlagsWithContext(ctx, f)
 	c.RuntimeConfig.RegisterFlags(f)
 	c.Analytics.RegisterFlags(f)
+	c.LimitsConfig.RegisterFlags(f)
 }
 
 // registerServerFlagsWithChangedDefaultValues registers *Config.Server flags, but overrides some defaults set by the weaveworks package.
@@ -208,6 +210,8 @@ type Phlare struct {
 	pusherClient       pushv1connect.PusherServiceClient
 	usageReport        *usagestats.Reporter
 	RuntimeConfig      *runtimeconfig.Manager
+	Overrides          *validation.Overrides
+	TenantLimits       validation.TenantLimits
 
 	storageBucket objstore.Bucket
 
