@@ -8,6 +8,7 @@ import (
 
 	"github.com/grafana/phlare/pkg/test"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFlagParsing(t *testing.T) {
@@ -49,6 +50,40 @@ func TestFlagParsing(t *testing.T) {
 			// "duplicate metrics collector registration attempted" errors.
 			prometheus.DefaultRegisterer = prometheus.NewRegistry()
 			testSingle(t, tc.arguments, tc.stdoutMessage, tc.stderrMessage, tc.stdoutExcluded, tc.stderrExcluded)
+		})
+	}
+}
+
+func TestParseMainFlags(t *testing.T) {
+	for name, tc := range map[string]struct {
+		args              []string
+		expectedMainFlags mainFlags
+		expectedLeftArgs  []string
+	}{
+		"no args": {
+			args:              []string{},
+			expectedMainFlags: mainFlags{},
+			expectedLeftArgs:  []string{},
+		},
+		"help": {
+			args: []string{"-help"},
+			expectedMainFlags: mainFlags{
+				printHelp: true,
+			},
+			expectedLeftArgs: []string{},
+		},
+		"help with unknown args": {
+			args: []string{"-help", "-foo", "-bar"},
+			expectedMainFlags: mainFlags{
+				printHelp: true,
+			},
+			expectedLeftArgs: []string{"-foo", "-bar"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mainFlags, leftArgs := parseMainFlags(tc.args)
+			require.Equal(t, tc.expectedMainFlags, mainFlags, "unexpected main flags")
+			require.Equal(t, tc.expectedLeftArgs, leftArgs, "unexpected left args")
 		})
 	}
 }
