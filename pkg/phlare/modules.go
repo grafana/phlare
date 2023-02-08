@@ -305,13 +305,18 @@ func (f *Phlare) initServer() (services.Service, error) {
 	// see https://github.com/grafana/phlare/issues/231
 	f.Cfg.Server.DoNotAddDefaultHTTPMiddleware = true
 
+	f.setupWorkerTimeout()
+	if f.isModuleActive(QueryScheduler) {
+		// to ensure that the query scheduler is always able to handle the request, we need to double the timeout
+		f.Cfg.Server.HTTPServerReadTimeout = 2 * f.Cfg.Server.HTTPServerReadTimeout
+		f.Cfg.Server.HTTPServerWriteTimeout = 2 * f.Cfg.Server.HTTPServerWriteTimeout
+	}
 	serv, err := server.New(f.Cfg.Server)
 	if err != nil {
 		return nil, err
 	}
 
 	f.Server = serv
-	f.setupWorkerTimeout()
 
 	servicesToWaitFor := func() []services.Service {
 		svs := []services.Service(nil)
