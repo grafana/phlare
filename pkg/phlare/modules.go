@@ -50,6 +50,7 @@ import (
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
 	"github.com/grafana/phlare/pkg/validation"
+	"github.com/grafana/phlare/pkg/validation/exporter"
 )
 
 // The various modules that make up Phlare.
@@ -72,9 +73,6 @@ const (
 	OverridesExporter string = "overrides-exporter"
 
 	// QueryFrontendTripperware string = "query-frontend-tripperware"
-	// RulerStorage             string = "ruler-storage"
-	// Ruler                    string = "ruler"
-	// TableManager             string = "table-manager"
 	// Compactor                string = "compactor"
 	// IndexGateway             string = "index-gateway"
 	// IndexGatewayRing         string = "index-gateway-ring"
@@ -106,6 +104,7 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 }
 
 func (f *Phlare) initRuntimeConfig() (services.Service, error) {
+	// todo test this.
 	if len(f.Cfg.RuntimeConfig.LoadPath) == 0 {
 		// no need to initialize module if load path is empty
 		return nil, nil
@@ -138,37 +137,29 @@ func (f *Phlare) initOverrides() (serv services.Service, err error) {
 }
 
 func (f *Phlare) initOverridesExporter() (services.Service, error) {
-	// f.Cfg.OverridesExporter.Ring.Common.ListenPort = f.Cfg.Server.GRPCListenPort
+	overridesExporter, err := exporter.NewOverridesExporter(
+		f.Cfg.OverridesExporter,
+		&f.Cfg.LimitsConfig,
+		f.TenantLimits,
+		log.With(f.logger, "component", "overrides-exporter"),
+		f.reg,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to instantiate overrides-exporter")
+	}
+	if f.reg != nil {
+		f.reg.MustRegister(overridesExporter)
+	}
 
-	// overridesExporter, err := exporter.NewOverridesExporter(
-	// 	f.Cfg.OverridesExporter,
-	// 	&f.Cfg.LimitsConfig,
-	// 	f.TenantLimits,
-	// 	util_log.Logger,
-	// 	f.Registerer,
-	// )
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "failed to instantiate overrides-exporter")
-	// }
-	// if f.Registerer != nil {
-	// 	f.Registerer.MustRegister(overridesExporter)
-	// }
+	f.Server.HTTP.Methods("GET", "POST").Path("/overrides-exporter/ring").HandlerFunc(overridesExporter.RingHandler)
 
-	// f.API.RegisterOverridesExporter(overridesExporter)
-
-	// return overridesExporter, nil
-	return nil, nil
+	return overridesExporter, nil
 }
-
-// todo move to limits
-type fakeLimits struct{}
-
-func (fakeLimits) MaxQueriersPerUser(user string) int { return 0 }
 
 func (f *Phlare) initQueryScheduler() (services.Service, error) {
 	f.Cfg.QueryScheduler.ServiceDiscovery.SchedulerRing.ListenPort = f.Cfg.Server.HTTPListenPort
 
-	s, err := scheduler.NewScheduler(f.Cfg.QueryScheduler, &fakeLimits{}, log.With(f.logger, "component", "scheduler"), f.reg)
+	s, err := scheduler.NewScheduler(f.Cfg.QueryScheduler, f.Overrides, log.With(f.logger, "component", "scheduler"), f.reg)
 	if err != nil {
 		return nil, errors.Wrap(err, "query-scheduler init")
 	}
@@ -256,7 +247,8 @@ func (f *Phlare) initGRPCGateway() (services.Service, error) {
 }
 
 func (f *Phlare) initDistributor() (services.Service, error) {
-	d, err := distributor.New(f.Cfg.Distributor, f.ring, nil, f.reg, log.With(f.logger, "component", "distributor"), f.auth)
+	f.Cfg.Distributor.DistributorRing.ListenPort = f.Cfg.Server.HTTPListenPort
+	d, err := distributor.New(f.Cfg.Distributor, f.ring, nil, f.Overrides, f.reg, log.With(f.logger, "component", "distributor"), f.auth)
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +257,8 @@ func (f *Phlare) initDistributor() (services.Service, error) {
 	f.pusherClient = d
 
 	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d, f.auth)
+	f.Server.HTTP.Path("/distributor/ring").Methods("GET", "POST").Handler(d)
+
 	return d, nil
 }
 
@@ -302,8 +296,10 @@ func (f *Phlare) initMemberlistKV() (services.Service, error) {
 
 	f.MemberlistKV = memberlist.NewKVInitService(&f.Cfg.MemberlistKV, f.logger, dnsProvider, f.reg)
 
+	f.Cfg.Distributor.DistributorRing.KVStore.MemberlistKV = f.MemberlistKV.GetMemberlistKV
 	f.Cfg.Ingester.LifecyclerConfig.RingConfig.KVStore.MemberlistKV = f.MemberlistKV.GetMemberlistKV
 	f.Cfg.QueryScheduler.ServiceDiscovery.SchedulerRing.KVStore.MemberlistKV = f.MemberlistKV.GetMemberlistKV
+	f.Cfg.OverridesExporter.Ring.KVStore.MemberlistKV = f.MemberlistKV.GetMemberlistKV
 
 	f.Cfg.Frontend.QuerySchedulerDiscovery = f.Cfg.QueryScheduler.ServiceDiscovery
 	f.Cfg.Worker.QuerySchedulerDiscovery = f.Cfg.QueryScheduler.ServiceDiscovery

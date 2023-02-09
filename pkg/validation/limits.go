@@ -11,11 +11,6 @@ import (
 )
 
 const (
-	// LocalRateLimitStrat represents a ingestion rate limiting strategy that enforces the limit
-	// on a per distributor basis.
-	//
-	// The actual effective rate limit will be N times higher, where N is the number of distributor replicas.
-	LocalIngestionRateStrategy = "local"
 
 	// GlobalRateLimitStrat represents a ingestion rate limiting strategy that enforces the rate
 	// limiting globally, configuring a per-distributor local rate limiter as "ingestion_rate / N",
@@ -27,11 +22,6 @@ const (
 	GlobalIngestionRateStrategy = "global"
 
 	bytesInMB = 1048576
-
-	defaultPerStreamRateLimit  = 3 << 20 // 3MB
-	defaultPerStreamBurstLimit = 5 * defaultPerStreamRateLimit
-
-	DefaultPerTenantQueryTimeout = "1m"
 )
 
 // Limits describe all the limits for users; can be used to describe global default
@@ -47,8 +37,8 @@ type Limits struct {
 	MaxLabelNamesPerSeries int     `yaml:"max_label_names_per_series" json:"max_label_names_per_series"`
 
 	// Ingester enforced limits.
-	MaxLocalStreamsPerUser  int `yaml:"max_streams_per_user" json:"max_streams_per_user"`
-	MaxGlobalStreamsPerUser int `yaml:"max_global_streams_per_user" json:"max_global_streams_per_user"`
+	MaxLocalSeriesPerUser  int `yaml:"max_streams_per_user" json:"max_streams_per_user"`
+	MaxGlobalSeriesPerUser int `yaml:"max_global_streams_per_user" json:"max_global_streams_per_user"`
 
 	// Querier enforced limits.
 	MaxQueryLookback    model.Duration `yaml:"max_query_lookback" json:"max_query_lookback"`
@@ -70,19 +60,19 @@ func (e LimitError) Error() string {
 // RegisterFlags adds the flags required to config this to the given FlagSet
 func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 	f.Float64Var(&l.IngestionRateMB, "distributor.ingestion-rate-limit-mb", 4, "Per-user ingestion rate limit in sample size per second. Units in MB.")
-	f.Float64Var(&l.IngestionBurstSizeMB, "distributor.ingestion-burst-size-mb", 6, "Per-user allowed ingestion burst size (in sample size). Units in MB. The burst size refers to the per-distributor local rate limiter even in the case of the 'global' strategy, and should be set at least to the maximum logs size expected in a single push request.")
+	f.Float64Var(&l.IngestionBurstSizeMB, "distributor.ingestion-burst-size-mb", 6, "Per-user allowed ingestion burst size (in sample size). Units in MB. The burst size refers to the per-distributor local rate limiter, and should be set at least to the maximum logs size expected in a single push request.")
 	f.IntVar(&l.MaxLabelNameLength, "validation.max-length-label-name", 1024, "Maximum length accepted for label names.")
 	f.IntVar(&l.MaxLabelValueLength, "validation.max-length-label-value", 2048, "Maximum length accepted for label value. This setting also applies to the metric name.")
 	f.IntVar(&l.MaxLabelNamesPerSeries, "validation.max-label-names-per-series", 30, "Maximum number of label names per series.")
 
-	f.IntVar(&l.MaxLocalStreamsPerUser, "ingester.max-streams-per-user", 0, "Maximum number of active streams per user, per ingester. 0 to disable.")
-	f.IntVar(&l.MaxGlobalStreamsPerUser, "ingester.max-global-streams-per-user", 5000, "Maximum number of active streams per user, across the cluster. 0 to disable. When the global limit is enabled, each ingester is configured with a dynamic local limit based on the replication factor and the current number of healthy ingesters, and is kept updated whenever the number of ingesters change.")
+	f.IntVar(&l.MaxLocalSeriesPerUser, "ingester.max-series-per-user", 0, "Maximum number of active series of profiles per user, per ingester. 0 to disable.")
+	f.IntVar(&l.MaxGlobalSeriesPerUser, "ingester.max-global-series-per-user", 5000, "Maximum number of active series of profiles per user, across the cluster. 0 to disable. When the global limit is enabled, each ingester is configured with a dynamic local limit based on the replication factor and the current number of healthy ingesters, and is kept updated whenever the number of ingesters change.")
 
 	_ = l.MaxQueryLength.Set("721h")
-	f.Var(&l.MaxQueryLength, "store.max-query-length", "The limit to length of chunk store queries. 0 to disable.")
+	f.Var(&l.MaxQueryLength, "querier.max-query-length", "The limit to length of queries. 0 to disable.")
 
 	_ = l.MaxQueryLookback.Set("0s")
-	f.Var(&l.MaxQueryLookback, "querier.max-query-lookback", "Limit how far back in time series data and metadata can be queried, up until lookback duration ago. This limit is enforced in the query frontend, the querier and the ruler. If the requested time range is outside the allowed range, the request will not fail, but will be modified to only query data within the allowed time range. The default value of 0 does not set a limit.")
+	f.Var(&l.MaxQueryLookback, "querier.max-query-lookback", "Limit how far back in time series data and metadata can be queried, up until lookback duration ago. This limit is enforced in the query frontend. If the requested time range is outside the allowed range, the request will not fail, but will be modified to only query data within the allowed time range. The default value of 0 does not set a limit.")
 	f.IntVar(&l.MaxQueryParallelism, "querier.max-query-parallelism", 32, "Maximum number of queries that will be scheduled in parallel by the frontend.")
 }
 
@@ -180,16 +170,16 @@ func (o *Overrides) MaxLabelNamesPerSeries(userID string) int {
 	return o.getOverridesForUser(userID).MaxLabelNamesPerSeries
 }
 
-// MaxLocalStreamsPerUser returns the maximum number of streams a user is allowed to store
+// MaxLocalSeriesPerUser returns the maximum number of series a user is allowed to store
 // in a single ingester.
-func (o *Overrides) MaxLocalStreamsPerUser(userID string) int {
-	return o.getOverridesForUser(userID).MaxLocalStreamsPerUser
+func (o *Overrides) MaxLocalSeriesPerUser(userID string) int {
+	return o.getOverridesForUser(userID).MaxLocalSeriesPerUser
 }
 
-// MaxGlobalStreamsPerUser returns the maximum number of streams a user is allowed to store
+// MaxGlobalSeriesPerUser returns the maximum number of series a user is allowed to store
 // across the cluster.
-func (o *Overrides) MaxGlobalStreamsPerUser(userID string) int {
-	return o.getOverridesForUser(userID).MaxGlobalStreamsPerUser
+func (o *Overrides) MaxGlobalSeriesPerUser(userID string) int {
+	return o.getOverridesForUser(userID).MaxGlobalSeriesPerUser
 }
 
 // MaxQueryLength returns the limit of the length (in time) of a query.
@@ -207,6 +197,11 @@ func (o *Overrides) MaxQueryParallelism(userID string) int {
 func (o *Overrides) MaxQueryLookback(userID string) time.Duration {
 	return time.Duration(o.getOverridesForUser(userID).MaxQueryLookback)
 }
+
+// MaxQueriersPerUser returns the limit to the number of queriers that can be used
+// Shuffle sharding will be used to distribute queries across queriers.
+// 0 means no limit. Currently disabled.
+func (o *Overrides) MaxQueriersPerUser(user string) int { return 0 }
 
 func (o *Overrides) DefaultLimits() *Limits {
 	return o.defaultLimits

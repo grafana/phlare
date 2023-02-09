@@ -1,106 +1,132 @@
 package validation
 
 import (
+	"sort"
+	"strings"
+
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
+
+	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 )
+
+type Reason string
 
 const (
-	ReasonLabel = "reason"
-	// InvalidLabels is a reason for discarding log lines which have labels that cannot be parsed.
-	InvalidLabels = "invalid_labels"
-	MissingLabels = "missing_labels"
-
-	MissingLabelsErrorMsg = "error at least one label pair is required per stream"
-	InvalidLabelsErrorMsg = "Error parsing labels '%s' with error: %s"
+	ReasonLabel string = "reason"
+	// InvalidLabels is a reason for discarding profiles which have labels that are invalid.
+	InvalidLabels Reason = "invalid_labels"
+	// MissingLabels is a reason for discarding profiles which have no labels.
+	MissingLabels Reason = "missing_labels"
 	// RateLimited is one of the values for the reason to discard samples.
-	// Declared here to avoid duplication in ingester and distributor.
-	RateLimited         = "rate_limited"
-	RateLimitedErrorMsg = "Ingestion rate limit exceeded for user %s (limit: %d bytes/sec) while attempting to ingest '%d' lines totaling '%d' bytes, reduce log volume or contact your Loki administrator to see if the limit can be increased"
-	// LineTooLong is a reason for discarding too long log lines.
-	LineTooLong         = "line_too_long"
-	LineTooLongErrorMsg = "Max entry size '%d' bytes exceeded for stream '%s' while adding an entry with length '%d' bytes"
-	// StreamLimit is a reason for discarding lines when we can't create a new stream
-	// because the limit of active streams has been reached.
-	StreamLimit         = "stream_limit"
-	StreamLimitErrorMsg = "Maximum active stream limit exceeded, reduce the number of active streams (reduce labels or reduce label values), or contact your Loki administrator to see if the limit can be increased"
-	// StreamRateLimit is a reason for discarding lines when the streams own rate limit is hit
-	// rather than the overall ingestion rate limit.
-	StreamRateLimit = "per_stream_rate_limit"
-	// OutOfOrder is a reason for discarding lines when Loki doesn't accept out
-	// of order log lines (parameter `-ingester.unordered-writes` is set to
-	// `false`) and the lines in question are older than the newest line in the
-	// stream.
-	OutOfOrder = "out_of_order"
-	// TooFarBehind is a reason for discarding lines when Loki accepts
-	// unordered ingest  (parameter `-ingester.unordered-writes` is set to
-	// `true`, which is the default) and the lines in question are older than
-	// half of `-ingester.max-chunk-age` compared to the newest line in the
-	// stream.
-	TooFarBehind = "too_far_behind"
-	// GreaterThanMaxSampleAge is a reason for discarding log lines which are older than the current time - `reject_old_samples_max_age`
-	GreaterThanMaxSampleAge         = "greater_than_max_sample_age"
-	GreaterThanMaxSampleAgeErrorMsg = "entry for stream '%s' has timestamp too old: %v, oldest acceptable timestamp is: %v"
-	// TooFarInFuture is a reason for discarding log lines which are newer than the current time + `creation_grace_period`
-	TooFarInFuture         = "too_far_in_future"
-	TooFarInFutureErrorMsg = "entry for stream '%s' has timestamp too new: %v"
-	// MaxLabelNamesPerSeries is a reason for discarding a log line which has too many label names
-	MaxLabelNamesPerSeries         = "max_label_names_per_series"
-	MaxLabelNamesPerSeriesErrorMsg = "entry for stream '%s' has %d label names; limit %d"
-	// LabelNameTooLong is a reason for discarding a log line which has a label name too long
-	LabelNameTooLong         = "label_name_too_long"
-	LabelNameTooLongErrorMsg = "stream '%s' has label name too long: '%s'"
-	// LabelValueTooLong is a reason for discarding a log line which has a lable value too long
-	LabelValueTooLong         = "label_value_too_long"
-	LabelValueTooLongErrorMsg = "stream '%s' has label value too long: '%s'"
-	// DuplicateLabelNames is a reason for discarding a log line which has duplicate label names
-	DuplicateLabelNames         = "duplicate_label_names"
-	DuplicateLabelNamesErrorMsg = "stream '%s' has duplicate label name: '%s'"
+	RateLimited Reason = "rate_limited"
+	// OutOfOrder is a reason for discarding profiles when Phlare doesn't accept out
+	// of order profiles.
+	OutOfOrder Reason = "out_of_order"
+	// MaxLabelNamesPerSeries is a reason for discarding a request which has too many label names
+	MaxLabelNamesPerSeries Reason = "max_label_names_per_series"
+	// LabelNameTooLong is a reason for discarding a request which has a label name too long
+	LabelNameTooLong Reason = "label_name_too_long"
+	// LabelValueTooLong is a reason for discarding a request which has a label value too long
+	LabelValueTooLong Reason = "label_value_too_long"
+	// DuplicateLabelNames is a reason for discarding a request which has duplicate label names
+	DuplicateLabelNames Reason = "duplicate_label_names"
+
+	MissingLabelsErrorMsg          = "error at least one label pair is required per profile"
+	InvalidLabelsErrorMsg          = "invalid labels '%s' with error: %s"
+	MaxLabelNamesPerSeriesErrorMsg = "profile series '%s' has %d label names; limit %d"
+	LabelNameTooLongErrorMsg       = "profile with labels '%s' has label name too long: '%s'"
+	LabelValueTooLongErrorMsg      = "profile with labels '%s' has label value too long: '%s'"
+	DuplicateLabelNamesErrorMsg    = "profile with labels '%s' has duplicate label name: '%s'"
 )
 
-// MutatedSamples is a metric of the total number of lines mutated, by reason.
-var MutatedSamples = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "loki",
-		Name:      "mutated_samples_total",
-		Help:      "The total number of samples that have been mutated.",
-	},
-	[]string{ReasonLabel, "truncated"},
+var (
+	// DiscardedBytes is a metric of the total discarded bytes, by reason.
+	DiscardedBytes = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "phlare",
+			Name:      "discarded_bytes_total",
+			Help:      "The total number of bytes that were discarded.",
+		},
+		[]string{ReasonLabel, "tenant"},
+	)
+
+	// DiscardedProfiles is a metric of the number of discarded profiles, by reason.
+	DiscardedProfiles = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "phlare",
+			Name:      "discarded_samples_total",
+			Help:      "The total number of samples that were discarded.",
+		},
+		[]string{ReasonLabel, "tenant"},
+	)
 )
 
-// MutatedBytes is a metric of the total mutated bytes, by reason.
-var MutatedBytes = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "loki",
-		Name:      "mutated_bytes_total",
-		Help:      "The total number of bytes that have been mutated.",
-	},
-	[]string{ReasonLabel, "truncated"},
-)
+type LabelValidationLimits interface {
+	MaxLabelNameLength(userID string) int
+	MaxLabelValueLength(userID string) int
+	MaxLabelNamesPerSeries(userID string) int
+}
 
-// DiscardedBytes is a metric of the total discarded bytes, by reason.
-var DiscardedBytes = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "loki",
-		Name:      "discarded_bytes_total",
-		Help:      "The total number of bytes that were discarded.",
-	},
-	[]string{ReasonLabel, "tenant"},
-)
+// ValidateLabels validates the labels of a profile.
+func ValidateLabels(limits LabelValidationLimits, userID string, ls []*typesv1.LabelPair) error {
+	if len(ls) == 0 {
+		return NewErrorf(MissingLabels, MissingLabelsErrorMsg)
+	}
+	sort.Sort(phlaremodel.Labels(ls))
+	numLabelNames := len(ls)
+	maxLabels := limits.MaxLabelNamesPerSeries(userID)
+	if numLabelNames > maxLabels {
+		return NewErrorf(MaxLabelNamesPerSeries, MaxLabelNamesPerSeriesErrorMsg, phlaremodel.LabelPairsString(ls), numLabelNames, maxLabels)
+	}
+	nameValue := phlaremodel.Labels(ls).Get(model.MetricNameLabel)
+	if !model.IsValidMetricName(model.LabelValue(nameValue)) {
+		return NewErrorf(InvalidLabels, InvalidLabelsErrorMsg, phlaremodel.LabelPairsString(ls), "invalid metric name")
+	}
+	lastLabelName := ""
 
-// DiscardedSamples is a metric of the number of discarded samples, by reason.
-var DiscardedSamples = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "loki",
-		Name:      "discarded_samples_total",
-		Help:      "The total number of samples that were discarded.",
-	},
-	[]string{ReasonLabel, "tenant"},
-)
+	for _, l := range ls {
+		if len(l.Name) > limits.MaxLabelNameLength(userID) {
+			return NewErrorf(LabelNameTooLong, LabelNameTooLongErrorMsg, phlaremodel.LabelPairsString(ls), l.Name)
+		} else if len(l.Value) > limits.MaxLabelValueLength(userID) {
+			return NewErrorf(LabelValueTooLong, LabelValueTooLongErrorMsg, phlaremodel.LabelPairsString(ls), l.Value)
+		} else if !model.LabelName(l.Name).IsValid() {
+			return NewErrorf(InvalidLabels, InvalidLabelsErrorMsg, phlaremodel.LabelPairsString(ls), "invalid label name '"+l.Name+"'")
+		} else if !model.LabelValue(l.Value).IsValid() {
+			return NewErrorf(InvalidLabels, InvalidLabelsErrorMsg, phlaremodel.LabelPairsString(ls), "invalid label value '"+l.Value+"'")
+		} else if cmp := strings.Compare(lastLabelName, l.Name); cmp == 0 {
+			return NewErrorf(DuplicateLabelNames, DuplicateLabelNamesErrorMsg, phlaremodel.LabelPairsString(ls), l.Name)
+		}
+		lastLabelName = l.Name
+	}
 
-var LineLengthHist = promauto.NewHistogram(prometheus.HistogramOpts{
-	Namespace: "loki",
-	Name:      "bytes_per_line",
-	Help:      "The total number of bytes per line.",
-	Buckets:   prometheus.ExponentialBuckets(1, 8, 8), // 1B -> 16MB
-})
+	return nil
+}
+
+type Error struct {
+	Reason Reason
+	msg    string
+}
+
+func (e *Error) Error() string {
+	return e.msg
+}
+
+func NewErrorf(reason Reason, msg string, args ...interface{}) *Error {
+	return &Error{
+		Reason: reason,
+		msg:    msg,
+	}
+}
+
+func ReasonOf(err error) Reason {
+	var validationErr *Error
+	ok := errors.As(err, &validationErr)
+	if !ok {
+		return "unknown"
+	}
+	return validationErr.Reason
+}
