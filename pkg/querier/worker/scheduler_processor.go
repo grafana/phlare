@@ -49,12 +49,11 @@ var processorBackoffConfig = backoff.Config{
 
 func newSchedulerProcessor(cfg Config, handler RequestHandler, log log.Logger, reg prometheus.Registerer) (*schedulerProcessor, []services.Service) {
 	p := &schedulerProcessor{
-		log:            log,
-		handler:        handler,
-		maxMessageSize: cfg.GRPCClientConfig.MaxSendMsgSize,
-		querierID:      cfg.QuerierID,
-		grpcConfig:     cfg.GRPCClientConfig,
-		//
+		log:             log,
+		handler:         handler,
+		maxMessageSize:  cfg.GRPCClientConfig.MaxSendMsgSize,
+		querierID:       cfg.QuerierID,
+		grpcConfig:      cfg.GRPCClientConfig,
 		maxLoopDuration: cfg.MaxLoopDuration,
 
 		schedulerClientFactory: func(conn *grpc.ClientConn) schedulerpb.SchedulerForQuerierClient {
@@ -160,6 +159,7 @@ func (sp *schedulerProcessor) querierLoop(parentCtx context.Context, schedulerCl
 						// In the meanwhile, the execution context has been explicitly canceled, so we should just terminate.
 						return
 					default:
+						// Wait and check again inflight queries.
 						time.Sleep(100 * time.Millisecond)
 					}
 				}

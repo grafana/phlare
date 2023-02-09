@@ -212,9 +212,7 @@ func (s *Scheduler) FrontendLoop(ctx context.Context, frontend *connect.BidiStre
 	if err != nil {
 		return err
 	}
-	defer func() {
-		s.frontendDisconnected(frontendAddress)
-	}()
+	defer s.frontendDisconnected(frontendAddress)
 
 	// Response to INIT. If scheduler is not running, we skip for-loop, send SHUTTING_DOWN and exit this method.
 	if s.State() == services.Running {
@@ -427,9 +425,7 @@ func (s *Scheduler) QuerierLoop(ctx context.Context, bidi *connect.BidiStream[sc
 	querierID := resp.GetQuerierID()
 
 	s.requestQueue.RegisterQuerierConnection(querierID)
-	defer func() {
-		s.requestQueue.UnregisterQuerierConnection(querierID)
-	}()
+	defer s.requestQueue.UnregisterQuerierConnection(querierID)
 
 	lastUserIndex := queue.FirstUser()
 
