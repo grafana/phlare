@@ -1,4 +1,3 @@
-// It's OK to have the same string literals in multiple places in this file.
 //nolint:goconst
 package usage
 
