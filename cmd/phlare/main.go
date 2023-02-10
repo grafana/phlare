@@ -14,9 +14,7 @@ import (
 )
 
 func main() {
-	var (
-		config phlare.Config
-	)
+	var config phlare.Config
 
 	if err := cfg.DynamicUnmarshal(&config, os.Args[1:], flag.CommandLine); err != nil {
 		fmt.Fprintf(os.Stderr, "failed parsing config: %v\n", err)
