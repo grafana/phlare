@@ -7,9 +7,10 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/runtimeconfig"
+	"gopkg.in/yaml.v2"
+
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/validation"
-	"gopkg.in/yaml.v2"
 )
 
 type runtimeConfigValues struct {

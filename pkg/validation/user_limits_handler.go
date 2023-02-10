@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/grafana/dskit/tenant"
+
 	"github.com/grafana/phlare/pkg/util"
 )
 

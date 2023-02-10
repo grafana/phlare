@@ -3,9 +3,10 @@ package validation
 import (
 	"testing"
 
-	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
+
+	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
 
 func TestValidateLabels(t *testing.T) {
