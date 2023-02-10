@@ -45,6 +45,19 @@ import (
 	"github.com/grafana/phlare/pkg/util"
 )
 
+type mainFlags struct {
+	PrintModules bool
+	PrintHelp    bool
+	PrintHelpAll bool
+}
+
+func (mf *mainFlags) registerFlags(fs *flag.FlagSet) {
+	fs.BoolVar(&mf.PrintModules, "modules", false, "List available values that can be used as target.")
+	fs.BoolVar(&mf.PrintHelp, "h", false, "Print basic help.")
+	fs.BoolVar(&mf.PrintHelp, "help", false, "Print basic help.")
+	fs.BoolVar(&mf.PrintHelpAll, "help-all", false, "Print help, also including advanced and experimental parameters.")
+}
+
 type Config struct {
 	Target       flagext.StringSliceCSV `yaml:"target,omitempty"`
 	AgentConfig  agent.Config           `yaml:",inline"`
@@ -64,6 +77,8 @@ type Config struct {
 	ConfigFile      string `yaml:"-"`
 	ShowVersion     bool   `yaml:"-"`
 	ConfigExpandEnv bool   `yaml:"-"`
+
+	MainFlags mainFlags `yaml:"-"`
 }
 
 func newDefaultConfig() *Config {
@@ -105,6 +120,8 @@ func (c *Config) RegisterFlagsWithContext(ctx context.Context, f *flag.FlagSet) 
 	c.Tracing.RegisterFlags(f)
 	c.Storage.RegisterFlagsWithContext(ctx, f)
 	c.Analytics.RegisterFlags(f)
+
+	c.MainFlags.registerFlags(f)
 }
 
 // registerServerFlagsWithChangedDefaultValues registers *Config.Server flags, but overrides some defaults set by the weaveworks package.
