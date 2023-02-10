@@ -29,8 +29,8 @@ func TestIngestionRateStrategy(t *testing.T) {
 		mockRing.On("HealthyInstancesCount").Return(2)
 
 		strategy := newGlobalRateStrategy(newIngestionRateStrategy(overrides), mockRing)
-		assert.Equal(t, strategy.Limit("test"), float64(500))
-		assert.Equal(t, strategy.Burst("test"), 10000)
+		assert.Equal(t, strategy.Limit("test"), float64(1000*1024*1024/2))
+		assert.Equal(t, strategy.Burst("test"), 10000*1024*1024)
 	})
 
 	t.Run("infinite rate limiter should return unlimited settings", func(t *testing.T) {

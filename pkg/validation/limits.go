@@ -11,16 +11,6 @@ import (
 )
 
 const (
-
-	// GlobalRateLimitStrat represents a ingestion rate limiting strategy that enforces the rate
-	// limiting globally, configuring a per-distributor local rate limiter as "ingestion_rate / N",
-	// where N is the number of distributor replicas (it's automatically adjusted if the
-	// number of replicas change).
-	//
-	// The global strategy requires the distributors to form their own ring, which
-	// is used to keep track of the current number of healthy distributor replicas.
-	GlobalIngestionRateStrategy = "global"
-
 	bytesInMB = 1048576
 )
 
@@ -44,10 +34,6 @@ type Limits struct {
 	MaxQueryLookback    model.Duration `yaml:"max_query_lookback" json:"max_query_lookback"`
 	MaxQueryLength      model.Duration `yaml:"max_query_length" json:"max_query_length"`
 	MaxQueryParallelism int            `yaml:"max_query_parallelism" json:"max_query_parallelism"`
-
-	// Config for overrides, convenient if it goes here.
-	PerTenantOverrideConfig string         `yaml:"per_tenant_override_config" json:"per_tenant_override_config"`
-	PerTenantOverridePeriod model.Duration `yaml:"per_tenant_override_period" json:"per_tenant_override_period"`
 }
 
 // LimitError are errors that do not comply with the limits specified.
@@ -60,7 +46,7 @@ func (e LimitError) Error() string {
 // RegisterFlags adds the flags required to config this to the given FlagSet
 func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 	f.Float64Var(&l.IngestionRateMB, "distributor.ingestion-rate-limit-mb", 4, "Per-user ingestion rate limit in sample size per second. Units in MB.")
-	f.Float64Var(&l.IngestionBurstSizeMB, "distributor.ingestion-burst-size-mb", 6, "Per-user allowed ingestion burst size (in sample size). Units in MB. The burst size refers to the per-distributor local rate limiter, and should be set at least to the maximum logs size expected in a single push request.")
+	f.Float64Var(&l.IngestionBurstSizeMB, "distributor.ingestion-burst-size-mb", 2, "Per-user allowed ingestion burst size (in sample size). Units in MB. The burst size refers to the per-distributor local rate limiter, and should be set at least to the maximum profile size expected in a single push request.")
 	f.IntVar(&l.MaxLabelNameLength, "validation.max-length-label-name", 1024, "Maximum length accepted for label names.")
 	f.IntVar(&l.MaxLabelValueLength, "validation.max-length-label-value", 2048, "Maximum length accepted for label value. This setting also applies to the metric name.")
 	f.IntVar(&l.MaxLabelNamesPerSeries, "validation.max-label-names-per-series", 30, "Maximum number of label names per series.")

@@ -104,11 +104,11 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 }
 
 func (f *Phlare) initRuntimeConfig() (services.Service, error) {
-	// todo test this.
 	if len(f.Cfg.RuntimeConfig.LoadPath) == 0 {
 		// no need to initialize module if load path is empty
 		return nil, nil
 	}
+
 	f.Cfg.RuntimeConfig.Loader = loadRuntimeConfig
 
 	// make sure to set default limits before we start loading configuration into memory

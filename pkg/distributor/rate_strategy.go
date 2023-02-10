@@ -6,8 +6,9 @@
 package distributor
 
 import (
-	"github.com/grafana/dskit/limiter"
 	"golang.org/x/time/rate"
+
+	"github.com/grafana/dskit/limiter"
 )
 
 // ReadLifecycler represents the read interface to the lifecycler.
@@ -20,6 +21,13 @@ type globalStrategy struct {
 	ring         ReadLifecycler
 }
 
+// newGlobalRateStrategy represents a ingestion rate limiting strategy that enforces the rate
+// limiting globally, configuring a per-distributor local rate limiter as "ingestion_rate / N",
+// where N is the number of distributor replicas (it's automatically adjusted if the
+// number of replicas change).
+//
+// The global strategy requires the distributors to form their own ring, which
+// is used to keep track of the current number of healthy distributor replicas.
 func newGlobalRateStrategy(baseStrategy limiter.RateLimiterStrategy, ring ReadLifecycler) limiter.RateLimiterStrategy {
 	return &globalStrategy{
 		baseStrategy: baseStrategy,
@@ -43,7 +51,6 @@ func (s *globalStrategy) Burst(tenantID string) int {
 	// to keep it easier to understand for users / operators.
 	return s.baseStrategy.Burst(tenantID)
 }
-
 
 type ingestionRateStrategy struct {
 	limits Limits

@@ -69,7 +69,7 @@ type Config struct {
 	PoolConfig  clientpool.PoolConfig `yaml:"pool_config,omitempty"`
 
 	// Distributors ring
-	DistributorRing RingConfig `yaml:"ring"`
+	DistributorRing RingConfig `yaml:"ring" doc:"hidden"`
 }
 
 // RegisterFlags registers distributor-related flags.

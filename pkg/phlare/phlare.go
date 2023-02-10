@@ -66,7 +66,7 @@ type Config struct {
 	MemberlistKV      memberlist.KVConfig    `yaml:"memberlist"`
 	PhlareDB          phlaredb.Config        `yaml:"phlaredb,omitempty"`
 	Tracing           tracing.Config         `yaml:"tracing"`
-	OverridesExporter exporter.Config        `yaml:"overrides_exporter"`
+	OverridesExporter exporter.Config        `yaml:"overrides_exporter" doc:"hidden"`
 	RuntimeConfig     runtimeconfig.Config   `yaml:"runtime_config"`
 
 	Storage StorageConfig `yaml:"storage"`

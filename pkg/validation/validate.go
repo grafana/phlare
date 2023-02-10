@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -118,7 +119,7 @@ func (e *Error) Error() string {
 func NewErrorf(reason Reason, msg string, args ...interface{}) *Error {
 	return &Error{
 		Reason: reason,
-		msg:    msg,
+		msg:    fmt.Sprintf(msg, args...),
 	}
 }
 
