@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grafana/phlare/pkg/test"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/grafana/phlare/pkg/test"
 )
 
 func TestFlagParsing(t *testing.T) {

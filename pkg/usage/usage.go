@@ -1,3 +1,5 @@
+// It's OK to have the same string literals in multiple places in this file.
+//nolint:goconst
 package usage
 
 import (
@@ -8,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/grafana/dskit/flagext"
+
 	"github.com/grafana/phlare/pkg/util/fieldcategory"
 )
 
