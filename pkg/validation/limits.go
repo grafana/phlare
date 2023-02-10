@@ -37,8 +37,8 @@ type Limits struct {
 	MaxLabelNamesPerSeries int     `yaml:"max_label_names_per_series" json:"max_label_names_per_series"`
 
 	// Ingester enforced limits.
-	MaxLocalSeriesPerUser  int `yaml:"max_streams_per_user" json:"max_streams_per_user"`
-	MaxGlobalSeriesPerUser int `yaml:"max_global_streams_per_user" json:"max_global_streams_per_user"`
+	MaxLocalSeriesPerUser  int `yaml:"max_series_per_user" json:"max_series_per_user"`
+	MaxGlobalSeriesPerUser int `yaml:"max_global_series_per_user" json:"max_global_series_per_user"`
 
 	// Querier enforced limits.
 	MaxQueryLookback    model.Duration `yaml:"max_query_lookback" json:"max_query_lookback"`
