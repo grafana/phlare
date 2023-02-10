@@ -165,12 +165,12 @@ func Test_rowRangeIter(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			it := rowRanges{tc.r: 0xff}.iter()
-			var result = []int64{}
+			result := []int64{}
 			for it.Next() {
 				result = append(result, it.At().RowNumber())
+				assert.Equal(t, model.Fingerprint(0xff), it.At().fp)
 			}
 			assert.Equal(t, tc.expected, result)
 		})
 	}
-
 }

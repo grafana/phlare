@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/gogo/status"
@@ -24,6 +25,7 @@ import (
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/grafana/phlare/pkg/phlaredb/tsdb"
 	"github.com/grafana/phlare/pkg/phlaredb/tsdb/index"
+	"github.com/grafana/phlare/pkg/validation"
 )
 
 // delta encoding for ranges
@@ -136,6 +138,15 @@ type profileSeries struct {
 	profilesOnDisk []*rowRange
 }
 
+type PersistentProfileSeriesCallback interface {
+	// PreCreationSeries is called before creating a series to indicate if the series can be created.
+	// A non nil error means the series should not be created.
+	PreCreationSeries(labels.Labels) error
+	// PreCreationProfiles is called before creating profiles to indicate if the profile can be created.
+	// A non nil error means the profile should not be created.
+	PreCreationProfiles(ps *schemav1.Profile, lbs phlaremodel.Labels) error
+}
+
 type profilesIndex struct {
 	ix *tsdb.BitPrefixInvertedIndex
 	// todo: like the inverted index we might want to shard fingerprint to avoid contentions.
@@ -163,11 +174,12 @@ func newProfileIndex(totalShards uint32, metrics *headMetrics) (*profilesIndex, 
 
 // Add a new set of profile to the index.
 // The seriesRef are expected to match the profile labels passed in.
-func (pi *profilesIndex) Add(ps *schemav1.Profile, lbs phlaremodel.Labels, profileName string) {
+func (pi *profilesIndex) Add(ps *schemav1.Profile, lbs phlaremodel.Labels, profileName string) error {
 	pi.mutex.Lock()
 	defer pi.mutex.Unlock()
 	profiles, ok := pi.profilesPerFP[ps.SeriesFingerprint]
 	if !ok {
+		// todo pre creation check if the series can be created.
 		lbs := pi.ix.Add(lbs, ps.SeriesFingerprint)
 		profiles = &profileSeries{
 			lbs:     lbs,
@@ -178,6 +190,10 @@ func (pi *profilesIndex) Add(ps *schemav1.Profile, lbs phlaremodel.Labels, profi
 		pi.profilesPerFP[ps.SeriesFingerprint] = profiles
 		pi.totalSeries.Inc()
 		pi.metrics.seriesCreated.WithLabelValues(profileName).Inc()
+	}
+	// post creation check if the profile is valid
+	if ps.TimeNanos < profiles.maxTime {
+		return validation.NewErrorf(validation.OutOfOrder, "profile for series %s out of order (received %s last %s)", phlaremodel.LabelPairsString(lbs), time.Unix(0, ps.TimeNanos), time.Unix(0, profiles.maxTime))
 	}
 	profiles.profiles = append(profiles.profiles, ps)
 	if ps.TimeNanos < profiles.minTime {
@@ -405,7 +421,7 @@ func (pi *profilesIndex) writeTo(ctx context.Context, path string) ([][]rowRange
 	rangesPerRG := make([][]rowRangeWithSeriesIndex, len(pfs[0].profilesOnDisk))
 
 	// Add series
-	//pi.seriesIndexes = make(map[model.Fingerprint]uint32, len(pfs))
+	// pi.seriesIndexes = make(map[model.Fingerprint]uint32, len(pfs))
 	for i, s := range pfs {
 		if err := writer.AddSeries(storage.SeriesRef(i), s.lbs, s.fp, index.ChunkMeta{
 			MinTime: s.minTime,
@@ -426,7 +442,7 @@ func (pi *profilesIndex) writeTo(ctx context.Context, path string) ([][]rowRange
 
 func (pl *profilesIndex) cutRowGroup(rgProfiles []*schemav1.Profile) error {
 	// adding rowGroup and rowNum information per fingerprint
-	var rowRangePerFP = make(map[model.Fingerprint]*rowRange, len(pl.profilesPerFP))
+	rowRangePerFP := make(map[model.Fingerprint]*rowRange, len(pl.profilesPerFP))
 	for rowNum, p := range rgProfiles {
 		if _, ok := rowRangePerFP[p.SeriesFingerprint]; !ok {
 			rowRangePerFP[p.SeriesFingerprint] = &rowRange{
@@ -460,7 +476,6 @@ func (pl *profilesIndex) cutRowGroup(rgProfiles []*schemav1.Profile) error {
 	}
 
 	return nil
-
 }
 
 // SplitFiltersAndMatchers splits empty matchers off, which are treated as filters, see #220
