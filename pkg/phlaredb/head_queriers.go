@@ -57,6 +57,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 		profiles []Profile
 		buf      = make([][]parquet.Value, 1)
 	)
+	defer pIt.Close()
 	for pIt.Next() {
 		res := pIt.At()
 
@@ -67,7 +68,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 
 		lbls, ok := labelsPerFP[v.fp]
 		if !ok {
-			panic("no profile series labels with matching fingerprint found")
+			return nil, errors.Errorf("no profile series labels with matching fingerprint %d found", v.fp)
 		}
 
 		buf = res.Columns(buf, "TimeNanos")
@@ -81,6 +82,10 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 			ts:     model.TimeFromUnixNano(buf[0][0].Int64()),
 			RowNum: res.RowNumber[0],
 		})
+	}
+
+	if pIt.Err() != nil {
+		return nil, errors.Wrap(pIt.Err(), "iterator error")
 	}
 
 	// Sort profiles by time, the slice is already sorted by series order
@@ -180,7 +185,7 @@ func (q *headInMemoryQuerier) SelectMatchingProfiles(ctx context.Context, params
 			continue
 		}
 
-		var profiles = make([]*schemav1.Profile, len(profileSeries.profiles))
+		profiles := make([]*schemav1.Profile, len(profileSeries.profiles))
 		copy(profiles, profileSeries.profiles)
 
 		iters = append(iters,
@@ -255,7 +260,6 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 	}
 
 	return q.head.resolvePprof(stacktraceSamples), nil
-
 }
 
 func (q *headInMemoryQuerier) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error) {
