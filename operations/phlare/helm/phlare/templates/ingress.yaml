@@ -1,0 +1,33 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "phlare.fullname" . }}-ingress
+  labels:
+    {{- include "phlare.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  rules:
+  {{- range $.Values.ingress.hosts }}
+  - host: {{ . | quote }}
+    http:
+      paths:
+      - backend:
+          service:
+            name: {{ include "phlare.fullname" $ }}-query-frontend
+            port:
+              number: 4100
+        path: /querier.v1.QuerierService/
+        pathType: Prefix
+      - backend:
+          service:
+            name: {{ include "phlare.fullname" $ }}-distributor
+            port:
+              number: 4100
+        path: /push.v1.PusherService/
+        pathType: Prefix
+  {{- end }}
+{{- end }}
