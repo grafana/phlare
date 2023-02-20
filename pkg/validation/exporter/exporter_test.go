@@ -27,16 +27,16 @@ import (
 func TestOverridesExporter_withConfig(t *testing.T) {
 	tenantLimits := map[string]*validation.Limits{
 		"tenant-a": {
-			IngestionRateMB:        10,
-			IngestionBurstSizeMB:   11,
-			MaxGlobalSeriesPerUser: 12,
-			MaxLocalSeriesPerUser:  13,
-			MaxLabelNameLength:     14,
-			MaxLabelValueLength:    15,
-			MaxLabelNamesPerSeries: 16,
-			MaxQueryLookback:       17,
-			MaxQueryLength:         18,
-			MaxQueryParallelism:    19,
+			IngestionRateMB:          10,
+			IngestionBurstSizeMB:     11,
+			MaxGlobalSeriesPerTenant: 12,
+			MaxLocalSeriesPerTenant:  13,
+			MaxLabelNameLength:       14,
+			MaxLabelValueLength:      15,
+			MaxLabelNamesPerSeries:   16,
+			MaxQueryLookback:         17,
+			MaxQueryLength:           18,
+			MaxQueryParallelism:      19,
 		},
 	}
 	ringStore, closer := consul.NewInMemoryClient(ring.GetCodec(), log.NewNopLogger(), nil)
@@ -58,16 +58,16 @@ func TestOverridesExporter_withConfig(t *testing.T) {
 	cfg1.Ring.InstanceID = "overrides-exporter-1"
 	cfg1.Ring.InstanceAddr = "1.2.3.1"
 	exporter, err := NewOverridesExporter(cfg1, &validation.Limits{
-		IngestionRateMB:        20,
-		IngestionBurstSizeMB:   21,
-		MaxGlobalSeriesPerUser: 22,
-		MaxLocalSeriesPerUser:  23,
-		MaxLabelNameLength:     24,
-		MaxLabelValueLength:    25,
-		MaxLabelNamesPerSeries: 26,
-		MaxQueryLookback:       27,
-		MaxQueryLength:         28,
-		MaxQueryParallelism:    29,
+		IngestionRateMB:          20,
+		IngestionBurstSizeMB:     21,
+		MaxGlobalSeriesPerTenant: 22,
+		MaxLocalSeriesPerTenant:  23,
+		MaxLabelNameLength:       24,
+		MaxLabelValueLength:      25,
+		MaxLabelNamesPerSeries:   26,
+		MaxQueryLookback:         27,
+		MaxQueryLength:           28,
+		MaxQueryParallelism:      29,
 	}, validation.NewMockTenantLimits(tenantLimits), log.NewNopLogger(), nil)
 	require.NoError(t, err)
 
@@ -99,16 +99,16 @@ func TestOverridesExporter_withConfig(t *testing.T) {
 	limitsMetrics := `
 # HELP phlare_limits_overrides Resource limit overrides applied to tenants
 # TYPE phlare_limits_overrides gauge
-phlare_limits_overrides{limit_name="ingestion_rate_mb",user="tenant-a"} 10
-phlare_limits_overrides{limit_name="ingestion_burst_size_mb",user="tenant-a"} 11
-phlare_limits_overrides{limit_name="max_global_series_per_user",user="tenant-a"} 12
-phlare_limits_overrides{limit_name="max_series_per_user",user="tenant-a"} 13
-phlare_limits_overrides{limit_name="max_label_name_length",user="tenant-a"} 14
-phlare_limits_overrides{limit_name="max_label_value_length",user="tenant-a"} 15
-phlare_limits_overrides{limit_name="max_label_names_per_series",user="tenant-a"} 16
-phlare_limits_overrides{limit_name="max_query_lookback",user="tenant-a"} 17
-phlare_limits_overrides{limit_name="max_query_length",user="tenant-a"} 18
-phlare_limits_overrides{limit_name="max_query_parallelism",user="tenant-a"} 19
+phlare_limits_overrides{limit_name="ingestion_rate_mb",tenant="tenant-a"} 10
+phlare_limits_overrides{limit_name="ingestion_burst_size_mb",tenant="tenant-a"} 11
+phlare_limits_overrides{limit_name="max_global_series_per_tenant",tenant="tenant-a"} 12
+phlare_limits_overrides{limit_name="max_series_per_tenant",tenant="tenant-a"} 13
+phlare_limits_overrides{limit_name="max_label_name_length",tenant="tenant-a"} 14
+phlare_limits_overrides{limit_name="max_label_value_length",tenant="tenant-a"} 15
+phlare_limits_overrides{limit_name="max_label_names_per_series",tenant="tenant-a"} 16
+phlare_limits_overrides{limit_name="max_query_lookback",tenant="tenant-a"} 17
+phlare_limits_overrides{limit_name="max_query_length",tenant="tenant-a"} 18
+phlare_limits_overrides{limit_name="max_query_parallelism",tenant="tenant-a"} 19
 `
 
 	// Make sure each override matches the values from the supplied `Limit`
@@ -120,8 +120,8 @@ phlare_limits_overrides{limit_name="max_query_parallelism",user="tenant-a"} 19
 # TYPE phlare_limits_defaults gauge
 phlare_limits_defaults{limit_name="ingestion_rate_mb"} 20
 phlare_limits_defaults{limit_name="ingestion_burst_size_mb"} 21
-phlare_limits_defaults{limit_name="max_global_series_per_user"} 22
-phlare_limits_defaults{limit_name="max_series_per_user"} 23
+phlare_limits_defaults{limit_name="max_global_series_per_tenant"} 22
+phlare_limits_defaults{limit_name="max_series_per_tenant"} 23
 phlare_limits_defaults{limit_name="max_label_name_length"} 24
 phlare_limits_defaults{limit_name="max_label_value_length"} 25
 phlare_limits_defaults{limit_name="max_label_names_per_series"} 26

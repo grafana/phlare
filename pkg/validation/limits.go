@@ -14,10 +14,10 @@ const (
 	bytesInMB = 1048576
 )
 
-// Limits describe all the limits for users; can be used to describe global default
-// limits via flags, or per-user limits via yaml config.
+// Limits describe all the limits for tenants; can be used to describe global default
+// limits via flags, or per-tenant limits via yaml config.
 // NOTE: we use custom `model.Duration` instead of standard `time.Duration` because,
-// to support user-friendly duration format (e.g: "1h30m45s") in JSON value.
+// to support tenant-friendly duration format (e.g: "1h30m45s") in JSON value.
 type Limits struct {
 	// Distributor enforced limits.
 	IngestionRateMB        float64 `yaml:"ingestion_rate_mb" json:"ingestion_rate_mb"`
@@ -27,8 +27,8 @@ type Limits struct {
 	MaxLabelNamesPerSeries int     `yaml:"max_label_names_per_series" json:"max_label_names_per_series"`
 
 	// Ingester enforced limits.
-	MaxLocalSeriesPerUser  int `yaml:"max_series_per_user" json:"max_series_per_user"`
-	MaxGlobalSeriesPerUser int `yaml:"max_global_series_per_user" json:"max_global_series_per_user"`
+	MaxLocalSeriesPerTenant  int `yaml:"max_series_per_tenant" json:"max_series_per_tenant"`
+	MaxGlobalSeriesPerTenant int `yaml:"max_global_series_per_user" json:"max_global_series_per_user"`
 
 	// Querier enforced limits.
 	MaxQueryLookback    model.Duration `yaml:"max_query_lookback" json:"max_query_lookback"`
@@ -45,14 +45,14 @@ func (e LimitError) Error() string {
 
 // RegisterFlags adds the flags required to config this to the given FlagSet
 func (l *Limits) RegisterFlags(f *flag.FlagSet) {
-	f.Float64Var(&l.IngestionRateMB, "distributor.ingestion-rate-limit-mb", 4, "Per-user ingestion rate limit in sample size per second. Units in MB.")
-	f.Float64Var(&l.IngestionBurstSizeMB, "distributor.ingestion-burst-size-mb", 2, "Per-user allowed ingestion burst size (in sample size). Units in MB. The burst size refers to the per-distributor local rate limiter, and should be set at least to the maximum profile size expected in a single push request.")
+	f.Float64Var(&l.IngestionRateMB, "distributor.ingestion-rate-limit-mb", 4, "Per-tenant ingestion rate limit in sample size per second. Units in MB.")
+	f.Float64Var(&l.IngestionBurstSizeMB, "distributor.ingestion-burst-size-mb", 2, "Per-tenant allowed ingestion burst size (in sample size). Units in MB. The burst size refers to the per-distributor local rate limiter, and should be set at least to the maximum profile size expected in a single push request.")
 	f.IntVar(&l.MaxLabelNameLength, "validation.max-length-label-name", 1024, "Maximum length accepted for label names.")
 	f.IntVar(&l.MaxLabelValueLength, "validation.max-length-label-value", 2048, "Maximum length accepted for label value. This setting also applies to the metric name.")
 	f.IntVar(&l.MaxLabelNamesPerSeries, "validation.max-label-names-per-series", 30, "Maximum number of label names per series.")
 
-	f.IntVar(&l.MaxLocalSeriesPerUser, "ingester.max-series-per-user", 0, "Maximum number of active series of profiles per user, per ingester. 0 to disable.")
-	f.IntVar(&l.MaxGlobalSeriesPerUser, "ingester.max-global-series-per-user", 5000, "Maximum number of active series of profiles per user, across the cluster. 0 to disable. When the global limit is enabled, each ingester is configured with a dynamic local limit based on the replication factor and the current number of healthy ingesters, and is kept updated whenever the number of ingesters change.")
+	f.IntVar(&l.MaxLocalSeriesPerTenant, "ingester.max-series-per-tenant", 0, "Maximum number of active series of profiles per tenant, per ingester. 0 to disable.")
+	f.IntVar(&l.MaxGlobalSeriesPerTenant, "ingester.max-global-series-per-tenant", 5000, "Maximum number of active series of profiles per tenant, across the cluster. 0 to disable. When the global limit is enabled, each ingester is configured with a dynamic local limit based on the replication factor and the current number of healthy ingesters, and is kept updated whenever the number of ingesters change.")
 
 	_ = l.MaxQueryLength.Set("721h")
 	f.Var(&l.MaxQueryLength, "querier.max-query-length", "The limit to length of queries. 0 to disable.")
@@ -103,12 +103,12 @@ func SetDefaultLimitsForYAMLUnmarshalling(defaults Limits) {
 type TenantLimits interface {
 	// TenantLimits is a function that returns limits for given tenant, or
 	// nil, if there are no tenant-specific limits.
-	TenantLimits(userID string) *Limits
-	// AllByUserID gets a mapping of all tenant IDs and limits for that user
-	AllByUserID() map[string]*Limits
+	TenantLimits(tenantID string) *Limits
+	// AllByTenantID gets a mapping of all tenant IDs and limits for that tenant
+	AllByTenantID() map[string]*Limits
 }
 
-// Overrides periodically fetch a set of per-user overrides, and provides convenience
+// Overrides periodically fetch a set of per-tenant overrides, and provides convenience
 // functions for fetching the correct value.
 type Overrides struct {
 	defaultLimits *Limits
@@ -123,79 +123,79 @@ func NewOverrides(defaults Limits, tenantLimits TenantLimits) (*Overrides, error
 	}, nil
 }
 
-func (o *Overrides) AllByUserID() map[string]*Limits {
+func (o *Overrides) AllByTenantID() map[string]*Limits {
 	if o.tenantLimits != nil {
-		return o.tenantLimits.AllByUserID()
+		return o.tenantLimits.AllByTenantID()
 	}
 	return nil
 }
 
 // IngestionRateBytes returns the limit on ingester rate (MBs per second).
-func (o *Overrides) IngestionRateBytes(userID string) float64 {
-	return o.getOverridesForUser(userID).IngestionRateMB * bytesInMB
+func (o *Overrides) IngestionRateBytes(tenantID string) float64 {
+	return o.getOverridesForTenant(tenantID).IngestionRateMB * bytesInMB
 }
 
 // IngestionBurstSizeBytes returns the burst size for ingestion rate.
-func (o *Overrides) IngestionBurstSizeBytes(userID string) int {
-	return int(o.getOverridesForUser(userID).IngestionBurstSizeMB * bytesInMB)
+func (o *Overrides) IngestionBurstSizeBytes(tenantID string) int {
+	return int(o.getOverridesForTenant(tenantID).IngestionBurstSizeMB * bytesInMB)
 }
 
 // MaxLabelNameLength returns maximum length a label name can be.
-func (o *Overrides) MaxLabelNameLength(userID string) int {
-	return o.getOverridesForUser(userID).MaxLabelNameLength
+func (o *Overrides) MaxLabelNameLength(tenantID string) int {
+	return o.getOverridesForTenant(tenantID).MaxLabelNameLength
 }
 
 // MaxLabelValueLength returns maximum length a label value can be. This also is
 // the maximum length of a metric name.
-func (o *Overrides) MaxLabelValueLength(userID string) int {
-	return o.getOverridesForUser(userID).MaxLabelValueLength
+func (o *Overrides) MaxLabelValueLength(tenantID string) int {
+	return o.getOverridesForTenant(tenantID).MaxLabelValueLength
 }
 
 // MaxLabelNamesPerSeries returns maximum number of label/value pairs timeseries.
-func (o *Overrides) MaxLabelNamesPerSeries(userID string) int {
-	return o.getOverridesForUser(userID).MaxLabelNamesPerSeries
+func (o *Overrides) MaxLabelNamesPerSeries(tenantID string) int {
+	return o.getOverridesForTenant(tenantID).MaxLabelNamesPerSeries
 }
 
-// MaxLocalSeriesPerUser returns the maximum number of series a user is allowed to store
+// MaxLocalSeriesPerTenant returns the maximum number of series a tenant is allowed to store
 // in a single ingester.
-func (o *Overrides) MaxLocalSeriesPerUser(userID string) int {
-	return o.getOverridesForUser(userID).MaxLocalSeriesPerUser
+func (o *Overrides) MaxLocalSeriesPerTenant(tenantID string) int {
+	return o.getOverridesForTenant(tenantID).MaxLocalSeriesPerTenant
 }
 
-// MaxGlobalSeriesPerUser returns the maximum number of series a user is allowed to store
+// MaxGlobalSeriesPerTenant returns the maximum number of series a tenant is allowed to store
 // across the cluster.
-func (o *Overrides) MaxGlobalSeriesPerUser(userID string) int {
-	return o.getOverridesForUser(userID).MaxGlobalSeriesPerUser
+func (o *Overrides) MaxGlobalSeriesPerTenant(tenantID string) int {
+	return o.getOverridesForTenant(tenantID).MaxGlobalSeriesPerTenant
 }
 
 // MaxQueryLength returns the limit of the length (in time) of a query.
-func (o *Overrides) MaxQueryLength(userID string) time.Duration {
-	return time.Duration(o.getOverridesForUser(userID).MaxQueryLength)
+func (o *Overrides) MaxQueryLength(tenantID string) time.Duration {
+	return time.Duration(o.getOverridesForTenant(tenantID).MaxQueryLength)
 }
 
 // MaxQueryParallelism returns the limit to the number of sub-queries the
 // frontend will process in parallel.
-func (o *Overrides) MaxQueryParallelism(userID string) int {
-	return o.getOverridesForUser(userID).MaxQueryParallelism
+func (o *Overrides) MaxQueryParallelism(tenantID string) int {
+	return o.getOverridesForTenant(tenantID).MaxQueryParallelism
 }
 
 // MaxQueryLookback returns the max lookback period of queries.
-func (o *Overrides) MaxQueryLookback(userID string) time.Duration {
-	return time.Duration(o.getOverridesForUser(userID).MaxQueryLookback)
+func (o *Overrides) MaxQueryLookback(tenantID string) time.Duration {
+	return time.Duration(o.getOverridesForTenant(tenantID).MaxQueryLookback)
 }
 
-// MaxQueriersPerUser returns the limit to the number of queriers that can be used
+// MaxQueriersPerTenant returns the limit to the number of queriers that can be used
 // Shuffle sharding will be used to distribute queries across queriers.
 // 0 means no limit. Currently disabled.
-func (o *Overrides) MaxQueriersPerUser(user string) int { return 0 }
+func (o *Overrides) MaxQueriersPerTenant(tenant string) int { return 0 }
 
 func (o *Overrides) DefaultLimits() *Limits {
 	return o.defaultLimits
 }
 
-func (o *Overrides) getOverridesForUser(userID string) *Limits {
+func (o *Overrides) getOverridesForTenant(tenantID string) *Limits {
 	if o.tenantLimits != nil {
-		l := o.tenantLimits.TenantLimits(userID)
+		l := o.tenantLimits.TenantLimits(tenantID)
 		if l != nil {
 			return l
 		}

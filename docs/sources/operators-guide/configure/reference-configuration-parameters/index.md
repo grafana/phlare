@@ -168,11 +168,11 @@ client:
 [frontend_worker: <frontend_worker>]
 
 limits:
-  # Per-user ingestion rate limit in sample size per second. Units in MB.
+  # Per-tenant ingestion rate limit in sample size per second. Units in MB.
   # CLI flag: -distributor.ingestion-rate-limit-mb
   [ingestion_rate_mb: <float> | default = 4]
 
-  # Per-user allowed ingestion burst size (in sample size). Units in MB. The
+  # Per-tenant allowed ingestion burst size (in sample size). Units in MB. The
   # burst size refers to the per-distributor local rate limiter, and should be
   # set at least to the maximum profile size expected in a single push request.
   # CLI flag: -distributor.ingestion-burst-size-mb
@@ -191,24 +191,24 @@ limits:
   # CLI flag: -validation.max-label-names-per-series
   [max_label_names_per_series: <int> | default = 30]
 
-  # Maximum number of active series of profiles per user, per ingester. 0 to
+  # Maximum number of active series of profiles per tenant, per ingester. 0 to
   # disable.
-  # CLI flag: -ingester.max-series-per-user
-  [max_series_per_user: <int> | default = 0]
+  # CLI flag: -ingester.max-series-per-tenant
+  [max_series_per_tenant: <int> | default = 0]
 
-  # Maximum number of active series of profiles per user, across the cluster. 0
-  # to disable. When the global limit is enabled, each ingester is configured
+  # Maximum number of active series of profiles per tenant, across the cluster.
+  # 0 to disable. When the global limit is enabled, each ingester is configured
   # with a dynamic local limit based on the replication factor and the current
   # number of healthy ingesters, and is kept updated whenever the number of
   # ingesters change.
-  # CLI flag: -ingester.max-global-series-per-user
+  # CLI flag: -ingester.max-global-series-per-tenant
   [max_global_series_per_user: <int> | default = 5000]
 
-  # Limit how far back in time series data and metadata can be queried, up until
-  # lookback duration ago. This limit is enforced in the query frontend. If the
-  # requested time range is outside the allowed range, the request will not
-  # fail, but will be modified to only query data within the allowed time range.
-  # The default value of 0 does not set a limit.
+  # Limit how far back in profiling data can be queried, up until lookback
+  # duration ago. This limit is enforced in the query frontend. If the requested
+  # time range is outside the allowed range, the request will not fail, but will
+  # be modified to only query data within the allowed time range. The default
+  # value of 0 does not set a limit.
   # CLI flag: -querier.max-query-lookback
   [max_query_lookback: <duration> | default = 0s]
 

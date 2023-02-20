@@ -24,7 +24,7 @@ func (l *mockTenantLimits) TenantLimits(userID string) *Limits {
 	return l.limits[userID]
 }
 
-func (l *mockTenantLimits) AllByUserID() map[string]*Limits {
+func (l *mockTenantLimits) AllByTenantID() map[string]*Limits {
 	return l.limits
 }
 
