@@ -153,15 +153,15 @@ func TestWriteRead(t *testing.T) {
 func Test_rowRangeIter(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		r        *rowRange
+		r        rowRange
 		expected []int64
 	}{
-		{"empty", &rowRange{}, []int64{}},
-		{"first-element", &rowRange{0, 1}, []int64{0}},
-		{"first-3-elements", &rowRange{0, 3}, []int64{0, 1, 2}},
-		{"empty-offset", &rowRange{10, 0}, []int64{}},
-		{"one-element-offset", &rowRange{10, 1}, []int64{10}},
-		{"two elements-offset", &rowRange{10, 2}, []int64{10, 11}},
+		{"empty", rowRange{}, []int64{}},
+		{"first-element", rowRange{0, 1}, []int64{0}},
+		{"first-3-elements", rowRange{0, 3}, []int64{0, 1, 2}},
+		{"empty-offset", rowRange{10, 0}, []int64{}},
+		{"one-element-offset", rowRange{10, 1}, []int64{10}},
+		{"two elements-offset", rowRange{10, 2}, []int64{10, 11}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			it := rowRanges{tc.r: 0xff}.iter()

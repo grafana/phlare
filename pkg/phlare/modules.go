@@ -125,7 +125,7 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	f.RuntimeConfig = serv
 
 	f.Server.HTTP.Methods("GET").Path("/runtime_config").Handler(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig))
-	f.Server.HTTP.Methods("GET").Path("/api/v1/user_limits").Handler(middleware.AuthenticateUser.Wrap(validation.UserLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits)))
+	f.Server.HTTP.Methods("GET").Path("/api/v1/tenant_limits").Handler(middleware.AuthenticateUser.Wrap(validation.TenantLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits)))
 	return serv, err
 }
 

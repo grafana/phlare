@@ -54,9 +54,9 @@ phlare:
       replicaCount: 3
       resources:
         limits:
-          memory: 12Gi
+          memory: 16Gi
         requests:
-          memory: 6Gi
+          memory: 8Gi
           cpu: 1
 
 minio:

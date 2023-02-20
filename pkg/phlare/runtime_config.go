@@ -49,7 +49,7 @@ type tenantLimitsFromRuntimeConfig struct {
 	c *runtimeconfig.Manager
 }
 
-func (t *tenantLimitsFromRuntimeConfig) AllByUserID() map[string]*validation.Limits {
+func (t *tenantLimitsFromRuntimeConfig) AllByTenantID() map[string]*validation.Limits {
 	if t.c == nil {
 		return nil
 	}
@@ -63,7 +63,7 @@ func (t *tenantLimitsFromRuntimeConfig) AllByUserID() map[string]*validation.Lim
 }
 
 func (t *tenantLimitsFromRuntimeConfig) TenantLimits(userID string) *validation.Limits {
-	allByUserID := t.AllByUserID()
+	allByUserID := t.AllByTenantID()
 	if allByUserID == nil {
 		return nil
 	}

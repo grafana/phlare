@@ -54,7 +54,7 @@ func (s rowRangesWithSeriesIndex) getSeriesIndex(rowNum int64) uint32 {
 	panic("series index not found")
 }
 
-type rowRanges map[*rowRange]model.Fingerprint
+type rowRanges map[rowRange]model.Fingerprint
 
 func (rR rowRanges) iter() iter.Iterator[fingerprintWithRowNum] {
 	// ensure row ranges is sorted
@@ -89,7 +89,7 @@ func (r rowRanges) fingerprintsWithRowNum() query.Iterator {
 }
 
 type rowRangesIter struct {
-	r   []*rowRange
+	r   []rowRange
 	fps []model.Fingerprint
 	pos int64
 }
@@ -148,10 +148,11 @@ type PersistentProfileSeriesCallback interface {
 type profilesIndex struct {
 	ix *tsdb.BitPrefixInvertedIndex
 	// todo: like the inverted index we might want to shard fingerprint to avoid contentions.
-	profilesPerFP map[model.Fingerprint]*profileSeries
-	mutex         sync.RWMutex
-	totalProfiles *atomic.Int64
-	totalSeries   *atomic.Int64
+	profilesPerFP   map[model.Fingerprint]*profileSeries
+	mutex           sync.RWMutex
+	totalProfiles   *atomic.Int64
+	totalSeries     *atomic.Int64
+	rowGroupsOnDisk int
 
 	metrics *headMetrics
 }
@@ -179,10 +180,11 @@ func (pi *profilesIndex) Add(ps *schemav1.Profile, lbs phlaremodel.Labels, profi
 	if !ok {
 		lbs := pi.ix.Add(lbs, ps.SeriesFingerprint)
 		profiles = &profileSeries{
-			lbs:     lbs,
-			fp:      ps.SeriesFingerprint,
-			minTime: ps.TimeNanos,
-			maxTime: ps.TimeNanos,
+			lbs:            lbs,
+			fp:             ps.SeriesFingerprint,
+			minTime:        ps.TimeNanos,
+			maxTime:        ps.TimeNanos,
+			profilesOnDisk: make([]*rowRange, pi.rowGroupsOnDisk),
 		}
 		pi.profilesPerFP[ps.SeriesFingerprint] = profiles
 		pi.totalSeries.Inc()
@@ -240,6 +242,8 @@ outer:
 		idx++
 	}
 
+	sp.SetTag("matchedSeries", idx)
+
 	return ids[:idx], nil
 }
 
@@ -248,6 +252,9 @@ func (pi *profilesIndex) selectMatchingRowRanges(ctx context.Context, params *in
 	map[model.Fingerprint]phlaremodel.Labels,
 	error,
 ) {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "selectMatchingRowRanges - Index")
+	defer sp.Finish()
+
 	ids, err := pi.selectMatchingFPs(ctx, params)
 	if err != nil {
 		return nil, nil, err
@@ -277,8 +284,11 @@ func (pi *profilesIndex) selectMatchingRowRanges(ctx context.Context, params *in
 			continue
 		}
 
-		rowRanges[rR] = fp
+		rowRanges[*rR] = fp
 	}
+
+	sp.SetTag("rowGroupSegment", rowGroupIdx)
+	sp.SetTag("matchedRowRangesCount", len(rowRanges))
 
 	return rowRanges.fingerprintsWithRowNum(), labelsPerFP, nil
 }
@@ -455,6 +465,8 @@ func (pl *profilesIndex) cutRowGroup(rgProfiles []*schemav1.Profile) error {
 
 	pl.mutex.Lock()
 	defer pl.mutex.Unlock()
+
+	pl.rowGroupsOnDisk += 1
 
 	for _, ps := range pl.profilesPerFP {
 		// empty all in memory profiles
