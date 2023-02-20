@@ -410,7 +410,6 @@ func (f *Phlare) initUsageReport() (services.Service, error) {
 
 type statusService struct {
 	statusv1.UnimplementedStatusServiceServer
-	configYaml    string
 	defaultConfig *Config
 	actualConfig  *Config
 }
