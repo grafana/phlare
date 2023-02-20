@@ -24,8 +24,8 @@ var int64SlicePool = &sync.Pool{
 
 var defaultParquetConfig = &ParquetConfig{
 	MaxBufferRowCount: 100_000,
-	MaxRowGroupBytes:  128 * 1024 * 1024,
-	MaxBlockBytes:     10 * 128 * 1024 * 1024,
+	MaxRowGroupBytes:  10 * 128 * 1024 * 1024,
+	MaxBlockBytes:     10 * 10 * 128 * 1024 * 1024,
 }
 
 type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persister[M]] struct {
@@ -39,7 +39,7 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 
 	file   *os.File
 	cfg    *ParquetConfig
-	writer *parquet.Writer
+	writer *parquet.GenericWriter[P]
 
 	buffer      *parquet.Buffer
 	rowsFlushed int
@@ -47,6 +47,10 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 
 func (s *deduplicatingSlice[M, K, H, P]) Name() string {
 	return s.persister.Name()
+}
+
+func (s *deduplicatingSlice[M, K, H, P]) MemorySize() uint64 {
+	return s.size.Load()
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Size() uint64 {
@@ -62,7 +66,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Init(path string, cfg *ParquetConfig) e
 	s.file = file
 
 	// TODO: Reuse parquet.Writer beyond life time of the head.
-	s.writer = parquet.NewWriter(file, s.persister.Schema(),
+	s.writer = parquet.NewGenericWriter[P](file, s.persister.Schema(),
 		parquet.ColumnPageBuffers(parquet.NewFileBufferPool(os.TempDir(), "phlaredb-parquet-buffers*")),
 		parquet.CreatedBy("github.com/grafana/phlare/", build.Version, build.Revision),
 	)

@@ -36,9 +36,9 @@ brackets indicate that a parameter is optional.
 - `<prefix>`: a CLI flag prefix based on the context (look at the parent configuration block to see which CLI flags prefix should be used)
 - `<relabel_config>`: a [Prometheus relabeling configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
 - `<time>`: a timestamp, with available formats:
-    - `2006-01-20` (midnight, local timezone)
-    - `2006-01-20T15:04` (local timezone)
-    - RFC 3339 formats: `2006-01-20T15:04:05Z` (UTC) or `2006-01-20T15:04:05+07:00` (explicit timezone)
+  - `2006-01-20` (midnight, local timezone)
+  - `2006-01-20T15:04` (local timezone)
+  - RFC 3339 formats: `2006-01-20T15:04:05Z` (UTC) or `2006-01-20T15:04:05+07:00` (explicit timezone)
 
 ## Use environment variables in the configuration
 
@@ -239,9 +239,9 @@ phlaredb:
   # CLI flag: -phlaredb.max-block-duration
   [max_block_duration: <duration> | default = 3h]
 
-  # How big should a single row group be
+  # How big should a single row group be uncompressed
   # CLI flag: -phlaredb.row-group-target-size
-  [row_group_target_size: <int> | default = 104857600]
+  [row_group_target_size: <int> | default = 1342177280]
 
 tracing:
   # Set to false to disable tracing.
@@ -661,7 +661,7 @@ lifecycler:
 
         # Override the default cipher suite list (separated by commas). Allowed
         # values:
-        # 
+        #
         # Secure Ciphers:
         # - TLS_RSA_WITH_AES_128_CBC_SHA
         # - TLS_RSA_WITH_AES_256_CBC_SHA
@@ -680,7 +680,7 @@ lifecycler:
         # - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
         # - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
         # - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
-        # 
+        #
         # Insecure Ciphers:
         # - TLS_RSA_WITH_RC4_128_SHA
         # - TLS_RSA_WITH_3DES_EDE_CBC_SHA
@@ -994,7 +994,7 @@ backoff_config:
 [tls_insecure_skip_verify: <boolean> | default = false]
 
 # Override the default cipher suite list (separated by commas). Allowed values:
-# 
+#
 # Secure Ciphers:
 # - TLS_RSA_WITH_AES_128_CBC_SHA
 # - TLS_RSA_WITH_AES_256_CBC_SHA
@@ -1013,7 +1013,7 @@ backoff_config:
 # - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 # - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
 # - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
-# 
+#
 # Insecure Ciphers:
 # - TLS_RSA_WITH_RC4_128_SHA
 # - TLS_RSA_WITH_3DES_EDE_CBC_SHA
@@ -1192,7 +1192,7 @@ The `memberlist` block configures the Gossip memberlist.
 [tls_insecure_skip_verify: <boolean> | default = false]
 
 # Override the default cipher suite list (separated by commas). Allowed values:
-# 
+#
 # Secure Ciphers:
 # - TLS_RSA_WITH_AES_128_CBC_SHA
 # - TLS_RSA_WITH_AES_256_CBC_SHA
@@ -1211,7 +1211,7 @@ The `memberlist` block configures the Gossip memberlist.
 # - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 # - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
 # - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
-# 
+#
 # Insecure Ciphers:
 # - TLS_RSA_WITH_RC4_128_SHA
 # - TLS_RSA_WITH_3DES_EDE_CBC_SHA
