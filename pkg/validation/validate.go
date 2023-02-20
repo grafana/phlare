@@ -36,11 +36,11 @@ const (
 	LabelValueTooLong Reason = "label_value_too_long"
 	// DuplicateLabelNames is a reason for discarding a request which has duplicate label names
 	DuplicateLabelNames Reason = "duplicate_label_names"
-	// StreamLimit is a reason for discarding lines when we can't create a new stream
+	// SeriesLimit is a reason for discarding lines when we can't create a new stream
 	// because the limit of active streams has been reached.
-	StreamLimit Reason = "series_limit"
+	SeriesLimit Reason = "series_limit"
 
-	StreamLimitErrorMsg            = "Maximum active series limit exceeded (%d/%d), reduce the number of active streams (reduce labels or reduce label values), or contact your administrator to see if the limit can be increased"
+	SeriesLimitErrorMsg            = "Maximum active series limit exceeded (%d/%d), reduce the number of active streams (reduce labels or reduce label values), or contact your administrator to see if the limit can be increased"
 	MissingLabelsErrorMsg          = "error at least one label pair is required per profile"
 	InvalidLabelsErrorMsg          = "invalid labels '%s' with error: %s"
 	MaxLabelNamesPerSeriesErrorMsg = "profile series '%s' has %d label names; limit %d"

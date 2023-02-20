@@ -204,7 +204,7 @@ func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushReq
 						switch validation.ReasonOf(err) {
 						case validation.OutOfOrder:
 							return nil, connect.NewError(connect.CodeInvalidArgument, err)
-						case validation.StreamLimit:
+						case validation.SeriesLimit:
 							return nil, connect.NewError(connect.CodeResourceExhausted, err)
 						}
 					}

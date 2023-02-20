@@ -161,7 +161,7 @@ func (l *limiter) assertMaxSeriesPerUser(tenantID string, series int) error {
 	if series < calculatedLimit {
 		return nil
 	}
-	return validation.NewErrorf(validation.StreamLimit, validation.StreamLimitErrorMsg, series, calculatedLimit)
+	return validation.NewErrorf(validation.SeriesLimit, validation.SeriesLimitErrorMsg, series, calculatedLimit)
 }
 
 func convertGlobalToLocalLimit(globalLimit int, ringCount RingCount, replicationFactor int) int {
