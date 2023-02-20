@@ -136,6 +136,8 @@ type Head struct {
 	tables          []Table
 	delta           *deltaProfiles
 	pprofLabelCache labelCache
+
+	limiter TenantLimiter
 }
 
 const (
@@ -144,7 +146,8 @@ const (
 	defaultFolderMode = 0o755
 )
 
-func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
+func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Head, error) {
+	// todo if tenantLimiter is nil ....
 	parquetConfig := *defaultParquetConfig
 	h := &Head{
 		logger:  phlarecontext.Logger(phlarectx),
@@ -159,6 +162,7 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 		flushForcedTimer: time.NewTimer(cfg.MaxBlockDuration),
 
 		parquetConfig: &parquetConfig,
+		limiter:       limiter,
 	}
 	h.headPath = filepath.Join(cfg.DataPath, pathHead, h.meta.ULID.String())
 	h.localPath = filepath.Join(cfg.DataPath, pathLocal, h.meta.ULID.String())
@@ -292,8 +296,15 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 }
 
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
-	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
+
+	for i, fp := range seriesFingerprints {
+		if err := h.limiter.AllowProfile(fp, labels[i], p.TimeNanos); err != nil {
+			return err
+		}
+	}
+
+	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 
 	// create a rewriter state
 	rewrites := &rewriter{}

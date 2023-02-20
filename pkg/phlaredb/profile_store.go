@@ -49,7 +49,7 @@ type profileStore struct {
 }
 
 func newProfileStore(phlarectx context.Context) *profileStore {
-	var s = &profileStore{
+	s := &profileStore{
 		logger:    phlarecontext.Logger(phlarectx),
 		metrics:   contextHeadMetrics(phlarectx),
 		persister: &schemav1.ProfilePersister{},
@@ -105,7 +105,6 @@ func (s *profileStore) Close() error {
 }
 
 func (s *profileStore) RowGroups() (rowGroups []parquet.RowGroup) {
-
 	rowGroups = make([]parquet.RowGroup, len(s.rowGroups))
 	for pos := range rowGroups {
 		rowGroups[pos] = s.rowGroups[pos]
@@ -134,7 +133,6 @@ func (s *profileStore) profileSort(i, j int) bool {
 
 	// finally use ID as tie breaker
 	return bytes.Compare(pI.ID[:], pJ.ID[:]) < 0
-
 }
 
 func (s *profileStore) Flush(ctx context.Context) (numRows uint64, numRowGroups uint64, err error) {
@@ -358,7 +356,6 @@ func newRowGroupOnDisk(path string) (*rowGroupOnDisk, error) {
 	r.RowGroup = rowGroups[0]
 
 	return r, nil
-
 }
 
 func (r *rowGroupOnDisk) RowGroups() []parquet.RowGroup {
@@ -395,7 +392,6 @@ func (r *rowGroupOnDisk) columnIter(ctx context.Context, columnName string, pred
 		return query.NewErrIterator(fmt.Errorf("column '%s' not found in head row group segment '%s'", columnName, r.file.Name()))
 	}
 	return query.NewColumnIterator(ctx, []parquet.RowGroup{r.RowGroup}, column.ColumnIndex, columnName, 1000, predicate, alias)
-
 }
 
 type seriesIDRowsRewriter struct {
