@@ -12,16 +12,16 @@ import (
 )
 
 type fakeLimits struct {
-	maxLocalSeriesPerUser  int
-	maxGlobalSeriesPerUser int
+	maxLocalSeriesPerTenant  int
+	maxGlobalSeriesPerTenant int
 }
 
-func (f *fakeLimits) MaxLocalSeriesPerUser(userID string) int {
-	return f.maxLocalSeriesPerUser
+func (f *fakeLimits) MaxLocalSeriesPerTenant(userID string) int {
+	return f.maxLocalSeriesPerTenant
 }
 
-func (f *fakeLimits) MaxGlobalSeriesPerUser(userID string) int {
-	return f.maxGlobalSeriesPerUser
+func (f *fakeLimits) MaxGlobalSeriesPerTenant(userID string) int {
+	return f.maxGlobalSeriesPerTenant
 }
 
 type fakeRingCount struct {
@@ -54,7 +54,7 @@ func TestGlobalMaxSeries(t *testing.T) {
 	activeSeriesTimeout = 200 * time.Millisecond
 	activeSeriesCleanup = 100 * time.Millisecond
 
-	limiter := NewLimiter("foo", &fakeLimits{maxGlobalSeriesPerUser: 5}, &fakeRingCount{2}, 3)
+	limiter := NewLimiter("foo", &fakeLimits{maxGlobalSeriesPerTenant: 5}, &fakeRingCount{2}, 3)
 	defer limiter.Stop()
 
 	for i := 0; i < 7; i++ {
@@ -79,7 +79,7 @@ func TestLocalLimit(t *testing.T) {
 	activeSeriesTimeout = 200 * time.Millisecond
 	activeSeriesCleanup = 100 * time.Millisecond
 
-	limiter := NewLimiter("foo", &fakeLimits{maxGlobalSeriesPerUser: 5, maxLocalSeriesPerUser: 1}, &fakeRingCount{2}, 3)
+	limiter := NewLimiter("foo", &fakeLimits{maxGlobalSeriesPerTenant: 5, maxLocalSeriesPerTenant: 1}, &fakeRingCount{2}, 3)
 	defer limiter.Stop()
 
 	// local limit of 1 series should take precedence over global limit of 5 series.

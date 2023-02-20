@@ -21,8 +21,8 @@ type RingCount interface {
 }
 
 type Limits interface {
-	MaxLocalSeriesPerUser(userID string) int
-	MaxGlobalSeriesPerUser(userID string) int
+	MaxLocalSeriesPerTenant(tenantID string) int
+	MaxGlobalSeriesPerTenant(tenantID string) int
 }
 
 type Limiter interface {
@@ -142,11 +142,11 @@ func (l *limiter) allowNewSeries(fp model.Fingerprint) error {
 
 func (l *limiter) assertMaxSeriesPerUser(tenantID string, series int) error {
 	// Start by setting the local limit either from override or default
-	localLimit := l.limits.MaxLocalSeriesPerUser(tenantID)
+	localLimit := l.limits.MaxLocalSeriesPerTenant(tenantID)
 
 	// We can assume that series are evenly distributed across ingesters
 	// so we do convert the global limit into a local limit
-	globalLimit := l.limits.MaxGlobalSeriesPerUser(tenantID)
+	globalLimit := l.limits.MaxGlobalSeriesPerTenant(tenantID)
 	adjustedGlobalLimit := convertGlobalToLocalLimit(globalLimit, l.ring, l.replicationFactor)
 
 	// Set the calculated limit to the lesser of the local limit or the new calculated global limit

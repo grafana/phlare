@@ -85,7 +85,7 @@ func (f fingerprintWithRowNum) RowNumber() int64 {
 }
 
 func (r rowRanges) fingerprintsWithRowNum() query.Iterator {
-	return query.NewRowNumberIterator[fingerprintWithRowNum](r.iter())
+	return query.NewRowNumberIterator(r.iter())
 }
 
 type rowRangesIter struct {
