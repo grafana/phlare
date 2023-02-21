@@ -7,9 +7,9 @@ import (
 	"os"
 	"sort"
 
+	"github.com/grafana/dskit/flagext"
 	"github.com/prometheus/common/version"
 
-	"github.com/grafana/dskit/flagext"
 	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/grafana/phlare/pkg/phlare"
 	"github.com/grafana/phlare/pkg/usage"
