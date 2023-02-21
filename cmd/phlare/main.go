@@ -62,7 +62,7 @@ func main() {
 
 	if flags.PrintVersion {
 		fmt.Println(version.Print("phlare"))
-		os.Exit(0)
+		return
 	}
 
 	if flags.PrintModules {
