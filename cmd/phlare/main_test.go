@@ -39,6 +39,11 @@ func TestFlagParsing(t *testing.T) {
 			stdoutMessage:  "ingester *\n",
 			stderrExcluded: "ingester\n",
 		},
+		"version": {
+			arguments:      []string{"-version"},
+			stdoutMessage:  "phlare, version",
+			stderrExcluded: "phlare, version",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_ = os.Setenv("TARGET", "ingester")
