@@ -135,7 +135,7 @@ Use a custom namespace so that you do not have to overwrite the default namespac
    | Field | Value                                                        |
    | ----- | ------------------------------------------------------------ |
    | Name  | Phlare                                                       |
-   | URL   | <http://phlare-querier.phlare-test.svc.cluster.local.:4100/>   |
+   | URL   | `http://phlare-querier.phlare-test.svc.cluster.local.:4100/`   |
 
    To add a data source, see [Add a data source](/docs/grafana/latest/datasources/add-a-data-source/).
 
@@ -215,4 +215,4 @@ The following table describes the annotations:
 By default, the port will be discovered using named port `http2` or ending with `-metrics` or `-profiles`.
 This means that if you don't have a named port the scraping target will be dropped.
 
-If you don't want to use the port name then you can use the `port` annotation to statically specify the port number.
+If you don't want to use the port name then you can use the `profiles.grafana.com/<profile-type>.port` annotation to statically specify the port number.
