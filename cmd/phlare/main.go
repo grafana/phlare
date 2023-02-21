@@ -7,27 +7,65 @@ import (
 	"os"
 	"sort"
 
+	"github.com/prometheus/common/version"
+
+	"github.com/grafana/dskit/flagext"
 	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/grafana/phlare/pkg/phlare"
 	"github.com/grafana/phlare/pkg/usage"
 	_ "github.com/grafana/phlare/pkg/util/build"
 )
 
-func main() {
-	var config phlare.Config
+type mainFlags struct {
+	phlare.Config
 
-	if err := cfg.DynamicUnmarshal(&config, os.Args[1:], flag.CommandLine); err != nil {
+	PrintVersion bool
+	PrintModules bool
+	PrintHelp    bool
+	PrintHelpAll bool
+}
+
+func (mf *mainFlags) Clone() flagext.Registerer {
+	return func(mf mainFlags) *mainFlags {
+		return &mf
+	}(*mf)
+}
+
+func (mf *mainFlags) PhlareConfig() *phlare.Config {
+	return &mf.Config
+}
+
+func (mf *mainFlags) RegisterFlags(fs *flag.FlagSet) {
+	mf.Config.RegisterFlags(fs)
+	fs.BoolVar(&mf.PrintVersion, "version", false, "Show the version of phlare and exit")
+	fs.BoolVar(&mf.PrintModules, "modules", false, "List available modules that can be used as target and exit.")
+	fs.BoolVar(&mf.PrintHelp, "h", false, "Print basic help.")
+	fs.BoolVar(&mf.PrintHelp, "help", false, "Print basic help.")
+	fs.BoolVar(&mf.PrintHelpAll, "help-all", false, "Print help, also including advanced and experimental parameters.")
+}
+
+func main() {
+	var (
+		flags mainFlags
+	)
+
+	if err := cfg.DynamicUnmarshal(&flags, os.Args[1:], flag.CommandLine); err != nil {
 		fmt.Fprintf(os.Stderr, "failed parsing config: %v\n", err)
 		os.Exit(1)
 	}
 
-	f, err := phlare.New(config)
+	f, err := phlare.New(flags.Config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed creating phlare: %v\n", err)
 		os.Exit(1)
 	}
 
-	if config.MainFlags.PrintModules {
+	if flags.PrintVersion {
+		fmt.Println(version.Print("phlare"))
+		os.Exit(0)
+	}
+
+	if flags.PrintModules {
 		allDeps := f.ModuleManager.DependenciesForModule(phlare.All)
 
 		for _, m := range f.ModuleManager.UserVisibleModuleNames() {
@@ -46,10 +84,10 @@ func main() {
 		return
 	}
 
-	if config.MainFlags.PrintHelp || config.MainFlags.PrintHelpAll {
+	if flags.PrintHelp || flags.PrintHelpAll {
 		// Print available parameters to stdout, so that users can grep/less them easily.
 		flag.CommandLine.SetOutput(os.Stdout)
-		if err := usage.Usage(config.MainFlags.PrintHelpAll, &config); err != nil {
+		if err := usage.Usage(flags.PrintHelpAll, &flags); err != nil {
 			fmt.Fprintf(os.Stderr, "error printing usage: %s\n", err)
 			os.Exit(1)
 		}
