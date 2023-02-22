@@ -20,7 +20,7 @@ import (
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
-	query "github.com/grafana/phlare/pkg/phlaredb/query"
+	"github.com/grafana/phlare/pkg/phlaredb/query"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/grafana/phlare/pkg/util/build"
 )
@@ -200,10 +200,7 @@ func (s *profileStore) prepareFile(path string) (closer io.Closer, err error) {
 func (s *profileStore) empty() bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	if len(s.slice) == 0 {
-		return true
-	}
-	return false
+	return len(s.slice) == 0
 }
 
 // cutRowGroups gets called, when a patrticular row group has been finished and it will flush it to disk. The caller of cutRowGroups should be holding the write lock.
@@ -410,7 +407,7 @@ type seriesIDRowsRewriter struct {
 	seriesIndexes rowRangesWithSeriesIndex
 }
 
-func (r seriesIDRowsRewriter) SeekToRow(pos int64) error {
+func (r *seriesIDRowsRewriter) SeekToRow(pos int64) error {
 	if err := r.Rows.SeekToRow(pos); err != nil {
 		return err
 	}

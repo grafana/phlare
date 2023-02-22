@@ -95,8 +95,6 @@ type PhlareDB struct {
 	volumeChecker diskutil.VolumeChecker
 	fs            fileSystem
 
-	headFlushTimer time.Timer
-
 	blockQuerier *BlockQuerier
 	limiter      TenantLimiter
 }
@@ -110,7 +108,7 @@ func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareD
 	f := &PhlareDB{
 		cfg:    cfg,
 		logger: phlarecontext.Logger(phlarectx),
-		stopCh: make(chan struct{}, 0),
+		stopCh: make(chan struct{}),
 		volumeChecker: diskutil.NewVolumeChecker(
 			minFreeDisk,
 			minDiskAvailablePercentage,

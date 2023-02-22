@@ -20,7 +20,7 @@ import (
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
-	query "github.com/grafana/phlare/pkg/phlaredb/query"
+	"github.com/grafana/phlare/pkg/phlaredb/query"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/grafana/phlare/pkg/phlaredb/tsdb"
 	"github.com/grafana/phlare/pkg/phlaredb/tsdb/index"
@@ -463,7 +463,7 @@ func (pl *profilesIndex) cutRowGroup(rgProfiles []*schemav1.Profile) error {
 		ps.profiles = ps.profiles[:0]
 
 		// attach rowGroup and rowNum information
-		rowRange, _ := rowRangePerFP[ps.fp]
+		rowRange := rowRangePerFP[ps.fp]
 
 		ps.profilesOnDisk = append(
 			ps.profilesOnDisk,
@@ -499,10 +499,12 @@ const (
 
 type profilesHelper struct{}
 
+// nolint unused
 func (*profilesHelper) addToRewriter(r *rewriter, elemRewriter idConversionTable) {
 	r.locations = elemRewriter
 }
 
+// nolint unused
 func (*profilesHelper) rewrite(r *rewriter, s *schemav1.Profile) error {
 	for pos := range s.Comments {
 		r.strings.rewrite(&s.Comments[pos])
@@ -514,14 +516,17 @@ func (*profilesHelper) rewrite(r *rewriter, s *schemav1.Profile) error {
 	return nil
 }
 
+// nolint unused
 func (*profilesHelper) setID(oldID, newID uint64, p *schemav1.Profile) uint64 {
 	return oldID
 }
 
+// nolint unused
 func sizeOfSample(s *schemav1.Sample) uint64 {
 	return sampleSize + 8
 }
 
+// nolint unused
 func (*profilesHelper) size(p *schemav1.Profile) uint64 {
 	size := profileSize
 
@@ -535,6 +540,7 @@ func (*profilesHelper) size(p *schemav1.Profile) uint64 {
 	return size
 }
 
+// nolint unused
 func (*profilesHelper) clone(p *schemav1.Profile) *schemav1.Profile {
 	return p
 }

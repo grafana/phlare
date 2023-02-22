@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -38,7 +37,7 @@ import (
 func TestCreateLocalDir(t *testing.T) {
 	dataPath := t.TempDir()
 	localFile := dataPath + "/local"
-	require.NoError(t, ioutil.WriteFile(localFile, []byte("d"), 0o644))
+	require.NoError(t, os.WriteFile(localFile, []byte("d"), 0o644))
 	_, err := New(context.Background(), Config{
 		DataPath:         dataPath,
 		MaxBlockDuration: 30 * time.Minute,
@@ -451,14 +450,8 @@ func TestFilterProfiles(t *testing.T) {
 	}, filtered)
 }
 
-type fakeBlock struct {
-	id   string
-	size uint64 // in mbytes
-}
-
 type fakeVolumeFS struct {
 	mock.Mock
-	blocks []fakeBlock
 }
 
 func (f *fakeVolumeFS) HasHighDiskUtilization(path string) (*diskutil.VolumeStats, error) {

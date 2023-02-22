@@ -16,7 +16,7 @@ import (
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
-	query "github.com/grafana/phlare/pkg/phlaredb/query"
+	"github.com/grafana/phlare/pkg/phlaredb/query"
 )
 
 func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
@@ -343,12 +343,6 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 	}, nil
 }
 
-func (b *singleBlockQuerier) sampleMerge() *sampleMerge {
-	return &sampleMerge{
-		profileSource: b.profiles.file,
-	}
-}
-
 func (b *singleBlockQuerier) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByLabels - Block")
 	defer sp.Finish()
@@ -363,10 +357,6 @@ func (b *singleBlockQuerier) MergeByLabels(ctx context.Context, rows iter.Iterat
 type Source interface {
 	Schema() *parquet.Schema
 	RowGroups() []parquet.RowGroup
-}
-
-type sampleMerge struct {
-	profileSource Source
 }
 
 type profileSampleMap map[int64]*profile.Sample
