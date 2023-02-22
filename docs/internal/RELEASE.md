@@ -14,7 +14,7 @@ Once ready, you can edit and publish the draft release on Github.
 
 To release a minor version simply merge fixes to the release branch then create and push a new tag. (e.g. `v0.x.1`)
 
-> For helm charts, you need to merge a PR that bumps the chart version (no tagging required), the ci will automatically publish the chart to the [helm repository](https://grafana.github.io/helm-charts).
+> For helm charts, you need to merge a PR that bumps the chart version in the main branch (no tagging required), the ci will automatically publish the chart to the [helm repository](https://grafana.github.io/helm-charts).
 >
 ## Manual Release Process
 
