@@ -136,15 +136,6 @@ type profileSeries struct {
 	profilesOnDisk []*rowRange
 }
 
-type PersistentProfileSeriesCallback interface {
-	// PreCreationSeries is called before creating a series to indicate if the series can be created.
-	// A non nil error means the series should not be created.
-	PreCreationSeries(labels.Labels) error
-	// PreCreationProfiles is called before creating profiles to indicate if the profile can be created.
-	// A non nil error means the profile should not be created.
-	PreCreationProfiles(ps *schemav1.Profile, lbs phlaremodel.Labels) error
-}
-
 type profilesIndex struct {
 	ix *tsdb.BitPrefixInvertedIndex
 	// todo: like the inverted index we might want to shard fingerprint to avoid contentions.
@@ -425,7 +416,6 @@ func (pi *profilesIndex) writeTo(ctx context.Context, path string) ([][]rowRange
 	rangesPerRG := make([][]rowRangeWithSeriesIndex, len(pfs[0].profilesOnDisk))
 
 	// Add series
-	// pi.seriesIndexes = make(map[model.Fingerprint]uint32, len(pfs))
 	for i, s := range pfs {
 		if err := writer.AddSeries(storage.SeriesRef(i), s.lbs, s.fp, index.ChunkMeta{
 			MinTime: s.minTime,
