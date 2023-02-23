@@ -24,7 +24,7 @@ func (cfg *testCfg) Clone() flagext.Registerer {
 
 func TestYAMLFlagDoesNotMutate(t *testing.T) {
 	cfg := &testCfg{}
-	err := YAMLFlag(nil, "something")(cfg)
+	err := YAMLFlag(nil, "something", false)(cfg)
 	require.Nil(t, err)
 	require.Equal(t, 0, cfg.v)
 

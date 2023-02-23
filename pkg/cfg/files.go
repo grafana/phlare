@@ -64,7 +64,7 @@ func dYAML(y []byte) Source {
 	}
 }
 
-func YAMLFlag(args []string, name string) Source {
+func YAMLFlag(args []string, name string, testMode bool) Source {
 
 	return func(dst Cloneable) error {
 		freshFlags := flag.NewFlagSet("config-file-loader", flag.ContinueOnError)
@@ -77,6 +77,9 @@ func YAMLFlag(args []string, name string) Source {
 
 		if err := freshFlags.Parse(args); err != nil {
 			fmt.Fprintln(freshFlags.Output(), "Run with -help to get a list of available parameters")
+			if testMode {
+				return err
+			}
 			os.Exit(2)
 		}
 

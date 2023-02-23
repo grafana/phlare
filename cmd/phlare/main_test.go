@@ -44,6 +44,12 @@ func TestFlagParsing(t *testing.T) {
 			stdoutMessage:  "phlare, version",
 			stderrExcluded: "phlare, version",
 		},
+		"unknown flag": {
+			arguments:      []string{"-unknown.flag"},
+			stderrMessage:  "Run with -help to get a list of available parameters",
+			stdoutExcluded: "Usage of", // No usage description on unknown flag.
+			stderrExcluded: "Usage of",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_ = os.Setenv("TARGET", "ingester")
@@ -61,15 +67,17 @@ func TestFlagParsing(t *testing.T) {
 
 func testSingle(t *testing.T, arguments []string, stdoutMessage, stderrMessage, stdoutExcluded, stderrExcluded string) {
 	t.Helper()
-	oldArgs, oldStdout, oldStderr := os.Args, os.Stdout, os.Stderr
+	oldArgs, oldStdout, oldStderr, oldTestMode := os.Args, os.Stdout, os.Stderr, testMode
 	restored := false
+	testMode = true
 	restoreIfNeeded := func() {
 		if restored {
 			return
 		}
+		os.Args = oldArgs
 		os.Stdout = oldStdout
 		os.Stderr = oldStderr
-		os.Args = oldArgs
+		testMode = oldTestMode
 		restored = true
 	}
 	defer restoreIfNeeded()
