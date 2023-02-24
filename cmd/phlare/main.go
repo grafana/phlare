@@ -16,10 +16,6 @@ import (
 	_ "github.com/grafana/phlare/pkg/util/build"
 )
 
-// testMode is used to test flag parsing.
-// We don't want to exit the process when running tests.
-var testMode = false
-
 type mainFlags struct {
 	phlare.Config `yaml:",inline"`
 
@@ -53,7 +49,9 @@ func main() {
 		flags mainFlags
 	)
 
-	if err := cfg.DynamicUnmarshal(&flags, os.Args[1:], flag.CommandLine, testMode); err != nil {
+	testMode := cfg.GetTestMode()
+
+	if err := cfg.DynamicUnmarshal(&flags, os.Args[1:], flag.CommandLine); err != nil {
 		fmt.Fprintf(os.Stderr, "failed parsing config: %v\n", err)
 		if testMode {
 			return

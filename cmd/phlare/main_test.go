@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/grafana/phlare/pkg/test"
@@ -67,9 +68,9 @@ func TestFlagParsing(t *testing.T) {
 
 func testSingle(t *testing.T, arguments []string, stdoutMessage, stderrMessage, stdoutExcluded, stderrExcluded string) {
 	t.Helper()
-	oldArgs, oldStdout, oldStderr, oldTestMode := os.Args, os.Stdout, os.Stderr, testMode
+	oldArgs, oldStdout, oldStderr, oldTestMode := os.Args, os.Stdout, os.Stderr, cfg.GetTestMode()
 	restored := false
-	testMode = true
+	cfg.SetTestMode(true)
 	restoreIfNeeded := func() {
 		if restored {
 			return
@@ -77,7 +78,7 @@ func testSingle(t *testing.T, arguments []string, stdoutMessage, stderrMessage, 
 		os.Args = oldArgs
 		os.Stdout = oldStdout
 		os.Stderr = oldStderr
-		testMode = oldTestMode
+		cfg.SetTestMode(oldTestMode)
 		restored = true
 	}
 	defer restoreIfNeeded()
