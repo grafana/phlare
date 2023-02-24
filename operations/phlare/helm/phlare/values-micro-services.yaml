@@ -61,6 +61,3 @@ phlare:
 
 minio:
   enabled: true
-
-ingress:
-  enabled: false
