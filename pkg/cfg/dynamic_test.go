@@ -33,7 +33,7 @@ server:
 			args = append(args, configFileArgs...)
 		}
 
-		err = DynamicUnmarshal(&data, args, fs, false)
+		err = DynamicUnmarshal(&data, args, fs)
 		require.NoError(t, err)
 		return data
 	}

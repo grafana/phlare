@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/grafana/phlare/pkg/cfg"
 	"github.com/grafana/phlare/pkg/test"
 )
 
