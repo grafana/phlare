@@ -3,6 +3,7 @@ package phlare
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/api/openapiv2"
 	"github.com/grafana/phlare/pkg/agent"
+	"github.com/grafana/phlare/pkg/api"
 	"github.com/grafana/phlare/pkg/distributor"
 	"github.com/grafana/phlare/pkg/frontend"
 	"github.com/grafana/phlare/pkg/frontend/frontendpb/frontendpbconnect"
@@ -419,6 +421,13 @@ func (f *Phlare) initServer() (services.Service, error) {
 	if err := statusv1.RegisterStatusServiceHandlerServer(context.Background(), f.grpcGatewayMux, f.statusService()); err != nil {
 		return nil, err
 	}
+
+	// register static assets
+	f.Server.HTTP.PathPrefix("/static/").Handler(http.FileServer(http.FS(api.StaticFiles)))
+
+	// register index page
+	f.IndexPage = api.NewIndexPageContent()
+	f.Server.HTTP.Path("/").Handler(api.IndexHandler("", f.IndexPage))
 
 	return s, nil
 }
