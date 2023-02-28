@@ -53,6 +53,7 @@
 | phlare.serviceAccount.create | bool | `true` |  |
 | phlare.serviceAccount.name | string | `""` |  |
 | phlare.structuredConfig | object | `{}` | Allows to override Phlare's configuration using structured format. |
+| phlare.tenantOverrides | object | `{}` |  |
 | phlare.tolerations | list | `[]` |  |
 
 ----------------------------------------------

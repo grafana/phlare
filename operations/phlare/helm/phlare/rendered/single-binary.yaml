@@ -11,6 +11,23 @@ metadata:
     app.kubernetes.io/version: "0.5.1"
     app.kubernetes.io/managed-by: Helm
 ---
+# Source: phlare/templates/configmap-overrides.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phlare-dev-overrides-config
+  labels:
+    helm.sh/chart: phlare-0.5.1
+    app.kubernetes.io/name: phlare
+    app.kubernetes.io/instance: phlare-dev
+    app.kubernetes.io/version: "0.5.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  overrides.yaml: |
+    overrides:
+      foo:
+        ingestion_rate_mb: 10
+---
 # Source: phlare/templates/configmap.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -852,6 +869,7 @@ spec:
             - "-memberlist.cluster-label=default-phlare-dev"
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-config.file=/etc/phlare/config.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -868,6 +886,9 @@ spec:
             - name: config
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
+            - name: overrides-config
+              mountPath: /etc/phlare/overrides.yaml
+              subPath: overrides.yaml
             - name: data
               mountPath: /data
           resources:
@@ -876,5 +897,8 @@ spec:
         - name: config
           configMap:
             name: phlare-dev-config
+        - name: overrides-config
+          configMap:
+            name: phlare-dev-overrides-config
         - name: data
           emptyDir: {}
