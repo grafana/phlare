@@ -15,7 +15,7 @@ import (
 
 func TestIndexHandlerPrefix(t *testing.T) {
 	c := NewIndexPageContent()
-	c.AddLinks(defaultWeight, "Store Gateway", []IndexPageLink{{Desc: "Ring status", Path: "/store-gateway/ring"}})
+	c.AddLinks(DefaultWeight, "Store Gateway", []IndexPageLink{{Desc: "Ring status", Path: "/store-gateway/ring"}})
 
 	for _, tc := range []struct {
 		prefix    string
@@ -40,7 +40,7 @@ func TestIndexHandlerPrefix(t *testing.T) {
 
 func TestIndexPageContent(t *testing.T) {
 	c := NewIndexPageContent()
-	c.AddLinks(defaultWeight, "Some group", []IndexPageLink{
+	c.AddLinks(DefaultWeight, "Some group", []IndexPageLink{
 		{Desc: "Some link", Path: "/store-gateway/ring"},
 		{Dangerous: true, Desc: "Boom!", Path: "/store-gateway/boom"},
 	})

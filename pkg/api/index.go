@@ -18,8 +18,8 @@ import (
 const (
 	serviceStatusWeight = iota
 	configWeight
-	runtimeConfigWeight
-	defaultWeight
+	RuntimeConfigWeight
+	DefaultWeight
 	memberlistWeight
 	dangerousWeight
 )
