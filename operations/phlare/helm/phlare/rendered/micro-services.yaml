@@ -12,7 +12,7 @@ kind: ServiceAccount
 metadata:
   name: phlare-dev
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -358,7 +358,7 @@ kind: ConfigMap
 metadata:
   name: phlare-dev-overrides-config
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -366,8 +366,7 @@ metadata:
 data:
   overrides.yaml: |
     overrides:
-      foo:
-        ingestion_rate_mb: 10
+      {}
 ---
 # Source: phlare/templates/configmap.yaml
 apiVersion: v1
@@ -375,7 +374,7 @@ kind: ConfigMap
 metadata:
   name: phlare-dev-config
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1054,7 +1053,7 @@ kind: ClusterRole
 metadata:
   name: default-phlare-dev
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1080,7 +1079,7 @@ kind: ClusterRoleBinding
 metadata:
   name: default-phlare-dev
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1168,7 +1167,7 @@ kind: Service
 metadata:
   name: phlare-dev-memberlist
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1194,7 +1193,7 @@ kind: Service
 metadata:
   name: phlare-dev-agent
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1218,7 +1217,7 @@ kind: Service
 metadata:
   name: phlare-dev-distributor
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1242,7 +1241,7 @@ kind: Service
 metadata:
   name: phlare-dev-ingester
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1266,7 +1265,7 @@ kind: Service
 metadata:
   name: phlare-dev-ingester-headless
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1290,7 +1289,7 @@ kind: Service
 metadata:
   name: phlare-dev-querier
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1314,7 +1313,7 @@ kind: Service
 metadata:
   name: phlare-dev-query-frontend
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1338,7 +1337,7 @@ kind: Service
 metadata:
   name: phlare-dev-query-scheduler
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1362,7 +1361,7 @@ kind: Deployment
 metadata:
   name: phlare-dev-agent
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1378,7 +1377,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 2a59c876c4ab201adffd949c067bc1c9198fc405e81f5ebab90507259e0fe283
+        checksum/config: 65a7e6c11941c8c31ed1f5d154a82ad492d607df2707cb13b1fd1cbea3b1c1f5
         profiles.grafana.com/cpu.scrape: "true"
         profiles.grafana.com/goroutine.scrape: "true"
         profiles.grafana.com/memory.scrape: "true"
@@ -1405,7 +1404,7 @@ spec:
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-client.url=http://phlare-dev-distributor.default.svc.cluster.local.:4100"
             - "-config.file=/etc/phlare/config.yaml"
-            - "-runtime-config.file=/etc/phlare/overrides.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -1423,8 +1422,7 @@ spec:
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
             - name: overrides-config
-              mountPath: /etc/phlare/overrides.yaml
-              subPath: overrides.yaml
+              mountPath: /etc/phlare/overrides/
             - name: data
               mountPath: /data
           resources:
@@ -1449,7 +1447,7 @@ kind: Deployment
 metadata:
   name: phlare-dev-distributor
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1465,7 +1463,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 2a59c876c4ab201adffd949c067bc1c9198fc405e81f5ebab90507259e0fe283
+        checksum/config: 65a7e6c11941c8c31ed1f5d154a82ad492d607df2707cb13b1fd1cbea3b1c1f5
         profiles.grafana.com/cpu.scrape: "true"
         profiles.grafana.com/goroutine.scrape: "true"
         profiles.grafana.com/memory.scrape: "true"
@@ -1491,7 +1489,7 @@ spec:
             - "-memberlist.cluster-label=default-phlare-dev"
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-config.file=/etc/phlare/config.yaml"
-            - "-runtime-config.file=/etc/phlare/overrides.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -1509,8 +1507,7 @@ spec:
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
             - name: overrides-config
-              mountPath: /etc/phlare/overrides.yaml
-              subPath: overrides.yaml
+              mountPath: /etc/phlare/overrides/
             - name: data
               mountPath: /data
           resources:
@@ -1535,7 +1532,7 @@ kind: Deployment
 metadata:
   name: phlare-dev-querier
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1551,7 +1548,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 2a59c876c4ab201adffd949c067bc1c9198fc405e81f5ebab90507259e0fe283
+        checksum/config: 65a7e6c11941c8c31ed1f5d154a82ad492d607df2707cb13b1fd1cbea3b1c1f5
         profiles.grafana.com/cpu.scrape: "true"
         profiles.grafana.com/goroutine.scrape: "true"
         profiles.grafana.com/memory.scrape: "true"
@@ -1577,7 +1574,7 @@ spec:
             - "-memberlist.cluster-label=default-phlare-dev"
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-config.file=/etc/phlare/config.yaml"
-            - "-runtime-config.file=/etc/phlare/overrides.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -1595,8 +1592,7 @@ spec:
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
             - name: overrides-config
-              mountPath: /etc/phlare/overrides.yaml
-              subPath: overrides.yaml
+              mountPath: /etc/phlare/overrides/
             - name: data
               mountPath: /data
           resources:
@@ -1621,7 +1617,7 @@ kind: Deployment
 metadata:
   name: phlare-dev-query-frontend
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1637,7 +1633,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 2a59c876c4ab201adffd949c067bc1c9198fc405e81f5ebab90507259e0fe283
+        checksum/config: 65a7e6c11941c8c31ed1f5d154a82ad492d607df2707cb13b1fd1cbea3b1c1f5
         profiles.grafana.com/cpu.scrape: "true"
         profiles.grafana.com/goroutine.scrape: "true"
         profiles.grafana.com/memory.scrape: "true"
@@ -1663,7 +1659,7 @@ spec:
             - "-memberlist.cluster-label=default-phlare-dev"
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-config.file=/etc/phlare/config.yaml"
-            - "-runtime-config.file=/etc/phlare/overrides.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -1681,8 +1677,7 @@ spec:
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
             - name: overrides-config
-              mountPath: /etc/phlare/overrides.yaml
-              subPath: overrides.yaml
+              mountPath: /etc/phlare/overrides/
             - name: data
               mountPath: /data
           resources:
@@ -1707,7 +1702,7 @@ kind: Deployment
 metadata:
   name: phlare-dev-query-scheduler
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1723,7 +1718,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 2a59c876c4ab201adffd949c067bc1c9198fc405e81f5ebab90507259e0fe283
+        checksum/config: 65a7e6c11941c8c31ed1f5d154a82ad492d607df2707cb13b1fd1cbea3b1c1f5
         profiles.grafana.com/cpu.scrape: "true"
         profiles.grafana.com/goroutine.scrape: "true"
         profiles.grafana.com/memory.scrape: "true"
@@ -1749,7 +1744,7 @@ spec:
             - "-memberlist.cluster-label=default-phlare-dev"
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-config.file=/etc/phlare/config.yaml"
-            - "-runtime-config.file=/etc/phlare/overrides.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -1767,8 +1762,7 @@ spec:
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
             - name: overrides-config
-              mountPath: /etc/phlare/overrides.yaml
-              subPath: overrides.yaml
+              mountPath: /etc/phlare/overrides/
             - name: data
               mountPath: /data
           resources:
@@ -1888,7 +1882,7 @@ kind: StatefulSet
 metadata:
   name: phlare-dev-ingester
   labels:
-    helm.sh/chart: phlare-0.5.1
+    helm.sh/chart: phlare-0.5.2
     app.kubernetes.io/name: phlare
     app.kubernetes.io/instance: phlare-dev
     app.kubernetes.io/version: "0.5.1"
@@ -1906,7 +1900,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 2a59c876c4ab201adffd949c067bc1c9198fc405e81f5ebab90507259e0fe283
+        checksum/config: 65a7e6c11941c8c31ed1f5d154a82ad492d607df2707cb13b1fd1cbea3b1c1f5
         profiles.grafana.com/cpu.scrape: "true"
         profiles.grafana.com/goroutine.scrape: "true"
         profiles.grafana.com/memory.scrape: "true"
@@ -1932,7 +1926,7 @@ spec:
             - "-memberlist.cluster-label=default-phlare-dev"
             - "-memberlist.join=phlare-dev-memberlist.default.svc.cluster.local."
             - "-config.file=/etc/phlare/config.yaml"
-            - "-runtime-config.file=/etc/phlare/overrides.yaml"
+            - "-runtime-config.file=/etc/phlare/overrides/overrides.yaml"
             - "-log.level=debug"
           ports:
             - name: http2
@@ -1950,8 +1944,7 @@ spec:
               mountPath: /etc/phlare/config.yaml
               subPath: config.yaml
             - name: overrides-config
-              mountPath: /etc/phlare/overrides.yaml
-              subPath: overrides.yaml
+              mountPath: /etc/phlare/overrides/
             - name: data
               mountPath: /data
           resources:
