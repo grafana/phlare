@@ -61,10 +61,10 @@ spec:
           {{- end }}
           {{- with $values.extraEnvVars }}
           env:
-           {{- range $key, $value := . }}
+          {{- range $key, $value := . }}
             - name: {{ $key }}
               value: {{ $value | quote }}
-           {{- end }}
+          {{- end }}
           {{- end }}
           {{- with $values.extraEnvFrom }}
           envFrom:

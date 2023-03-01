@@ -710,7 +710,7 @@ phlare:
             regex: Pending|Succeeded|Failed|Completed
             action: drop
 
-  # Allows to add tenant specific overrides to the default limit configuration.
+  # -- Allows to add tenant specific overrides to the default limit configuration.
   tenantOverrides:
     {}
     # "foo":
