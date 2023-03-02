@@ -744,3 +744,5 @@ minio:
 
 ingress:
   enabled: false
+  # hosts:
+  #   - localhost

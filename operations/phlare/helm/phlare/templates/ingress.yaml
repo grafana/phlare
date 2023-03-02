@@ -23,7 +23,7 @@ spec:
             name: {{ include "phlare.fullname" $ }}
             {{- end }}
             port:
-              number: 4100
+              number: {{ $.Values.phlare.service.port }}
         path: /querier.v1.QuerierService/
         pathType: Prefix
       - backend:
@@ -34,7 +34,7 @@ spec:
             name: {{ include "phlare.fullname" $ }}
             {{- end }}
             port:
-              number: 4100
+              number: {{ $.Values.phlare.service.port }}
         path: /push.v1.PusherService/
         pathType: Prefix
   {{- end }}
