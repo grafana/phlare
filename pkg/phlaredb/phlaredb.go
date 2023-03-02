@@ -48,7 +48,7 @@ type Config struct {
 	// TODO: docs
 	RowGroupTargetSize uint64 `yaml:"row_group_target_size"`
 
-	Parquet *ParquetConfig `yaml:"-"` // Those configs should not be exposed to the user, rather they should be determiend by phlare itself. Currently they are solely used for test cases
+	Parquet *ParquetConfig `yaml:"-"` // Those configs should not be exposed to the user, rather they should be determined by phlare itself. Currently, they are solely used for test cases.
 }
 
 type ParquetConfig struct {
@@ -60,7 +60,7 @@ type ParquetConfig struct {
 func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 	f.StringVar(&cfg.DataPath, "phlaredb.data-path", "./data", "Directory used for local storage.")
 	f.DurationVar(&cfg.MaxBlockDuration, "phlaredb.max-block-duration", 3*time.Hour, "Upper limit to the duration of a Phlare block.")
-	f.Uint64Var(&cfg.RowGroupTargetSize, "phlaredb.row-group-target-size", 100*1024*1024, "How big should a single row group be")
+	f.Uint64Var(&cfg.RowGroupTargetSize, "phlaredb.row-group-target-size", 10*128*1024*1024, "How big should a single row group be uncompressed") // This should roughly be 128MiB compressed
 }
 
 type fileSystem interface {
@@ -73,6 +73,11 @@ type realFileSystem struct{}
 func (*realFileSystem) Open(name string) (fs.File, error)          { return os.Open(name) }
 func (*realFileSystem) ReadDir(name string) ([]fs.DirEntry, error) { return os.ReadDir(name) }
 func (*realFileSystem) RemoveAll(path string) error                { return os.RemoveAll(path) }
+
+type TenantLimiter interface {
+	AllowProfile(fp model.Fingerprint, lbs phlaremodel.Labels, tsNano int64) error
+	Stop()
+}
 
 type PhlareDB struct {
 	services.Service
@@ -90,12 +95,11 @@ type PhlareDB struct {
 	volumeChecker diskutil.VolumeChecker
 	fs            fileSystem
 
-	headFlushTimer time.Timer
-
 	blockQuerier *BlockQuerier
+	limiter      TenantLimiter
 }
 
-func New(phlarectx context.Context, cfg Config) (*PhlareDB, error) {
+func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareDB, error) {
 	fs, err := filesystem.NewBucket(cfg.DataPath)
 	if err != nil {
 		return nil, err
@@ -104,12 +108,13 @@ func New(phlarectx context.Context, cfg Config) (*PhlareDB, error) {
 	f := &PhlareDB{
 		cfg:    cfg,
 		logger: phlarecontext.Logger(phlarectx),
-		stopCh: make(chan struct{}, 0),
+		stopCh: make(chan struct{}),
 		volumeChecker: diskutil.NewVolumeChecker(
 			minFreeDisk,
 			minDiskAvailablePercentage,
 		),
-		fs: &realFileSystem{},
+		fs:      &realFileSystem{},
+		limiter: limiter,
 	}
 	if err := os.MkdirAll(f.LocalDataPath(), 0o777); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", f.LocalDataPath(), err)
@@ -282,6 +287,7 @@ func (f *PhlareDB) Close() error {
 	if err := f.blockQuerier.Close(); err != nil {
 		errs.Add(err)
 	}
+	f.limiter.Stop()
 	return errs.Err()
 }
 
@@ -435,7 +441,7 @@ func (f *PhlareDB) initHead() (oldHead *Head, err error) {
 	f.headLock.Lock()
 	defer f.headLock.Unlock()
 	oldHead = f.head
-	f.head, err = NewHead(f.phlarectx, f.cfg)
+	f.head, err = NewHead(f.phlarectx, f.cfg, f.limiter)
 	if err != nil {
 		return oldHead, err
 	}

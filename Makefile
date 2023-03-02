@@ -141,7 +141,7 @@ check/go/mod: go/mod
 
 
 define docker_buildx
-	docker buildx build $(1) --platform $(IMAGE_PLATFORM) $(BUILDX_ARGS) --build-arg=revision=$(GIT_REVISION) -t $(IMAGE_PREFIX)$(shell basename $(@D)) -t $(IMAGE_PREFIX)$(shell basename $(@D)):$(IMAGE_TAG) -f cmd/$(shell basename $(@D))/Dockerfile$(2) .
+	docker buildx build $(1) --platform $(IMAGE_PLATFORM) $(BUILDX_ARGS) --build-arg=revision=$(GIT_REVISION) -t $(IMAGE_PREFIX)$(shell basename $(@D)) -t $(IMAGE_PREFIX)$(shell basename $(@D)):$(IMAGE_TAG) -f cmd/$(shell basename $(@D))/$(2)Dockerfile .
 endef
 
 define deploy
@@ -157,7 +157,7 @@ endef
 .PHONY: docker-image/phlare/build-debug
 docker-image/phlare/build-debug: GOOS=linux GOARCH=amd64
 docker-image/phlare/build-debug: go/bin-debug $(BIN)/dlv
-	$(call docker_buildx,--load,.debug)
+	$(call docker_buildx,--load,debug.)
 
 .PHONY: docker-image/phlare/build
 docker-image/phlare/build: GOOS=linux GOARCH=amd64
@@ -198,13 +198,19 @@ clean: ## Delete intermediate build artifacts
 	@# -X only removes untracked files, -d recurses into directories, -f actually removes files/dirs
 	git clean -Xdf
 
+.PHONY: reference-help
+reference-help: ## Generates the reference help documentation.
+reference-help: build
+	@(./phlare -h || true) > cmd/phlare/help.txt.tmpl
+	@(./phlare -help-all || true) > cmd/phlare/help-all.txt.tmpl
+
 $(BIN)/buf: Makefile
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) $(GO) install github.com/bufbuild/buf/cmd/buf@v1.5.0
 
 $(BIN)/golangci-lint: Makefile
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.48.0
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
 
 $(BIN)/protoc-gen-go: Makefile go.mod
 	@mkdir -p $(@D)
@@ -250,9 +256,9 @@ $(BIN)/helm: Makefile go.mod
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) $(GO) install helm.sh/helm/v3/cmd/helm@v3.8.0
 
-$(BIN)/kubeval: Makefile go.mod
+$(BIN)/kubeconform: Makefile go.mod
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/instrumenta/kubeval@v0.16.1
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/yannh/kubeconform/cmd/kubeconform@v0.5.0
 
 $(BIN)/mage: Makefile go.mod
 	@mkdir -p $(@D)
@@ -301,16 +307,16 @@ trunk/fmt: $(BIN)/trunk
 	$(BIN)/trunk fmt
 
 .PHONY: helm/check
-helm/check: $(BIN)/kubeval $(BIN)/helm
+helm/check: $(BIN)/kubeconform $(BIN)/helm
 	$(BIN)/helm repo add --force-update minio https://charts.min.io/
 	$(BIN)/helm dependency build ./operations/phlare/helm/phlare/
 	mkdir -p ./operations/phlare/helm/phlare/rendered/
 	$(BIN)/helm template phlare-dev ./operations/phlare/helm/phlare/ \
 		| tee ./operations/phlare/helm/phlare/rendered/single-binary.yaml \
-		| $(BIN)/kubeval --strict
+		| $(BIN)/kubeconform --summary --strict --kubernetes-version 1.21.0
 	$(BIN)/helm template phlare-dev ./operations/phlare/helm/phlare/ --values operations/phlare/helm/phlare/values-micro-services.yaml \
 		| tee ./operations/phlare/helm/phlare/rendered/micro-services.yaml \
-		| $(BIN)/kubeval --strict
+		| $(BIN)/kubeconform --summary --strict --kubernetes-version 1.21.0
 	cat operations/phlare/helm/phlare/values-micro-services.yaml \
 		| go run ./tools/yaml-to-json \
 		> ./operations/phlare/jsonnet/values-micro-services.json
@@ -334,7 +340,7 @@ deploy-monitoring: $(BIN)/tk $(BIN)/kind tools/monitoring/environments/default/s
 .PHONY: tools/monitoring/environments/default/spec.json # This is a phony target for now as the cluster might be not already created.
 tools/monitoring/environments/default/spec.json: $(BIN)/tk $(BIN)/kind
 	$(BIN)/kind export kubeconfig --name $(KIND_CLUSTER) || $(BIN)/kind create cluster --name $(KIND_CLUSTER)
-	pushd tools/monitoring/ && rm -Rf vendor/ lib/ environments/default/spec.json  && PATH=$(BIN) $(BIN)/tk init -f
+	pushd tools/monitoring/ && rm -Rf vendor/ lib/ environments/default/spec.json  && PATH=$(BIN):$(PATH) $(BIN)/tk init -f
 	echo "import 'monitoring.libsonnet'" > tools/monitoring/environments/default/main.jsonnet
 	$(BIN)/tk env set tools/monitoring/environments/default --server=$(shell $(BIN)/kind get kubeconfig --name phlare-dev | grep server: | sed 's/server://g' | xargs) --namespace=monitoring
 

@@ -46,6 +46,7 @@ func copySlice[T any](in []T) []T {
 
 type idConversionTable map[int64]int64
 
+// nolint unused
 func (t idConversionTable) rewrite(idx *int64) {
 	pos := *idx
 	var ok bool
@@ -55,6 +56,7 @@ func (t idConversionTable) rewrite(idx *int64) {
 	}
 }
 
+// nolint unused
 func (t idConversionTable) rewriteUint64(idx *uint64) {
 	pos := *idx
 	v, ok := t[int64(pos)]
@@ -76,9 +78,12 @@ func emptyRewriter() *rewriter {
 
 // rewriter contains slices to rewrite the per profile reference into per head references.
 type rewriter struct {
-	strings     stringConversionTable
-	functions   idConversionTable
-	mappings    idConversionTable
+	strings stringConversionTable
+	// nolint unused
+	functions idConversionTable
+	// nolint unused
+	mappings idConversionTable
+	// nolint unused
 	locations   idConversionTable
 	stacktraces idConversionTable
 }
@@ -104,7 +109,8 @@ type Helper[M Models, K comparable] interface {
 
 type Table interface {
 	Name() string
-	Size() uint64
+	Size() uint64       // Size estimates the uncompressed byte size of the table in memory and on disk.
+	MemorySize() uint64 // MemorySize estimates the uncompressed byte size of the table in memory.
 	Init(path string, cfg *ParquetConfig) error
 	Flush(context.Context) (numRows uint64, numRowGroups uint64, err error)
 	Close() error
@@ -137,6 +143,8 @@ type Head struct {
 	tables          []Table
 	delta           *deltaProfiles
 	pprofLabelCache labelCache
+
+	limiter TenantLimiter
 }
 
 const (
@@ -145,7 +153,8 @@ const (
 	defaultFolderMode = 0o755
 )
 
-func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
+func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Head, error) {
+	// todo if tenantLimiter is nil ....
 	parquetConfig := *defaultParquetConfig
 	h := &Head{
 		logger:  phlarecontext.Logger(phlarectx),
@@ -160,6 +169,7 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 		flushForcedTimer: time.NewTimer(cfg.MaxBlockDuration),
 
 		parquetConfig: &parquetConfig,
+		limiter:       limiter,
 	}
 	h.headPath = filepath.Join(cfg.DataPath, pathHead, h.meta.ULID.String())
 	h.localPath = filepath.Join(cfg.DataPath, pathLocal, h.meta.ULID.String())
@@ -202,6 +212,16 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 	go h.loop()
 
 	return h, nil
+}
+
+func (h *Head) MemorySize() uint64 {
+	var size uint64
+	// TODO: Estimate size of TSDB index
+	for _, t := range h.tables {
+		size += t.MemorySize()
+	}
+
+	return size
 }
 
 func (h *Head) Size() uint64 {
@@ -293,8 +313,15 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 }
 
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
-	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
+
+	for i, fp := range seriesFingerprints {
+		if err := h.limiter.AllowProfile(fp, labels[i], p.TimeNanos); err != nil {
+			return err
+		}
+	}
+
+	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 
 	// create a rewriter state
 	rewrites := &rewriter{}

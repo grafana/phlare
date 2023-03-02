@@ -24,8 +24,8 @@ var int64SlicePool = &sync.Pool{
 
 var defaultParquetConfig = &ParquetConfig{
 	MaxBufferRowCount: 100_000,
-	MaxRowGroupBytes:  128 * 1024 * 1024,
-	MaxBlockBytes:     10 * 128 * 1024 * 1024,
+	MaxRowGroupBytes:  10 * 128 * 1024 * 1024,
+	MaxBlockBytes:     10 * 10 * 128 * 1024 * 1024,
 }
 
 type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persister[M]] struct {
@@ -39,7 +39,7 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 
 	file   *os.File
 	cfg    *ParquetConfig
-	writer *parquet.Writer
+	writer *parquet.GenericWriter[P]
 
 	buffer      *parquet.Buffer
 	rowsFlushed int
@@ -47,6 +47,10 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 
 func (s *deduplicatingSlice[M, K, H, P]) Name() string {
 	return s.persister.Name()
+}
+
+func (s *deduplicatingSlice[M, K, H, P]) MemorySize() uint64 {
+	return s.size.Load()
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Size() uint64 {
@@ -62,7 +66,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Init(path string, cfg *ParquetConfig) e
 	s.file = file
 
 	// TODO: Reuse parquet.Writer beyond life time of the head.
-	s.writer = parquet.NewWriter(file, s.persister.Schema(),
+	s.writer = parquet.NewGenericWriter[P](file, s.persister.Schema(),
 		parquet.ColumnPageBuffers(parquet.NewFileBufferPool(os.TempDir(), "phlaredb-parquet-buffers*")),
 		parquet.CreatedBy("github.com/grafana/phlare/", build.Version, build.Revision),
 	)
@@ -138,7 +142,6 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uin
 		// cap max row size by buffer
 		if rowsToFlush > s.cfg.MaxBufferRowCount {
 			rowsToFlush = s.cfg.MaxBufferRowCount
-
 		}
 
 		rows := make([]parquet.Row, rowsToFlush)
@@ -167,7 +170,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uin
 	return uint64(rowsFlushed), uint64(rowGroupsFlushed), nil
 }
 
-func (s *deduplicatingSlice[M, K, H, P]) ingest(ctx context.Context, elems []M, rewriter *rewriter) error {
+func (s *deduplicatingSlice[M, K, H, P]) ingest(_ context.Context, elems []M, rewriter *rewriter) error {
 	var (
 		rewritingMap = make(map[int64]int64)
 		missing      = int64SlicePool.Get().([]int64)
@@ -216,17 +219,11 @@ func (s *deduplicatingSlice[M, K, H, P]) ingest(ctx context.Context, elems []M, 
 		s.lock.Unlock()
 	}
 
+	// nolint staticcheck
 	int64SlicePool.Put(missing[:0])
 
 	// add rewrite information to struct
 	s.helper.addToRewriter(rewriter, rewritingMap)
 
 	return nil
-}
-
-func (s *deduplicatingSlice[M, K, H, P]) getIndex(key K) (int64, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	v, ok := s.lookup[key]
-	return v, ok
 }

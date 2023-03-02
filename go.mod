@@ -1,6 +1,6 @@
 module github.com/grafana/phlare
 
-go 1.18
+go 1.19
 
 require (
 	github.com/bufbuild/connect-go v1.4.1
@@ -13,7 +13,6 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
-	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.9
 	github.com/google/pprof v0.0.0-20221219190121-3cb0bae90811
 	github.com/google/uuid v1.3.0
@@ -56,6 +55,7 @@ require (
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.4.0
 	golang.org/x/text v0.6.0
+	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20221227171554-f9683d7f8bef
 	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
@@ -145,6 +145,7 @@ require (
 	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.3 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/gnostic v0.6.9 // indirect
@@ -198,6 +199,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc2 // indirect
 	github.com/oracle/oci-go-sdk/v65 v65.28.0 // indirect
+	github.com/ovh/go-ovh v1.3.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -235,7 +237,6 @@ require (
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/oauth2 v0.3.0 // indirect
 	golang.org/x/term v0.4.0 // indirect
-	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.4.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.105.0 // indirect
@@ -258,6 +259,6 @@ replace (
 	// Replace memberlist with our fork which includes some fixes that haven't been
 	// merged upstream yet.
 	github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20220708130638-bd88e10a3d91
-	github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.39.1
+	github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.41.0
 	google.golang.org/grpc => google.golang.org/grpc v1.44.0
 )

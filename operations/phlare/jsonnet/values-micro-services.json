@@ -35,11 +35,11 @@
         "replicaCount": 3,
         "resources": {
           "limits": {
-            "memory": "12Gi"
+            "memory": "16Gi"
           },
           "requests": {
             "cpu": 1,
-            "memory": "6Gi"
+            "memory": "8Gi"
           }
         }
       },

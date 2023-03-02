@@ -1,6 +1,6 @@
 # phlare
 
-![Version: 0.1.3](https://img.shields.io/badge/Version-0.1.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.2](https://img.shields.io/badge/AppVersion-0.1.2-informational?style=flat-square)
+![Version: 0.5.2](https://img.shields.io/badge/Version-0.5.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.1](https://img.shields.io/badge/AppVersion-0.5.1-informational?style=flat-square)
 
 🔥 horizontally-scalable, highly-available, multi-tenant continuous profiling aggregation system
 
@@ -27,7 +27,7 @@
 | phlare.fullnameOverride | string | `""` |  |
 | phlare.image.pullPolicy | string | `"IfNotPresent"` |  |
 | phlare.image.repository | string | `"grafana/phlare"` |  |
-| phlare.image.tag | string | `"0.1.1"` |  |
+| phlare.image.tag | string | `"0.5.1"` |  |
 | phlare.imagePullSecrets | list | `[]` |  |
 | phlare.memberlist.port | int | `7946` |  |
 | phlare.memberlist.port_name | string | `"memberlist"` |  |
@@ -37,8 +37,9 @@
 | phlare.persistence.annotations | object | `{}` |  |
 | phlare.persistence.enabled | bool | `false` |  |
 | phlare.persistence.size | string | `"10Gi"` |  |
-| phlare.podAnnotations."phlare.grafana.com/port" | string | `"4100"` |  |
-| phlare.podAnnotations."phlare.grafana.com/scrape" | string | `"true"` |  |
+| phlare.podAnnotations."profiles.grafana.com/cpu.scrape" | string | `"true"` |  |
+| phlare.podAnnotations."profiles.grafana.com/goroutine.scrape" | string | `"true"` |  |
+| phlare.podAnnotations."profiles.grafana.com/memory.scrape" | string | `"true"` |  |
 | phlare.podSecurityContext.fsGroup | int | `10001` |  |
 | phlare.podSecurityContext.runAsNonRoot | bool | `true` |  |
 | phlare.podSecurityContext.runAsUser | int | `10001` |  |
@@ -52,6 +53,7 @@
 | phlare.serviceAccount.create | bool | `true` |  |
 | phlare.serviceAccount.name | string | `""` |  |
 | phlare.structuredConfig | object | `{}` | Allows to override Phlare's configuration using structured format. |
+| phlare.tenantOverrides | object | `{}` | Allows to add tenant specific overrides to the default limit configuration. |
 | phlare.tolerations | list | `[]` |  |
 
 ----------------------------------------------
