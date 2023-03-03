@@ -441,6 +441,10 @@ func (f *Phlare) initServer() (services.Service, error) {
 	f.IndexPage = api.NewIndexPageContent()
 	f.Server.HTTP.Path("/").Handler(api.IndexHandler("", f.IndexPage))
 
+	f.IndexPage.AddLinks(api.OpenAPIDefinitionWeight, "OpenAPI definition", []api.IndexPageLink{
+		{Desc: "Swagger JSON", Path: "/api/swagger.json"},
+	})
+
 	return s, nil
 }
 

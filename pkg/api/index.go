@@ -22,6 +22,7 @@ const (
 	DefaultWeight
 	memberlistWeight
 	dangerousWeight
+	OpenAPIDefinitionWeight
 )
 
 func NewIndexPageContent() *IndexPageContent {
