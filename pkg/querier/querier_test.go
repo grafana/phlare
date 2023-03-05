@@ -2,13 +2,17 @@ package querier
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
+	"fmt"
 	"os"
+	"runtime/pprof"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/dustin/go-humanize"
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/pprof/profile"
@@ -17,15 +21,20 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
+	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
+	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/ingester/clientpool"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	pprofth "github.com/grafana/phlare/pkg/pprof/testhelper"
+	"github.com/grafana/phlare/pkg/tenant"
 	"github.com/grafana/phlare/pkg/testhelper"
+	"github.com/grafana/phlare/pkg/util"
 )
 
 func Test_QuerySampleType(t *testing.T) {
@@ -890,3 +899,170 @@ func TestRangeSeries(t *testing.T) {
 // 	}
 // 	return clients, nil
 // }
+
+type ingesterPoolClient struct {
+	ingesterv1connect.IngesterServiceClient
+}
+
+func (c *ingesterPoolClient) MergeProfilesStacktraces(ctx context.Context) clientpool.BidiClientMergeProfilesStacktraces {
+	return c.IngesterServiceClient.MergeProfilesStacktraces(ctx)
+}
+
+func (c *ingesterPoolClient) MergeProfilesLabels(ctx context.Context) clientpool.BidiClientMergeProfilesLabels {
+	return c.IngesterServiceClient.MergeProfilesLabels(ctx)
+}
+
+func (c *ingesterPoolClient) MergeProfilesPprof(ctx context.Context) clientpool.BidiClientMergeProfilesPprof {
+	return c.IngesterServiceClient.MergeProfilesPprof(ctx)
+}
+
+// forGivenIngesters runs f, in parallel, for given ingesters
+func forGivenIngestersAddresses[T any](ctx context.Context, addresses []string, f IngesterFn[T]) ([]responseFromIngesters[T], error) {
+	clients := make([]interface{}, 0, len(addresses))
+	for _, addr := range addresses {
+		clients = append(clients, &ingesterPoolClient{
+			ingesterv1connect.NewIngesterServiceClient(util.InstrumentedHTTPClient(), addr, connect.WithInterceptors(tenant.NewAuthInterceptor(true))),
+		})
+	}
+	responses := make([]responseFromIngesters[T], 0, len(clients))
+	for i, client := range clients {
+		resp, err := f(ctx, client.(IngesterQueryClient))
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, responseFromIngesters[T]{addresses[i], resp})
+	}
+
+	return responses, nil
+}
+
+func TestQueryIngester(t *testing.T) {
+	f, err := os.OpenFile("cpu.pprof.gz", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o755)
+	require.NoError(t, err)
+	require.NoError(t, pprof.StartCPUProfile(f))
+
+	address := []string{}
+	for i := 1; i <= 8; i++ {
+		address = append(address, fmt.Sprintf("http://localhost:400%d", i))
+	}
+	ctx := tenant.InjectTenantID(context.Background(), "1218")
+
+	responses, err := forGivenIngestersAddresses(ctx, address, func(_ context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesPprof, error) {
+		// we plan to use those streams to merge profiles
+		// so we use the main context here otherwise will be canceled
+		return ic.MergeProfilesPprof(ctx), nil
+	})
+
+	require.NoError(t, err)
+	profileType, err := phlaremodel.ParseProfileTypeSelector(`process_cpu:cpu:nanoseconds:cpu:nanoseconds`)
+	require.NoError(t, err)
+
+	// send the first initial request to all ingesters.
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, r := range responses {
+		r := r
+		g.Go(func() error {
+			err := r.response.Send(&ingestv1.MergeProfilesPprofRequest{
+				Request: &ingestv1.SelectProfilesRequest{
+					// LabelSelector: `{namespace="fire-dev-001"}`,
+					// LabelSelector: `{namespace="loki-dev-005"}`,
+					// LabelSelector: `{namespace="cortex-dev-01"}`,
+					LabelSelector: `{}`,
+					End:           int64(model.Now()),
+					Start:         int64(model.Now().Add(-30 * time.Minute)),
+					Type:          profileType,
+				},
+			})
+			if err != nil {
+				t.Log(err)
+			}
+			return err
+		})
+	}
+	require.NoError(t, g.Wait())
+
+	// merge all profiles
+	profile, err := selectMergePprofProfile(gCtx, responses)
+	require.NoError(t, err)
+	fh, err := os.OpenFile("heap.pprof.gz", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o755)
+	require.NoError(t, err)
+	require.NoError(t, pprof.Lookup("heap").WriteTo(fh, 0))
+	require.NoError(t, fh.Close())
+
+	pprof.StopCPUProfile()
+	require.NoError(t, f.Close())
+
+	for _, m := range profile.Mapping {
+		locs := 0
+		for _, loc := range profile.Location {
+			if loc.MappingId == m.Id {
+				locs++
+			}
+		}
+		t.Logf("Mapping (%d): %s  Locations: %d percentage:%.2f \n", m.Id, profile.StringTable[m.Filename], locs, float64(locs)/float64(len(profile.Location))*100)
+	}
+	t.Logf("Locations:%d\n", len(profile.Location))
+	t.Logf("Functions:%d\n", len(profile.Function))
+	t.Logf("Samples:%d\n", len(profile.Sample))
+
+	uniqSamples := map[string]struct{}{}
+	for _, s := range profile.Sample {
+		var key string
+		for _, l := range s.LocationId {
+			key += fmt.Sprintf(":%d", l)
+		}
+		uniqSamples[key] = struct{}{}
+
+	}
+	uniqFunctionLines := map[string]struct{}{}
+	for _, l := range profile.Location {
+		for _, f := range l.Line {
+			uniqFunctionLines[fmt.Sprintf("%d:%d", f.FunctionId, f.Line)] = struct{}{}
+		}
+	}
+	uniqueFunctionName := map[string]struct{}{}
+	for _, f := range profile.Function {
+		uniqueFunctionName[profile.StringTable[f.Name]] = struct{}{}
+	}
+	uniqueFunctionNames := map[string]struct{}{}
+	for _, f := range profile.Function {
+		uniqueFunctionNames[profile.StringTable[f.Name]+profile.StringTable[f.Filename]+profile.StringTable[f.SystemName]] = struct{}{}
+	}
+	uniqueFunction := map[string]struct{}{}
+	for _, f := range profile.Function {
+		uniqueFunction[fmt.Sprintf(
+			"%s:%s:%s:%d",
+			profile.StringTable[f.Name], profile.StringTable[f.Filename], profile.StringTable[f.SystemName], f.StartLine,
+		)] = struct{}{}
+	}
+	t.Logf("Unique Samples:%d\n", len(uniqSamples))
+	t.Logf("Unique FunctionName:%d\n", len(uniqueFunctionName))
+	t.Logf("Unique FunctionNamesss:%d\n", len(uniqueFunctionNames))
+	t.Logf("Unique Function:%d\n", len(uniqueFunction))
+	t.Logf("Unique Function/Line:%d\n", len(uniqFunctionLines))
+	buf := toBuffer(t, profile)
+	t.Logf("Full Compressed Size:%s", humanize.Bytes(uint64(buf.Len())))
+	fout, err := os.OpenFile("merge.pprof.gz", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o755)
+	require.NoError(t, err)
+	_, err = fout.Write(buf.Bytes())
+	require.NoError(t, err)
+	require.NoError(t, fout.Close())
+
+	profile.StringTable = nil
+	buf = toBuffer(t, profile)
+	t.Logf("Full Compressed Size Without Symbols:%s", humanize.Bytes(uint64(buf.Len())))
+	profile.Sample = nil
+	buf = toBuffer(t, profile)
+	t.Logf("Full Compressed Size Without Sample:%s", humanize.Bytes(uint64(buf.Len())))
+}
+
+func toBuffer(t *testing.T, p *googlev1.Profile) *bytes.Buffer {
+	t.Helper()
+	buf := bytes.NewBuffer(nil)
+	w := gzip.NewWriter(buf)
+	defer w.Close()
+	data, err := proto.Marshal(p)
+	_, err = w.Write(data)
+	require.NoError(t, err)
+	return buf
+}

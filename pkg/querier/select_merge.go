@@ -3,7 +3,9 @@ package querier
 import (
 	"container/heap"
 	"context"
+	"fmt"
 
+	"github.com/dustin/go-humanize"
 	"github.com/google/pprof/profile"
 	"github.com/grafana/dskit/multierror"
 	"github.com/prometheus/common/model"
@@ -376,10 +378,12 @@ func selectMergePprofProfile(ctx context.Context, responses []responseFromIngest
 			if err != nil {
 				return err
 			}
+			fmt.Println("result:" + humanize.Bytes(uint64(len(result))))
 			p, err := profile.ParseUncompressed(result)
 			if err != nil {
 				return err
 			}
+			fmt.Println("total samples:", len(p.Sample))
 			s.Do(func() {
 				results = append(results, p)
 			})
