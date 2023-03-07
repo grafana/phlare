@@ -58,7 +58,10 @@ func main() {
 
 	if err := cfg.DynamicUnmarshal(&flags, os.Args[1:], flag.CommandLine); err != nil {
 		fmt.Fprintf(os.Stderr, "failed parsing config: %v\n", err)
-		errorHandler(testMode)
+		if testMode {
+		    return
+    }
+    os.Exit(1)
 	}
 
 	f, err := phlare.New(flags.Config)
