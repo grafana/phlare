@@ -89,7 +89,6 @@ type Distributor struct {
 
 	// Metrics and stats.
 	metrics                 *metrics
-	clients                 prometheus.Gauge
 	rfStats                 *expvar.Int
 	bytesReceivedStats      *usagestats.Statistics
 	bytesReceivedTotalStats *usagestats.Counter
