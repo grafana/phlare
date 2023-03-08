@@ -43,31 +43,29 @@ func (mf *mainFlags) RegisterFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&mf.PrintHelp, "help", false, "Print basic help.")
 	fs.BoolVar(&mf.PrintHelpAll, "help-all", false, "Print help, also including advanced and experimental parameters.")
 }
-func errorHandler(testMode bool) {
-	if testMode {
-		return
+func errorHandler() {
+	testMode := cfg.GetTestMode()
+	if !testMode {
+		os.Exit(1)
 	}
-	os.Exit(1)
+
 }
 func main() {
 	var (
 		flags mainFlags
 	)
 
-	testMode := cfg.GetTestMode()
-
 	if err := cfg.DynamicUnmarshal(&flags, os.Args[1:], flag.CommandLine); err != nil {
 		fmt.Fprintf(os.Stderr, "failed parsing config: %v\n", err)
-		if testMode {
-		    return
-    }
-    os.Exit(1)
+		errorHandler()
+		return
 	}
 
 	f, err := phlare.New(flags.Config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed creating phlare: %v\n", err)
-		errorHandler(testMode)
+		errorHandler()
+		return
 	}
 
 	if flags.PrintVersion {
@@ -99,7 +97,8 @@ func main() {
 		flag.CommandLine.SetOutput(os.Stdout)
 		if err := usage.Usage(flags.PrintHelpAll, &flags); err != nil {
 			fmt.Fprintf(os.Stderr, "error printing usage: %s\n", err)
-			errorHandler(testMode)
+			errorHandler()
+			return
 		}
 
 		return
@@ -108,6 +107,7 @@ func main() {
 	err = f.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed running phlare: %v\n", err)
-		errorHandler(testMode)
+		errorHandler()
+		return
 	}
 }
