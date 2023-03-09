@@ -3,8 +3,9 @@ package query
 import (
 	"context"
 
-	"github.com/grafana/phlare/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/grafana/phlare/pkg/util"
 )
 
 type contextKey uint8
