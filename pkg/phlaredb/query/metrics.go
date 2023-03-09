@@ -3,8 +3,8 @@ package query
 import (
 	"context"
 
+	"github.com/grafana/phlare/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type contextKey uint8
@@ -18,12 +18,14 @@ type Metrics struct {
 }
 
 func NewMetrics(reg prometheus.Registerer) *Metrics {
-	return &Metrics{
-		pageReadsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+	m := &Metrics{
+		pageReadsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "phlaredb_page_reads_total",
 			Help: "Total number of pages read while querying",
 		}, []string{"table", "column"}),
 	}
+	m.pageReadsTotal = util.RegisterOrGet(reg, m.pageReadsTotal)
+	return m
 }
 
 func AddMetricsToContext(ctx context.Context, m *Metrics) context.Context {
