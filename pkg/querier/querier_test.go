@@ -1056,6 +1056,69 @@ func TestQueryIngester(t *testing.T) {
 	t.Logf("Full Compressed Size Without Sample:%s", humanize.Bytes(uint64(buf.Len())))
 }
 
+func TestMerge(t *testing.T) {
+	f, err := os.OpenFile("merge.pprof.gz", os.O_RDONLY, 0o755)
+	require.NoError(t, err)
+	defer f.Close()
+
+	p, err := profile.Parse(f)
+	require.NoError(t, err)
+
+	sizeOfProfile(t, p)
+
+	otherFn := &profile.Function{
+		ID:   uint64(len(p.Function) + 1),
+		Name: "other",
+	}
+	p.Function = append(p.Function, otherFn)
+	otherLocation := &profile.Location{
+		ID:      uint64(len(p.Location) + 1),
+		Mapping: p.Mapping[0],
+		Address: 0,
+		Line: []profile.Line{
+			{
+				Function: otherFn,
+			},
+		},
+		IsFolded: false,
+	}
+	p.Location = append(p.Location, otherLocation)
+	p.Sample = GroupSamples(p.Sample, []*profile.Location{otherLocation})
+
+	// var total int64
+	// for _, s := range p.Sample {
+	// 	total += s.Value[0]
+	// }
+	// threshold := int64(float64(total) * 0.01)
+
+	// // remove sample values below 1% of total
+	// for _, s := range p.Sample {
+	// 	if s.Value[0] < threshold {
+	// 		s.Location = []*profile.Location{otherLocation}
+	// 	}
+	// }
+
+	p = p.Compact()
+	sizeOfProfile(t, p)
+	fh, err := os.OpenFile("merge.compacted.pprof.gz", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o755)
+	require.NoError(t, err)
+	defer fh.Close()
+	err = p.Write(fh)
+	require.NoError(t, err)
+}
+
+func sizeOfProfile(t *testing.T, p *profile.Profile) {
+	t.Helper()
+	var buf bytes.Buffer
+	err := p.Write(&buf)
+	require.NoError(t, err)
+	t.Logf("Size:%s", humanize.Bytes(uint64(buf.Len())))
+	fmt.Println("len(fn):", len(p.Function))
+	fmt.Println("len(mapping):", len(p.Mapping))
+	fmt.Println("len(locs):", len(p.Location))
+	fmt.Println("len(sample):", len(p.Sample))
+}
+
 func toBuffer(t *testing.T, p *googlev1.Profile) *bytes.Buffer {
 	t.Helper()
 	buf := bytes.NewBuffer(nil)
@@ -1066,3 +1129,176 @@ func toBuffer(t *testing.T, p *googlev1.Profile) *bytes.Buffer {
 	require.NoError(t, err)
 	return buf
 }
+
+func GroupSamples(samples []*profile.Sample, locs []*profile.Location) []*profile.Sample {
+	roots := map[uint64]int64{}
+	total := int64(0)
+	empty := 0
+	for _, sample := range samples {
+		if len(sample.Location) == 0 {
+			empty++
+			continue
+		}
+		total += sample.Value[0]
+		if len(sample.Location) != 0 {
+			roots[sample.Location[0].ID] += sample.Value[0]
+		}
+	}
+	// threshold := int64(float64(total) * 0.0001)
+	below := 0
+	fmt.Println("roots:", len(roots))
+	values := make([]int64, 0, len(roots))
+	for _, v := range roots {
+		values = append(values, v)
+	}
+	sort.Slice(values, func(i, j int) bool {
+		return values[i] < values[j]
+	})
+
+	high := values[len(values)-1000]
+	q3 := values[len(values)*3/4]
+	q1 := values[len(values)/4]
+	iqr := q3 - q1
+
+	threshold := int64(3 * float64(iqr))
+	th := high - threshold
+	if th < 0 {
+		th = -th
+	}
+	for k, v := range roots {
+		if v <= high {
+			below++
+			delete(roots, k)
+		}
+	}
+	fmt.Println("empty:", empty)
+	fmt.Println("totalValue:", total)
+	fmt.Println("thresholdValue:", threshold)
+	fmt.Println("removed:", len(roots))
+
+	for _, sample := range samples {
+		if len(sample.Location) != 0 {
+			if _, ok := roots[sample.Location[0].ID]; !ok {
+				sample.Value[0] = 0
+			}
+		}
+	}
+
+	return samples
+}
+
+// func GroupSamples(samples []*profile.Sample, similarity float64, depth int, threshold int64) []*profile.Sample {
+// 	// Group samples by stack trace, combining samples with similar stack traces.
+// 	groups := make(map[string]struct {
+// 		Value    int64
+// 		Location []*profile.Location
+// 	})
+// 	for _, sample := range samples {
+// 		stackTrace := sample.Location
+// 		stackTraceStr := fmt.Sprintf("%v", stackTrace)
+// 		found := false
+// 		for key := range groups {
+// 			if similarityScore(stackTraceStr, key) >= similarity {
+// 				groups[key] += sample.Value[0]
+// 				found = true
+// 				break
+// 			}
+// 		}
+// 		if !found {
+// 			groups[stackTraceStr] = sample.Value[0]
+// 		}
+// 	}
+
+// 	// Split each stack trace into a list of frames up to the specified depth.
+// 	frameMap := make(map[string][][]uintptr)
+// 	for key := range groups {
+// 		stackTraceStr := key
+// 		stackTrace, err := profile.Parse(stackTraceStr)
+// 		if err != nil {
+// 			continue
+// 		}
+// 		frames := make([][]uintptr, 0)
+// 		for i := 0; i < depth && i < len(stackTrace.Frame); i++ {
+// 			frames = append(frames, stackTrace.Frame[:i+1])
+// 		}
+// 		frameMap[stackTraceStr] = frames
+// 	}
+
+// 	// Combine groups with similar frames and values below the threshold.
+// 	combined := make(map[string]int64)
+// 	for key1, value1 := range groups {
+// 		if value1 >= threshold {
+// 			continue
+// 		}
+// 		for key2, value2 := range groups {
+// 			if key1 == key2 {
+// 				continue
+// 			}
+// 			frames1 := frameMap[key1]
+// 			frames2 := frameMap[key2]
+// 			if len(frames1) > 0 && len(frames2) > 0 && reflect.DeepEqual(frames1[0], frames2[0]) && value2 < threshold {
+// 				combinedKey := "other"
+// 				for i := 1; i < len(frames1); i++ {
+// 					combinedKey = fmt.Sprintf("%v;%v", frames1[i], combinedKey)
+// 				}
+// 				for i := 1; i < len(frames2); i++ {
+// 					combinedKey = fmt.Sprintf("%v;%v", frames2[i], combinedKey)
+// 				}
+// 				if _, ok := combined[combinedKey]; !ok {
+// 					combined[combinedKey] = value1 + value2
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	// Create the final list of samples.
+// 	result := make([]*profile.Sample, 0, len(combined))
+// 	for key, value := range combined {
+// 		stackTrace := make([]uint64, 0)
+// 		for _, frameStr := range strings.Split(key, ";") {
+// 			if frameStr == "other" {
+// 				stackTrace = append(stackTrace, 0)
+// 			} else {
+// 				frame := parseFrame(frameStr)
+// 				if frame != nil {
+// 					pc := uintptr(frame.PC)
+// 					stackTrace = append(stackTrace, uint64(pc))
+// 				}
+// 			}
+// 		}
+// 		result = append(result, &profile.Sample{
+// 			Value:    value,
+// 			Location: stackTrace,
+// 		})
+// 	}
+// 	return result
+// }
+
+// func similarityScore(st1, st2 stacktrace) float64 {
+// 	// Compute the Jaccard similarity between two stacktraces.
+// 	// This is the size of the intersection divided by the size of the union.
+// 	set1 := make(map[uintptr]bool)
+// 	for _, pc := range st1 {
+// 		set1[pc] = true
+// 	}
+// 	set2 := make(map[uintptr]bool)
+// 	for _, pc := range st2 {
+// 		set2[pc] = true
+// 	}
+// 	var intersection, union float64
+// 	for pc := range set1 {
+// 		if set2[pc] {
+// 			intersection++
+// 		}
+// 		union++
+// 	}
+// 	for pc := range set2 {
+// 		if !set1[pc] {
+// 			union++
+// 		}
+// 	}
+// 	if union == 0 {
+// 		return 0
+// 	}
+// 	return intersection / union
+// }
