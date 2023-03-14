@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/atomic"
 
+	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	pushv1 "github.com/grafana/phlare/api/gen/proto/go/push/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/ingester/clientpool"
@@ -202,6 +203,7 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 			d.metrics.receivedSamples.WithLabelValues(profName, tenantID).Observe(float64(len(p.Sample)))
 			totalPushUncompressedBytes += int64(p.SizeBytes())
 			p.Normalize()
+			d.metrics.receivedSamplesBytes.WithLabelValues(profName, tenantID).Observe(float64(sampleSizeBytes(p.Profile)))
 
 			// zip the data back into the buffer
 			bw := bytes.NewBuffer(raw.RawProfile[:0])
@@ -280,6 +282,19 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// sampleSizeBytes returns the size of samples in bytes.
+func sampleSizeBytes(p *googlev1.Profile) int64 {
+	var size int64
+	for _, s := range p.Sample {
+		size += int64(8 * len(s.Value))
+		for _, v := range s.Label {
+			size += int64(len(p.StringTable[v.Key]))
+			size += int64(len(p.StringTable[v.Str]))
+		}
+	}
+	return size
 }
 
 func (d *Distributor) sendProfiles(ctx context.Context, ingester ring.InstanceDesc, profileTrackers []*profileTracker, pushTracker *pushTracker) {

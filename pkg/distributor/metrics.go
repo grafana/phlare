@@ -8,6 +8,7 @@ type metrics struct {
 	receivedCompressedBytes   *prometheus.HistogramVec
 	receivedDecompressedBytes *prometheus.HistogramVec
 	receivedSamples           *prometheus.HistogramVec
+	receivedSamplesBytes      *prometheus.HistogramVec
 }
 
 func newMetrics(reg prometheus.Registerer) *metrics {
@@ -36,6 +37,15 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 				Name:      "distributor_received_samples",
 				Help:      "The number of samples per profile name received by the distributor.",
 				Buckets:   prometheus.ExponentialBucketsRange(100, 100000, 30),
+			},
+			[]string{"type", "tenant"},
+		),
+		receivedSamplesBytes: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "phlare",
+				Name:      "distributor_received_samples_bytes",
+				Help:      "The number of bytes per profiles without symbols received by the distributor.",
+				Buckets:   prometheus.ExponentialBucketsRange(10*1024, 15*1024*1024, 30),
 			},
 			[]string{"type", "tenant"},
 		),
