@@ -157,8 +157,8 @@ func populateLabels(lset labels.Labels, cfg ScrapeConfig) (res, orig labels.Labe
 	return res, lset, nil
 }
 
-// targetsFromGroup builds targets based on the given TargetGroup and config.
-func (tg *TargetGroup) targetsFromGroup(group *targetgroup.Group) ([]*Target, []*Target, error) {
+// TargetsFromGroup builds targets based on the given TargetGroup and config.
+func (tg *TargetGroup) TargetsFromGroup(group *targetgroup.Group) ([]*Target, []*Target, error) {
 	var (
 		targets        = make([]*Target, 0, len(group.Targets))
 		droppedTargets = make([]*Target, 0, len(group.Targets))
