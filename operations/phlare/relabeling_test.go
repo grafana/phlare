@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
@@ -39,6 +40,8 @@ func Test_Relabeling(t *testing.T) {
 
 	groups := []*agent.TargetGroup{}
 	for _, scrapeCfg := range cfg.ScrapeConfigs {
+		scrapeCfg.ScrapeInterval = model.Duration(15 * time.Second)
+		scrapeCfg.ScrapeTimeout = model.Duration(15 * time.Second)
 		groups = append(groups, agent.NewTargetGroup(context.Background(), "test", scrapeCfg, nil, "test", log.NewLogfmtLogger(os.Stdout)))
 	}
 
