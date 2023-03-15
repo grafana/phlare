@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/grafana/phlare/pkg/agent"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grafana/phlare/pkg/agent"
 )
 
 func Test_Relabeling(t *testing.T) {
