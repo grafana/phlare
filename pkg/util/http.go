@@ -15,7 +15,6 @@ import (
 	"github.com/felixge/httpsnoop"
 	"github.com/gorilla/mux"
 	"github.com/grafana/dskit/multierror"
-	"github.com/grafana/phlare/pkg/tenant"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,6 +25,8 @@ import (
 	"github.com/weaveworks/common/user"
 	"golang.org/x/net/http2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/grafana/phlare/pkg/tenant"
 )
 
 var defaultTransport http.RoundTripper = &http2.Transport{
