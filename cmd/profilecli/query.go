@@ -65,8 +65,35 @@ func parseRelativeTime(s string) (time.Duration, error) {
 	return time.Duration(d), nil
 }
 
+type phlareClient struct {
+	TenantID string
+	URL      string
+	client   *http.Client
+}
+
+func (c *phlareClient) httpClient() *http.Client {
+	if c.client == nil {
+		c.client = &http.Client{Transport: c}
+	}
+	return c.client
+}
+
+func (c *phlareClient) RoundTrip(req *http.Request) (*http.Response, error) {
+	if c.TenantID != "" {
+		req.Header.Set("X-Scope-OrgID", c.TenantID)
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func (c *phlareClient) queryClient() querierv1connect.QuerierServiceClient {
+	return querierv1connect.NewQuerierServiceClient(
+		c.httpClient(),
+		c.URL,
+	)
+}
+
 type queryParams struct {
-	URL         string
+	*phlareClient
 	From        string
 	To          string
 	ProfileType string
@@ -90,20 +117,24 @@ func (p *queryParams) parseFromTo() (from time.Time, to time.Time, err error) {
 	return from, to, nil
 }
 
-func (p *queryParams) client() querierv1connect.QuerierServiceClient {
-	return querierv1connect.NewQuerierServiceClient(
-		http.DefaultClient,
-		p.URL,
-	)
-}
-
 type flagger interface {
 	Flag(name, help string) *kingpin.FlagClause
 }
 
+func addPhlareClient(queryCmd flagger) *phlareClient {
+	client := &phlareClient{}
+
+	queryCmd.Flag("url", "URL of the profile store.").Default("http://localhost:4100").StringVar(&client.URL)
+	queryCmd.Flag("tenant-id", "The tenant ID to be used for the X-Scope-OrgID header.").Default("").StringVar(&client.TenantID)
+	return client
+}
+
 func addQueryParams(queryCmd flagger) *queryParams {
-	params := &queryParams{}
-	queryCmd.Flag("url", "URL of the profile store.").Default("http://localhost:4100").StringVar(&params.URL)
+	var (
+		params = &queryParams{}
+	)
+	params.phlareClient = addPhlareClient(queryCmd)
+
 	queryCmd.Flag("from", "Beginning of the query.").Default("now-1h").StringVar(&params.From)
 	queryCmd.Flag("to", "End of the query.").Default("now").StringVar(&params.To)
 	queryCmd.Flag("profile-type", "Profile type to query.").Default("process_cpu:cpu:nanoseconds:cpu:nanoseconds").StringVar(&params.ProfileType)
@@ -119,7 +150,7 @@ func queryMerge(ctx context.Context, params *queryParams, outputFlag string) (er
 
 	level.Info(logger).Log("msg", "query aggregated profile from profile store", "url", params.URL, "from", from, "to", to, "query", params.Query, "type", params.ProfileType)
 
-	qc := params.client()
+	qc := params.phlareClient.queryClient()
 
 	resp, err := qc.SelectMergeProfile(ctx, connect.NewRequest(&querierv1.SelectMergeProfileRequest{
 		ProfileTypeID: params.ProfileType,
