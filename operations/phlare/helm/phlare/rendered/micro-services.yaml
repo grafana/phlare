@@ -524,6 +524,7 @@ data:
           mutex:
             enabled: false
           process_cpu:
+            delta: true
             enabled: true
       relabel_configs:
       - action: keep
@@ -586,6 +587,7 @@ data:
           mutex:
             enabled: false
           process_cpu:
+            delta: true
             enabled: true
       relabel_configs:
       - action: keep
@@ -1487,9 +1489,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 4dbd1966a4ec7e87542764d4e1a2dd21c203b51105625947c406f20f19624f36
+        checksum/config: 1115b23a6b64ac92648f9e4bc43a571f388662fa077280488b506475ab51d69d
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare
@@ -1573,9 +1578,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 4dbd1966a4ec7e87542764d4e1a2dd21c203b51105625947c406f20f19624f36
+        checksum/config: 1115b23a6b64ac92648f9e4bc43a571f388662fa077280488b506475ab51d69d
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare
@@ -1658,9 +1666,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 4dbd1966a4ec7e87542764d4e1a2dd21c203b51105625947c406f20f19624f36
+        checksum/config: 1115b23a6b64ac92648f9e4bc43a571f388662fa077280488b506475ab51d69d
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare
@@ -1743,9 +1754,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 4dbd1966a4ec7e87542764d4e1a2dd21c203b51105625947c406f20f19624f36
+        checksum/config: 1115b23a6b64ac92648f9e4bc43a571f388662fa077280488b506475ab51d69d
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare
@@ -1828,9 +1842,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 4dbd1966a4ec7e87542764d4e1a2dd21c203b51105625947c406f20f19624f36
+        checksum/config: 1115b23a6b64ac92648f9e4bc43a571f388662fa077280488b506475ab51d69d
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare
@@ -2010,9 +2027,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 4dbd1966a4ec7e87542764d4e1a2dd21c203b51105625947c406f20f19624f36
+        checksum/config: 1115b23a6b64ac92648f9e4bc43a571f388662fa077280488b506475ab51d69d
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare

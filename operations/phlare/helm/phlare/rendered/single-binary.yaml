@@ -183,6 +183,7 @@ data:
           mutex:
             enabled: false
           process_cpu:
+            delta: true
             enabled: true
       relabel_configs:
       - action: keep
@@ -245,6 +246,7 @@ data:
           mutex:
             enabled: false
           process_cpu:
+            delta: true
             enabled: true
       relabel_configs:
       - action: keep
@@ -827,9 +829,12 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 7ef2475c087f3b2672ccc3e8d4b21660c2e576522f995059b25731a69d1261f1
+        checksum/config: a781867cc5e9bddb8a630ac1d270dfc07fd37bfa5f566f550419e23902522266
+        profiles.grafana.com/cpu.port_name: http2
         profiles.grafana.com/cpu.scrape: "true"
+        profiles.grafana.com/goroutine.port_name: http2
         profiles.grafana.com/goroutine.scrape: "true"
+        profiles.grafana.com/memory.port_name: http2
         profiles.grafana.com/memory.scrape: "true"
       labels:
         app.kubernetes.io/name: phlare

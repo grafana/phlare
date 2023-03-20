@@ -38,8 +38,11 @@
 | phlare.persistence.annotations | object | `{}` |  |
 | phlare.persistence.enabled | bool | `false` |  |
 | phlare.persistence.size | string | `"10Gi"` |  |
+| phlare.podAnnotations."profiles.grafana.com/cpu.port_name" | string | `"http2"` |  |
 | phlare.podAnnotations."profiles.grafana.com/cpu.scrape" | string | `"true"` |  |
+| phlare.podAnnotations."profiles.grafana.com/goroutine.port_name" | string | `"http2"` |  |
 | phlare.podAnnotations."profiles.grafana.com/goroutine.scrape" | string | `"true"` |  |
+| phlare.podAnnotations."profiles.grafana.com/memory.port_name" | string | `"http2"` |  |
 | phlare.podAnnotations."profiles.grafana.com/memory.scrape" | string | `"true"` |  |
 | phlare.podSecurityContext.fsGroup | int | `10001` |  |
 | phlare.podSecurityContext.runAsNonRoot | bool | `true` |  |

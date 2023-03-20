@@ -40,8 +40,11 @@ phlare:
   podAnnotations:
     # Scrapes itself see https://grafana.com/docs/phlare/latest/operators-guide/deploy-kubernetes/#optional-scrape-your-own-workloads-profiles
     profiles.grafana.com/memory.scrape: "true"
+    profiles.grafana.com/memory.port_name: http2
     profiles.grafana.com/cpu.scrape: "true"
+    profiles.grafana.com/cpu.port_name: http2
     profiles.grafana.com/goroutine.scrape: "true"
+    profiles.grafana.com/goroutine.port_name: http2
     # profiles.grafana.com/block.scrape: "true"
     # profiles.grafana.com/mutex.scrape: "true"
 
@@ -286,6 +289,7 @@ phlare:
               enabled: false
             process_cpu:
               enabled: true
+              delta: true
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_annotation_profiles_grafana_com_cpu_scrape]
             action: keep
@@ -338,6 +342,7 @@ phlare:
               enabled: false
             process_cpu:
               enabled: true
+              delta: true
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_annotation_profiles_grafana_com_cpu_scrape]
             action: keep
