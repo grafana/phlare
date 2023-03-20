@@ -245,7 +245,6 @@ func BenchmarkFlush(b *testing.B) {
 			require.NoError(b, store.cutRowGroup())
 		}
 		b.StartTimer()
-		// flush profiles and ensure the correct number of files are created
 		_, _, err := store.Flush(context.Background())
 		require.NoError(b, err)
 		b.StopTimer()
