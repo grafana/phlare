@@ -151,7 +151,7 @@ func populateLabels(lset labels.Labels, cfg ScrapeConfig) (res, orig labels.Labe
 	}
 
 	if timeoutDuration <= intervalDuration {
-		return nil, nil, fmt.Errorf("scrape timeout must be larger or equal to interval for (%q <= %q)", timeout, interval)
+		return nil, nil, fmt.Errorf("scrape timeout must be larger than scrape interval for (%q <= %q)", timeout, interval)
 	}
 
 	// Meta labels are deleted after relabelling. Other internal labels propagate to
