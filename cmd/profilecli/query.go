@@ -19,6 +19,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/version"
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
@@ -30,6 +31,8 @@ const (
 	outputRaw     = "raw"
 	outputPprof   = "pprof="
 )
+
+var userAgentHeader = fmt.Sprintf("phlare/%s", version.Version)
 
 func parseTime(s string) (time.Time, error) {
 	if s == "" {
@@ -71,18 +74,27 @@ type phlareClient struct {
 	client   *http.Client
 }
 
-func (c *phlareClient) httpClient() *http.Client {
-	if c.client == nil {
-		c.client = &http.Client{Transport: c}
-	}
-	return c.client
+type authRoundTripper struct {
+	tenantID string
+	next     http.RoundTripper
 }
 
-func (c *phlareClient) RoundTrip(req *http.Request) (*http.Response, error) {
-	if c.TenantID != "" {
-		req.Header.Set("X-Scope-OrgID", c.TenantID)
+func (a *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if a.tenantID != "" {
+		req.Header.Set("X-Scope-OrgID", a.tenantID)
 	}
-	return http.DefaultTransport.RoundTrip(req)
+	req.Header.Set("User-Agent", userAgentHeader)
+	return a.next.RoundTrip(req)
+}
+
+func (c *phlareClient) httpClient() *http.Client {
+	if c.client == nil {
+		c.client = &http.Client{Transport: &authRoundTripper{
+			tenantID: c.TenantID,
+			next:     http.DefaultTransport,
+		}}
+	}
+	return c.client
 }
 
 func (c *phlareClient) queryClient() querierv1connect.QuerierServiceClient {
