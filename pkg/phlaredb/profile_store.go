@@ -275,8 +275,13 @@ func (s *profileStore) writeRowGroups(path string, rowGroups []parquet.RowGroup)
 		if err != nil {
 			return 0, 0, err
 		}
+
 		n += uint64(nInt64)
 		numRowGroups += 1
+
+		if err := s.writer.Flush(); err != nil {
+			return 0, 0, err
+		}
 	}
 
 	if err := s.writer.Close(); err != nil {
