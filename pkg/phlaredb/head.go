@@ -350,6 +350,8 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	var profileIngested bool
 	for idxType := range samplesPerType {
 		samples := samplesPerType[idxType]
+		// Sort samples per stacktraceID and aggregate duplicate stacktraceIDs into
+		// a single value to make sure we won't have any duplicates, as this is not recognized as part of the delta calculation.
 		sort.Slice(samples, func(i, j int) bool {
 			return samples[i].StacktraceID > samples[j].StacktraceID
 		})
@@ -360,6 +362,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 			}
 			if i < len(p.Sample)-1 && s.StacktraceID == samples[i+1].StacktraceID {
 				samples[i+1].Value += s.Value
+				// TODO: Currently we're not aggregating labels, and we should probably decide what to do with them in this case.
 				return true
 			}
 			return false
