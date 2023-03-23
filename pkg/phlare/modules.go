@@ -379,7 +379,6 @@ func (f *Phlare) initServer() (services.Service, error) {
 	f.reg.MustRegister(collectors.NewGoCollector(
 		collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll),
 	))
-	prometheus.MustRegister()
 	DisableSignalHandling(&f.Cfg.Server)
 	f.Cfg.Server.Registerer = prometheus.WrapRegistererWithPrefix("phlare_", f.reg)
 	// Not all default middleware works with http2 so we'll add then manually.
