@@ -161,6 +161,69 @@ client:
 # The querier block configures the querier.
 [querier: <querier>]
 
+# The query_frontend block configures the query-frontend.
+[frontend: <query_frontend>]
+
+# The frontend_worker block configures the frontend-worker.
+[frontend_worker: <frontend_worker>]
+
+limits:
+  # Per-tenant ingestion rate limit in sample size per second. Units in MB.
+  # CLI flag: -distributor.ingestion-rate-limit-mb
+  [ingestion_rate_mb: <float> | default = 4]
+
+  # Per-tenant allowed ingestion burst size (in sample size). Units in MB. The
+  # burst size refers to the per-distributor local rate limiter, and should be
+  # set at least to the maximum profile size expected in a single push request.
+  # CLI flag: -distributor.ingestion-burst-size-mb
+  [ingestion_burst_size_mb: <float> | default = 2]
+
+  # Maximum length accepted for label names.
+  # CLI flag: -validation.max-length-label-name
+  [max_label_name_length: <int> | default = 1024]
+
+  # Maximum length accepted for label value. This setting also applies to the
+  # metric name.
+  # CLI flag: -validation.max-length-label-value
+  [max_label_value_length: <int> | default = 2048]
+
+  # Maximum number of label names per series.
+  # CLI flag: -validation.max-label-names-per-series
+  [max_label_names_per_series: <int> | default = 30]
+
+  # Maximum number of active series of profiles per tenant, per ingester. 0 to
+  # disable.
+  # CLI flag: -ingester.max-local-series-per-tenant
+  [max_local_series_per_tenant: <int> | default = 0]
+
+  # Maximum number of active series of profiles per tenant, across the cluster.
+  # 0 to disable. When the global limit is enabled, each ingester is configured
+  # with a dynamic local limit based on the replication factor and the current
+  # number of healthy ingesters, and is kept updated whenever the number of
+  # ingesters change.
+  # CLI flag: -ingester.max-global-series-per-tenant
+  [max_global_series_per_tenant: <int> | default = 5000]
+
+  # Limit how far back in profiling data can be queried, up until lookback
+  # duration ago. This limit is enforced in the query frontend. If the requested
+  # time range is outside the allowed range, the request will not fail, but will
+  # be modified to only query data within the allowed time range. The default
+  # value of 0 does not set a limit.
+  # CLI flag: -querier.max-query-lookback
+  [max_query_lookback: <duration> | default = 0s]
+
+  # The limit to length of queries. 0 to disable.
+  # CLI flag: -querier.max-query-length
+  [max_query_length: <duration> | default = 30d1h]
+
+  # Maximum number of queries that will be scheduled in parallel by the
+  # frontend.
+  # CLI flag: -querier.max-query-parallelism
+  [max_query_parallelism: <int> | default = 32]
+
+# The query_scheduler block configures the query-scheduler.
+[query_scheduler: <query_scheduler>]
+
 # The ingester block configures the ingester.
 [ingester: <ingester>]
 
@@ -176,10 +239,24 @@ phlaredb:
   # CLI flag: -phlaredb.max-block-duration
   [max_block_duration: <duration> | default = 3h]
 
+  # How big should a single row group be uncompressed
+  # CLI flag: -phlaredb.row-group-target-size
+  [row_group_target_size: <int> | default = 1342177280]
+
 tracing:
   # Set to false to disable tracing.
   # CLI flag: -tracing.enabled
   [enabled: <boolean> | default = true]
+
+runtime_config:
+  # How often to check runtime config files.
+  # CLI flag: -runtime-config.reload-period
+  [period: <duration> | default = 10s]
+
+  # Comma separated list of yaml files with the configuration that can be
+  # updated at runtime. Runtime config files will be merged from left to right.
+  # CLI flag: -runtime-config.file
+  [file: <string> | default = ""]
 
 storage:
   # Backend storage to use. Supported backends are: s3, gcs, azure, swift,
@@ -763,6 +840,198 @@ pool_config:
 [extra_query_delay: <duration> | default = 0s]
 ```
 
+### query_frontend
+
+The `query_frontend` block configures the query-frontend.
+
+```yaml
+# Number of concurrent workers forwarding queries to single query-scheduler.
+# CLI flag: -query-frontend.scheduler-worker-concurrency
+[scheduler_worker_concurrency: <int> | default = 5]
+
+# Configures the gRPC client used to communicate between the query-frontends and
+# the query-schedulers.
+# The CLI flags prefix for this block configuration is:
+# query-frontend.grpc-client-config
+[grpc_client_config: <grpc_client>]
+
+# List of network interface names to look up when finding the instance IP
+# address. This address is sent to query-scheduler and querier, which uses it to
+# send the query response back to query-frontend.
+# CLI flag: -query-frontend.instance-interface-names
+[instance_interface_names: <list of strings> | default = [<private network interfaces>]]
+
+# IP address to advertise to the querier (via scheduler) (default is
+# auto-detected from network interfaces).
+# CLI flag: -query-frontend.instance-addr
+[address: <string> | default = ""]
+```
+
+### frontend_worker
+
+The `frontend_worker` block configures the frontend-worker.
+
+```yaml
+# Querier ID, sent to the query-frontend to identify requests from the same
+# querier. Defaults to hostname.
+# CLI flag: -querier.id
+[id: <string> | default = ""]
+
+# Configures the gRPC client used to communicate between the queriers and the
+# query-frontends / query-schedulers.
+# The CLI flags prefix for this block configuration is: querier.frontend-client
+[grpc_client_config: <grpc_client>]
+```
+
+### query_scheduler
+
+The `query_scheduler` block configures the query-scheduler.
+
+```yaml
+# Maximum number of outstanding requests per tenant per query-scheduler.
+# In-flight requests above this limit will fail with HTTP response status code
+# 429.
+# CLI flag: -query-scheduler.max-outstanding-requests-per-tenant
+[max_outstanding_requests_per_tenant: <int> | default = 100]
+
+# If a querier disconnects without sending notification about graceful shutdown,
+# the query-scheduler will keep the querier in the tenant's shard until the
+# forget delay has passed. This feature is useful to reduce the blast radius
+# when shuffle-sharding is enabled.
+# CLI flag: -query-scheduler.querier-forget-delay
+[querier_forget_delay: <duration> | default = 0s]
+
+# This configures the gRPC client used to report errors back to the
+# query-frontend.
+# The CLI flags prefix for this block configuration is:
+# query-scheduler.grpc-client-config
+[grpc_client_config: <grpc_client>]
+
+# The maximum number of query-scheduler instances to use, regardless how many
+# replicas are running. This option can be set only when
+# -query-scheduler.service-discovery-mode is set to 'ring'. 0 to use all
+# available query-scheduler instances.
+# CLI flag: -query-scheduler.max-used-instances
+[max_used_instances: <int> | default = 0]
+```
+
+### grpc_client
+
+The `grpc_client` block configures the gRPC client used to communicate between two Phlare components. The supported CLI flags `<prefix>` used to reference this configuration block are:
+
+- `querier.frontend-client`
+- `query-frontend.grpc-client-config`
+- `query-scheduler.grpc-client-config`
+
+&nbsp;
+
+```yaml
+# gRPC client max receive message size (bytes).
+# CLI flag: -<prefix>.grpc-max-recv-msg-size
+[max_recv_msg_size: <int> | default = 104857600]
+
+# gRPC client max send message size (bytes).
+# CLI flag: -<prefix>.grpc-max-send-msg-size
+[max_send_msg_size: <int> | default = 104857600]
+
+# Use compression when sending messages. Supported values are: 'gzip', 'snappy'
+# and '' (disable compression)
+# CLI flag: -<prefix>.grpc-compression
+[grpc_compression: <string> | default = ""]
+
+# Rate limit for gRPC client; 0 means disabled.
+# CLI flag: -<prefix>.grpc-client-rate-limit
+[rate_limit: <float> | default = 0]
+
+# Rate limit burst for gRPC client.
+# CLI flag: -<prefix>.grpc-client-rate-limit-burst
+[rate_limit_burst: <int> | default = 0]
+
+# Enable backoff and retry when we hit ratelimits.
+# CLI flag: -<prefix>.backoff-on-ratelimits
+[backoff_on_ratelimits: <boolean> | default = false]
+
+backoff_config:
+  # Minimum delay when backing off.
+  # CLI flag: -<prefix>.backoff-min-period
+  [min_period: <duration> | default = 100ms]
+
+  # Maximum delay when backing off.
+  # CLI flag: -<prefix>.backoff-max-period
+  [max_period: <duration> | default = 10s]
+
+  # Number of times to backoff and retry before failing.
+  # CLI flag: -<prefix>.backoff-retries
+  [max_retries: <int> | default = 10]
+
+# Enable TLS in the GRPC client. This flag needs to be enabled when any other
+# TLS flag is set. If set to false, insecure connection to gRPC server will be
+# used.
+# CLI flag: -<prefix>.tls-enabled
+[tls_enabled: <boolean> | default = false]
+
+# Path to the client certificate file, which will be used for authenticating
+# with the server. Also requires the key path to be configured.
+# CLI flag: -<prefix>.tls-cert-path
+[tls_cert_path: <string> | default = ""]
+
+# Path to the key file for the client certificate. Also requires the client
+# certificate to be configured.
+# CLI flag: -<prefix>.tls-key-path
+[tls_key_path: <string> | default = ""]
+
+# Path to the CA certificates file to validate server certificate against. If
+# not set, the host's root CA certificates are used.
+# CLI flag: -<prefix>.tls-ca-path
+[tls_ca_path: <string> | default = ""]
+
+# Override the expected name on the server certificate.
+# CLI flag: -<prefix>.tls-server-name
+[tls_server_name: <string> | default = ""]
+
+# Skip validating server certificate.
+# CLI flag: -<prefix>.tls-insecure-skip-verify
+[tls_insecure_skip_verify: <boolean> | default = false]
+
+# Override the default cipher suite list (separated by commas). Allowed values:
+# 
+# Secure Ciphers:
+# - TLS_RSA_WITH_AES_128_CBC_SHA
+# - TLS_RSA_WITH_AES_256_CBC_SHA
+# - TLS_RSA_WITH_AES_128_GCM_SHA256
+# - TLS_RSA_WITH_AES_256_GCM_SHA384
+# - TLS_AES_128_GCM_SHA256
+# - TLS_AES_256_GCM_SHA384
+# - TLS_CHACHA20_POLY1305_SHA256
+# - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+# - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+# - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+# - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+# - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+# - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+# - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+# - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+# 
+# Insecure Ciphers:
+# - TLS_RSA_WITH_RC4_128_SHA
+# - TLS_RSA_WITH_3DES_EDE_CBC_SHA
+# - TLS_RSA_WITH_AES_128_CBC_SHA256
+# - TLS_ECDHE_ECDSA_WITH_RC4_128_SHA
+# - TLS_ECDHE_RSA_WITH_RC4_128_SHA
+# - TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA
+# - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+# - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+# CLI flag: -<prefix>.tls-cipher-suites
+[tls_cipher_suites: <string> | default = ""]
+
+# Override the default minimum TLS version. Allowed values: VersionTLS10,
+# VersionTLS11, VersionTLS12, VersionTLS13
+# CLI flag: -<prefix>.tls-min-version
+[tls_min_version: <string> | default = ""]
+```
+
 ### memberlist
 
 The `memberlist` block configures the Gossip memberlist.
@@ -1290,6 +1559,7 @@ You can refer to the Prometheus documentation the following block:
 - [relabel_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config)
 - [static_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#static_config)
 - [kubernetes_sd_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#kubernetes_sd_config)
+- [http_sd_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config)
 
 #### pprof_config
 

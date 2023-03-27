@@ -25,7 +25,6 @@ IMAGE_TAG ?= $(shell ./tools/image-tag)
 GIT_REVISION := $(shell git rev-parse --short HEAD)
 GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 GIT_LAST_COMMIT_DATE := $(shell git log -1 --date=iso-strict --format=%cd)
-GORELEASER_ENV := GIT_LAST_COMMIT_DATE=$(GIT_LAST_COMMIT_DATE)
 
 # Build flags
 VPREFIX := github.com/grafana/phlare/pkg/util/build
@@ -48,13 +47,16 @@ test: go/test ## Run unit tests
 .PHONY: generate
 generate: $(BIN)/buf $(BIN)/protoc-gen-go $(BIN)/protoc-gen-go-vtproto $(BIN)/protoc-gen-openapiv2 $(BIN)/protoc-gen-grpc-gateway $(BIN)/protoc-gen-connect-go $(BIN)/protoc-gen-connect-go-mux $(BIN)/gomodifytags ## Regenerate protobuf
 	rm -Rf api/openapiv2/gen/ api/gen
-	PATH=$(BIN) $(BIN)/buf generate
+	find pkg/ \( -name \*.pb.go -o -name \*.connect\*.go \) -delete
+	cd api/ && PATH=$(BIN) $(BIN)/buf generate
+	cd pkg && PATH=$(BIN) $(BIN)/buf generate
 	PATH=$(BIN):$(PATH) ./tools/add-parquet-tags.sh
 	go run ./tools/doc-generator/ ./docs/sources/operators-guide/configure/reference-configuration-parameters/index.template > docs/sources/operators-guide/configure/reference-configuration-parameters/index.md
 
 .PHONY: buf/lint
 buf/lint: $(BIN)/buf
-	$(BIN)/buf lint || true # TODO: Fix linting problems and remove the always true
+	cd api/ && $(BIN)/buf lint || true # TODO: Fix linting problems and remove the always true
+	cd pkg && $(BIN)/buf lint || true # TODO: Fix linting problems and remove the always true
 
 .PHONY: go/test
 go/test: $(BIN)/gotestsum
@@ -73,27 +75,27 @@ release/prereq: $(BIN)/goreleaser ## Ensure release pre requesites are met
 
 .PHONY: release
 release: release/prereq ## Create a release
-	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser release -p=$(shell nproc) --rm-dist
 
 .PHONY: release/prepare
 release/prepare: release/prereq ## Prepare a release
-	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser release -p=$(shell nproc) --rm-dist --snapshot
 
 .PHONY: release/build/all
 release/build/all: release/prereq ## Build all release binaries
-	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser build -p=$(shell nproc) --rm-dist --snapshot
 
 .PHONY: release/build
 release/build: release/prereq ## Build current platform release binaries
-	$(GORELEASER_ENV) \
 	$(BIN)/goreleaser build -p=$(shell nproc) --rm-dist --snapshot --single-target
 
 .PHONY: go/deps
 go/deps:
 	$(GO) mod tidy
+
+.PHONY: go/bin-debug
+go/bin-debug:
+	$(MAKE) go/bin 'GO_FLAGS=-ldflags "-extldflags \"-static\" $(GO_LDFLAGS)" -tags netgo'
 
 .PHONY: go/bin
 go/bin:
@@ -120,7 +122,8 @@ fmt: $(BIN)/golangci-lint $(BIN)/buf $(BIN)/tk ## Automatically fix some lint er
 	git ls-files '*.go' | grep -v 'vendor/' | xargs gofmt -s -w
 	# TODO: Reenable once golangci-lint support go 1.18 properly
 	# $(BIN)/golangci-lint run --fix
-	$(BIN)/buf format -w .
+	cd api/ && $(BIN)/buf format -w .
+	cd pkg && $(BIN)/buf format -w .
 	$(BIN)/tk fmt ./operations/phlare/jsonnet/ tools/monitoring/
 
 .PHONY: check/unstaged-changes
@@ -133,7 +136,7 @@ check/go/mod: go/mod
 
 
 define docker_buildx
-	docker buildx build $(1) --platform $(IMAGE_PLATFORM) $(BUILDX_ARGS) --build-arg=revision=$(GIT_REVISION) -t $(IMAGE_PREFIX)$(shell basename $(@D)) -t $(IMAGE_PREFIX)$(shell basename $(@D)):$(IMAGE_TAG) -f cmd/$(shell basename $(@D))/Dockerfile .
+	docker buildx build $(1) --platform $(IMAGE_PLATFORM) $(BUILDX_ARGS) --build-arg=revision=$(GIT_REVISION) -t $(IMAGE_PREFIX)$(shell basename $(@D)) -t $(IMAGE_PREFIX)$(shell basename $(@D)):$(IMAGE_TAG) -f cmd/$(shell basename $(@D))/$(2)Dockerfile .
 endef
 
 define deploy
@@ -143,8 +146,16 @@ define deploy
 	kubectl get pods
 	$(BIN)/helm upgrade --install $(1) ./operations/phlare/helm/phlare $(2) \
 		--set phlare.image.tag=$(IMAGE_TAG) --set phlare.image.repository=$(IMAGE_PREFIX)phlare --set phlare.service.port_name=http-metrics \
+		--set phlare.podAnnotations."profiles\.grafana\.com\/memory\.port_name"=http-metrics \
+		--set phlare.podAnnotations."profiles\.grafana\.com\/cpu\.port_name"=http-metrics \
+		--set phlare.podAnnotations."profiles\.grafana\.com\/goroutine\.port_name"=http-metrics \
 		--set phlare.components.querier.resources=null --set phlare.components.distributor.resources=null --set phlare.components.ingester.resources=null
 endef
+
+.PHONY: docker-image/phlare/build-debug
+docker-image/phlare/build-debug: GOOS=linux GOARCH=amd64
+docker-image/phlare/build-debug: go/bin-debug $(BIN)/dlv
+	$(call docker_buildx,--load,debug.)
 
 .PHONY: docker-image/phlare/build
 docker-image/phlare/build: GOOS=linux GOARCH=amd64
@@ -185,13 +196,19 @@ clean: ## Delete intermediate build artifacts
 	@# -X only removes untracked files, -d recurses into directories, -f actually removes files/dirs
 	git clean -Xdf
 
+.PHONY: reference-help
+reference-help: ## Generates the reference help documentation.
+reference-help: build
+	@(./phlare -h || true) > cmd/phlare/help.txt.tmpl
+	@(./phlare -help-all || true) > cmd/phlare/help-all.txt.tmpl
+
 $(BIN)/buf: Makefile
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) $(GO) install github.com/bufbuild/buf/cmd/buf@v1.5.0
 
 $(BIN)/golangci-lint: Makefile
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.48.0
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
 
 $(BIN)/protoc-gen-go: Makefile go.mod
 	@mkdir -p $(@D)
@@ -227,7 +244,7 @@ $(BIN)/kind: Makefile go.mod
 
 $(BIN)/tk: Makefile go.mod $(BIN)/jb
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/grafana/tanka/cmd/tk@v0.22.1
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/grafana/tanka/cmd/tk@v0.24.0
 
 $(BIN)/jb: Makefile go.mod
 	@mkdir -p $(@D)
@@ -237,9 +254,9 @@ $(BIN)/helm: Makefile go.mod
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) $(GO) install helm.sh/helm/v3/cmd/helm@v3.8.0
 
-$(BIN)/kubeval: Makefile go.mod
+$(BIN)/kubeconform: Makefile go.mod
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/instrumenta/kubeval@v0.16.1
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/yannh/kubeconform/cmd/kubeconform@v0.5.0
 
 $(BIN)/mage: Makefile go.mod
 	@mkdir -p $(@D)
@@ -256,6 +273,10 @@ $(BIN)/goreleaser: Makefile go.mod
 $(BIN)/gotestsum: Makefile go.mod
 	@mkdir -p $(@D)
 	GOBIN=$(abspath $(@D)) $(GO) install gotest.tools/gotestsum@v1.9.0
+
+$(BIN)/dlv: Makefile go.mod
+	@mkdir -p $(@D)
+	GOBIN=$(abspath $(@D)) CGO_ENABLED=0 $(GO) install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@v1.20.1
 
 $(BIN)/trunk: Makefile
 	@mkdir -p $(@D)
@@ -284,16 +305,16 @@ trunk/fmt: $(BIN)/trunk
 	$(BIN)/trunk fmt
 
 .PHONY: helm/check
-helm/check: $(BIN)/kubeval $(BIN)/helm
+helm/check: $(BIN)/kubeconform $(BIN)/helm
 	$(BIN)/helm repo add --force-update minio https://charts.min.io/
 	$(BIN)/helm dependency build ./operations/phlare/helm/phlare/
 	mkdir -p ./operations/phlare/helm/phlare/rendered/
 	$(BIN)/helm template phlare-dev ./operations/phlare/helm/phlare/ \
 		| tee ./operations/phlare/helm/phlare/rendered/single-binary.yaml \
-		| $(BIN)/kubeval --strict
+		| $(BIN)/kubeconform --summary --strict --kubernetes-version 1.21.0
 	$(BIN)/helm template phlare-dev ./operations/phlare/helm/phlare/ --values operations/phlare/helm/phlare/values-micro-services.yaml \
 		| tee ./operations/phlare/helm/phlare/rendered/micro-services.yaml \
-		| $(BIN)/kubeval --strict
+		| $(BIN)/kubeconform --summary --strict --kubernetes-version 1.21.0
 	cat operations/phlare/helm/phlare/values-micro-services.yaml \
 		| go run ./tools/yaml-to-json \
 		> ./operations/phlare/jsonnet/values-micro-services.json
@@ -303,11 +324,11 @@ helm/check: $(BIN)/kubeval $(BIN)/helm
 
 .PHONY: deploy
 deploy: $(BIN)/kind $(BIN)/helm docker-image/phlare/build
-	$(call deploy,phlare-dev,)
+	$(call deploy,phlare-dev,--set=phlare.extraEnvVars.JAEGER_AGENT_HOST=jaeger.monitoring.svc.cluster.local.)
 
 .PHONY: deploy-micro-services
 deploy-micro-services: $(BIN)/kind $(BIN)/helm docker-image/phlare/build
-	$(call deploy,phlare-micro-services,--values=operations/phlare/helm/phlare/values-micro-services.yaml)
+	$(call deploy,phlare-micro-services,--values=operations/phlare/helm/phlare/values-micro-services.yaml --set=phlare.extraEnvVars.JAEGER_AGENT_HOST=jaeger.monitoring.svc.cluster.local.)
 
 .PHONY: deploy-monitoring
 deploy-monitoring: $(BIN)/tk $(BIN)/kind tools/monitoring/environments/default/spec.json
@@ -317,7 +338,7 @@ deploy-monitoring: $(BIN)/tk $(BIN)/kind tools/monitoring/environments/default/s
 .PHONY: tools/monitoring/environments/default/spec.json # This is a phony target for now as the cluster might be not already created.
 tools/monitoring/environments/default/spec.json: $(BIN)/tk $(BIN)/kind
 	$(BIN)/kind export kubeconfig --name $(KIND_CLUSTER) || $(BIN)/kind create cluster --name $(KIND_CLUSTER)
-	pushd tools/monitoring/ && rm -Rf vendor/ lib/ environments/default/spec.json  && PATH=$(BIN) $(BIN)/tk init -f
+	pushd tools/monitoring/ && rm -Rf vendor/ lib/ environments/default/spec.json  && PATH=$(BIN):$(PATH) $(BIN)/tk init -f
 	echo "import 'monitoring.libsonnet'" > tools/monitoring/environments/default/main.jsonnet
 	$(BIN)/tk env set tools/monitoring/environments/default --server=$(shell $(BIN)/kind get kubeconfig --name phlare-dev | grep server: | sed 's/server://g' | xargs) --namespace=monitoring
 

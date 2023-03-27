@@ -35,17 +35,43 @@
         "replicaCount": 3,
         "resources": {
           "limits": {
-            "memory": "12Gi"
+            "memory": "16Gi"
           },
           "requests": {
             "cpu": 1,
-            "memory": "6Gi"
+            "memory": "8Gi"
           }
         }
       },
       "querier": {
         "kind": "Deployment",
         "replicaCount": 3,
+        "resources": {
+          "limits": {
+            "memory": "1Gi"
+          },
+          "requests": {
+            "cpu": "100m",
+            "memory": "256Mi"
+          }
+        }
+      },
+      "query-frontend": {
+        "kind": "Deployment",
+        "replicaCount": 2,
+        "resources": {
+          "limits": {
+            "memory": "1Gi"
+          },
+          "requests": {
+            "cpu": "100m",
+            "memory": "256Mi"
+          }
+        }
+      },
+      "query-scheduler": {
+        "kind": "Deployment",
+        "replicaCount": 2,
         "resources": {
           "limits": {
             "memory": "1Gi"

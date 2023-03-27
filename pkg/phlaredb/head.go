@@ -36,6 +36,7 @@ import (
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	"github.com/grafana/phlare/pkg/slices"
 )
 
 func copySlice[T any](in []T) []T {
@@ -46,6 +47,7 @@ func copySlice[T any](in []T) []T {
 
 type idConversionTable map[int64]int64
 
+// nolint unused
 func (t idConversionTable) rewrite(idx *int64) {
 	pos := *idx
 	var ok bool
@@ -55,6 +57,7 @@ func (t idConversionTable) rewrite(idx *int64) {
 	}
 }
 
+// nolint unused
 func (t idConversionTable) rewriteUint64(idx *uint64) {
 	pos := *idx
 	v, ok := t[int64(pos)]
@@ -68,19 +71,25 @@ type Models interface {
 	*schemav1.Profile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
 }
 
+func emptyRewriter() *rewriter {
+	return &rewriter{
+		strings: []int64{0},
+	}
+}
+
 // rewriter contains slices to rewrite the per profile reference into per head references.
 type rewriter struct {
-	strings     stringConversionTable
-	functions   idConversionTable
-	mappings    idConversionTable
+	strings stringConversionTable
+	// nolint unused
+	functions idConversionTable
+	// nolint unused
+	mappings idConversionTable
+	// nolint unused
 	locations   idConversionTable
 	stacktraces idConversionTable
 }
 
-type Helper[M Models, K comparable] interface {
-	key(M) K
-	addToRewriter(*rewriter, idConversionTable)
-	rewrite(*rewriter, M) error
+type storeHelper[M Models] interface {
 	// some Models contain their own IDs within the struct, this allows to set them and keep track of the preexisting ID. It should return the oldID that is supposed to be rewritten.
 	setID(existingSliceID uint64, newID uint64, element M) uint64
 
@@ -89,13 +98,22 @@ type Helper[M Models, K comparable] interface {
 
 	// clone copies parts that are not optimally sized from protobuf parsing
 	clone(M) M
+
+	rewrite(*rewriter, M) error
+}
+
+type Helper[M Models, K comparable] interface {
+	storeHelper[M]
+	key(M) K
+	addToRewriter(*rewriter, idConversionTable)
 }
 
 type Table interface {
 	Name() string
-	Size() uint64
-	Init(path string, cfg *ParquetConfig) error
-	Flush() (numRows uint64, numRowGroups uint64, err error)
+	Size() uint64       // Size estimates the uncompressed byte size of the table in memory and on disk.
+	MemorySize() uint64 // MemorySize estimates the uncompressed byte size of the table in memory.
+	Init(path string, cfg *ParquetConfig, metrics *headMetrics) error
+	Flush(context.Context) (numRows uint64, numRowGroups uint64, err error)
 	Close() error
 }
 
@@ -115,18 +133,19 @@ type Head struct {
 	metaLock sync.RWMutex
 	meta     *block.Meta
 
-	index           *profilesIndex
 	parquetConfig   *ParquetConfig
 	strings         deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
 	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
 	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
 	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
 	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
-	profiles        deduplicatingSlice[*schemav1.Profile, noKey, *profilesHelper, *schemav1.ProfilePersister]
+	profiles        *profileStore
 	totalSamples    *atomic.Uint64
 	tables          []Table
 	delta           *deltaProfiles
 	pprofLabelCache labelCache
+
+	limiter TenantLimiter
 }
 
 const (
@@ -135,7 +154,9 @@ const (
 	defaultFolderMode = 0o755
 )
 
-func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
+func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Head, error) {
+	// todo if tenantLimiter is nil ....
+	parquetConfig := *defaultParquetConfig
 	h := &Head{
 		logger:  phlarecontext.Logger(phlarectx),
 		metrics: contextHeadMetrics(phlarectx),
@@ -148,19 +169,26 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 		flushCh:          make(chan struct{}),
 		flushForcedTimer: time.NewTimer(cfg.MaxBlockDuration),
 
-		parquetConfig: defaultParquetConfig,
+		parquetConfig: &parquetConfig,
+		limiter:       limiter,
 	}
 	h.headPath = filepath.Join(cfg.DataPath, pathHead, h.meta.ULID.String())
 	h.localPath = filepath.Join(cfg.DataPath, pathLocal, h.meta.ULID.String())
-	h.metrics.setHead(h)
 
 	if cfg.Parquet != nil {
 		h.parquetConfig = cfg.Parquet
 	}
 
-	if err := os.MkdirAll(h.headPath, defaultFolderMode); err != nil {
+	h.parquetConfig.MaxRowGroupBytes = cfg.RowGroupTargetSize
+
+	// ensure folder is writable
+	err := os.MkdirAll(h.headPath, defaultFolderMode)
+	if err != nil {
 		return nil, err
 	}
+
+	// create profile store
+	h.profiles = newProfileStore(phlarectx)
 
 	h.tables = []Table{
 		&h.strings,
@@ -168,19 +196,14 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 		&h.functions,
 		&h.locations,
 		&h.stacktraces,
-		&h.profiles,
+		h.profiles,
 	}
 	for _, t := range h.tables {
-		if err := t.Init(h.headPath, h.parquetConfig); err != nil {
+		if err := t.Init(h.headPath, h.parquetConfig, h.metrics); err != nil {
 			return nil, err
 		}
 	}
 
-	index, err := newProfileIndex(32, h.metrics)
-	if err != nil {
-		return nil, err
-	}
-	h.index = index
 	h.delta = newDeltaProfiles()
 
 	h.pprofLabelCache.init()
@@ -189,6 +212,16 @@ func NewHead(phlarectx context.Context, cfg Config) (*Head, error) {
 	go h.loop()
 
 	return h, nil
+}
+
+func (h *Head) MemorySize() uint64 {
+	var size uint64
+	// TODO: Estimate size of TSDB index
+	for _, t := range h.tables {
+		size += t.MemorySize()
+	}
+
+	return size
 }
 
 func (h *Head) Size() uint64 {
@@ -280,8 +313,15 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 }
 
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
-	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
+
+	for i, fp := range seriesFingerprints {
+		if err := h.limiter.AllowProfile(fp, labels[i], p.TimeNanos); err != nil {
+			return err
+		}
+	}
+
+	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 
 	// create a rewriter state
 	rewrites := &rewriter{}
@@ -309,10 +349,32 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 
 	var profileIngested bool
 	for idxType := range samplesPerType {
+		samples := samplesPerType[idxType]
+		// Sort samples per stacktraceID and aggregate duplicate stacktraceIDs into
+		// a single value to make sure we won't have any duplicates, as this is not recognized as part of the delta calculation.
+		sort.Slice(samples, func(i, j int) bool {
+			return samples[i].StacktraceID > samples[j].StacktraceID
+		})
+		total := len(samples)
+		samples = slices.RemoveInPlace(samples, func(s *schemav1.Sample, i int) bool {
+			if s.Value == 0 {
+				return true
+			}
+			if i < len(p.Sample)-1 && s.StacktraceID == samples[i+1].StacktraceID {
+				samples[i+1].Value += s.Value
+				// TODO: Currently we're not aggregating labels, and we should probably decide what to do with them in this case.
+				return true
+			}
+			return false
+		})
+		if total != len(samples) {
+			// copy samples if there are less than received to avoid retaining memory.
+			samples = copySlice(samples)
+		}
 		profile := &schemav1.Profile{
 			ID:                id,
 			SeriesFingerprint: seriesFingerprints[idxType],
-			Samples:           samplesPerType[idxType],
+			Samples:           samples,
 			DropFrames:        p.DropFrames,
 			KeepFrames:        p.KeepFrames,
 			TimeNanos:         p.TimeNanos,
@@ -324,16 +386,18 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		profile = h.delta.computeDelta(profile, labels[idxType])
 
 		if profile == nil {
+			level.Debug(h.logger).Log("msg", "profile is empty after delta computation", "metricName", metricName)
 			continue
 		}
 
-		if err := h.profiles.ingest(ctx, []*schemav1.Profile{profile}, rewrites); err != nil {
+		if err := h.profiles.ingest(ctx, []*schemav1.Profile{profile}, labels[idxType], metricName, rewrites); err != nil {
 			return err
 		}
 
-		h.index.Add(profile, labels[idxType], metricName)
-
 		profileIngested = true
+		h.totalSamples.Add(uint64(len(profile.Samples)))
+		h.metrics.sampleValuesIngested.WithLabelValues(metricName).Add(float64(len(profile.Samples)))
+		h.metrics.sampleValuesReceived.WithLabelValues(metricName).Add(float64(len(p.Sample)))
 	}
 
 	if !profileIngested {
@@ -349,11 +413,6 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		h.meta.MaxTime = v
 	}
 	h.metaLock.Unlock()
-
-	samplesInProfile := len(samplesPerType[0]) * len(labels)
-	h.totalSamples.Add(sampleSize)
-	h.metrics.sampleValuesIngested.WithLabelValues(metricName).Add(float64(samplesInProfile))
-	h.metrics.sampleValuesReceived.WithLabelValues(metricName).Add(float64(len(p.Sample) * len(labels)))
 
 	return nil
 }
@@ -405,7 +464,7 @@ func labelsForProfile(p *profilev1.Profile, externalLabels ...*typesv1.LabelPair
 
 // LabelValues returns the possible label values for a given label name.
 func (h *Head) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
-	values, err := h.index.ix.LabelValues(req.Msg.Name, nil)
+	values, err := h.profiles.index.ix.LabelValues(req.Msg.Name, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -414,9 +473,9 @@ func (h *Head) LabelValues(ctx context.Context, req *connect.Request[ingestv1.La
 	}), nil
 }
 
-// LabelValues returns the possible label values for a given label name.
+// LabelNames returns the possible label values for a given label name.
 func (h *Head) LabelNames(ctx context.Context, req *connect.Request[ingestv1.LabelNamesRequest]) (*connect.Response[ingestv1.LabelNamesResponse], error) {
-	values, err := h.index.ix.LabelNames(nil)
+	values, err := h.profiles.index.ix.LabelNames(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +487,7 @@ func (h *Head) LabelNames(ctx context.Context, req *connect.Request[ingestv1.Lab
 
 // ProfileTypes returns the possible profile types.
 func (h *Head) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error) {
-	values, err := h.index.ix.LabelValues(phlaremodel.LabelNameProfileType, nil)
+	values, err := h.profiles.index.ix.LabelValues(phlaremodel.LabelNameProfileType, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -458,26 +517,29 @@ func (h *Head) InRange(start, end model.Time) bool {
 	return b.InRange(start, end)
 }
 
-func (h *Head) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Head")
-	defer sp.Finish()
-	selectors, err := parser.ParseMetricSelector(params.LabelSelector)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "failed to parse label selectors: "+err.Error())
+// Returns underlying queries, the queriers should be roughly ordered in TS increasing order
+func (h *Head) Queriers() Queriers {
+	h.profiles.lock.RLock()
+	defer h.profiles.lock.RUnlock()
+
+	queriers := make([]Querier, 0, len(h.profiles.rowGroups)+1)
+	for idx := range h.profiles.rowGroups {
+		queriers = append(queriers, &headOnDiskQuerier{
+			head:        h,
+			rowGroupIdx: idx,
+		})
 	}
-	selectors = append(selectors, phlaremodel.SelectorFromProfileType(params.Type))
-	return h.index.SelectProfiles(selectors, model.Time(params.Start), model.Time(params.End))
+	queriers = append(queriers, &headInMemoryQuerier{h})
+	return queriers
 }
 
-func (h *Head) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Head")
+// add the location IDs to the stacktraces
+func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktraceSampleMap) *ingestv1.MergeProfilesStacktracesResult {
+	sp, _ := opentracing.StartSpanFromContext(ctx, "resolveStacktraces - Head")
 	defer sp.Finish()
 
-	stacktraceSamples := map[uint64]*ingestv1.StacktraceSample{}
 	names := []string{}
 	functions := map[int64]int{}
-
-	defer rows.Close()
 
 	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
@@ -490,117 +552,39 @@ func (h *Head) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profil
 		h.strings.lock.RUnlock()
 	}()
 
-	for rows.Next() {
-		p, ok := rows.At().(ProfileWithLabels)
-		if !ok {
-			return nil, errors.New("expected ProfileWithLabels")
-		}
-		for _, s := range p.Samples {
-			if s.Value == 0 {
-				continue
-			}
-			existing, ok := stacktraceSamples[s.StacktraceID]
-			if ok {
-				existing.Value += s.Value
-				continue
-			}
-			locs := h.stacktraces.slice[s.StacktraceID].LocationIDs
-			fnIds := make([]int32, 0, 2*len(locs))
-			for _, loc := range locs {
-				for _, line := range h.locations.slice[loc].Line {
-					fnNameID := h.functions.slice[line.FunctionId].Name
-					pos, ok := functions[fnNameID]
-					if !ok {
-						functions[fnNameID] = len(names)
-						fnIds = append(fnIds, int32(len(names)))
-						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
-						continue
-					}
-					fnIds = append(fnIds, int32(pos))
+	for stacktraceID := range stacktraceSamples {
+		locs := h.stacktraces.slice[stacktraceID].LocationIDs
+		fnIds := make([]int32, 0, 2*len(locs))
+		for _, loc := range locs {
+			for _, line := range h.locations.slice[loc].Line {
+				fnNameID := h.functions.slice[line.FunctionId].Name
+				pos, ok := functions[fnNameID]
+				if !ok {
+					functions[fnNameID] = len(names)
+					fnIds = append(fnIds, int32(len(names)))
+					names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
+					continue
 				}
-			}
-			stacktraceSamples[s.StacktraceID] = &ingestv1.StacktraceSample{
-				FunctionIds: fnIds,
-				Value:       s.Value,
+				fnIds = append(fnIds, int32(pos))
 			}
 		}
+		stacktraceSamples[stacktraceID].FunctionIds = fnIds
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	return &ingestv1.MergeProfilesStacktracesResult{
 		Stacktraces:   lo.Values(stacktraceSamples),
 		FunctionNames: names,
-	}, nil
+	}
 }
 
-func (h *Head) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error) {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "MergeByLabels - Head")
+func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSampleMap) *profile.Profile {
+	sp, _ := opentracing.StartSpanFromContext(ctx, "resolvePprof - Head")
 	defer sp.Finish()
 
-	labelsByFingerprint := map[model.Fingerprint]string{}
-	seriesByLabels := map[string]*typesv1.Series{}
-	labelBuf := make([]byte, 0, 1024)
-	defer rows.Close()
-
-	for rows.Next() {
-		p, ok := rows.At().(ProfileWithLabels)
-		if !ok {
-			return nil, errors.New("expected ProfileWithLabels")
-		}
-		labelsByString, ok := labelsByFingerprint[p.fp]
-		if !ok {
-			labelBuf = p.Labels().BytesWithLabels(labelBuf, by...)
-			labelsByString = string(labelBuf)
-			labelsByFingerprint[p.fp] = labelsByString
-			if _, ok := seriesByLabels[labelsByString]; !ok {
-				seriesByLabels[labelsByString] = &typesv1.Series{
-					Labels: p.Labels().WithLabels(by...),
-					Points: []*typesv1.Point{
-						{
-							Timestamp: int64(p.Timestamp()),
-							Value:     float64(p.Total()),
-						},
-					},
-				}
-				continue
-			}
-		}
-		series := seriesByLabels[labelsByString]
-		series.Points = append(series.Points, &typesv1.Point{
-			Timestamp: int64(p.Timestamp()),
-			Value:     float64(p.Total()),
-		})
-
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	result := lo.Values(seriesByLabels)
-	sort.Slice(result, func(i, j int) bool {
-		return phlaremodel.CompareLabelPairs(result[i].Labels, result[j].Labels) < 0
-	})
-	// we have to sort the points in each series because labels reduction may have changed the order
-	for _, s := range result {
-		sort.Slice(s.Points, func(i, j int) bool {
-			return s.Points[i].Timestamp < s.Points[j].Timestamp
-		})
-	}
-	return result, nil
-}
-
-// MergePprof merges profiles from the rows iterator into a single pprof profile.
-func (h *Head) MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*profile.Profile, error) {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "MergePprof - Head")
-	defer sp.Finish()
-
-	stacktraceSamples := map[uint64]*profile.Sample{}
 	locations := map[uint64]*profile.Location{}
 	functions := map[uint64]*profile.Function{}
 	mappings := map[uint64]*profile.Mapping{}
 
-	defer rows.Close()
-
 	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
@@ -612,82 +596,64 @@ func (h *Head) MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*pr
 		h.strings.lock.RUnlock()
 	}()
 
-	for rows.Next() {
-		p, ok := rows.At().(ProfileWithLabels)
-		if !ok {
-			return nil, errors.New("expected ProfileWithLabels")
-		}
-		for _, s := range p.Samples {
-			if s.Value == 0 {
-				continue
-			}
-			existing, ok := stacktraceSamples[s.StacktraceID]
-			if ok {
-				existing.Value[0] += s.Value
-				continue
-			}
-			locationIds := h.stacktraces.slice[s.StacktraceID].LocationIDs
-			stacktraceLocations := make([]*profile.Location, len(locationIds))
+	// now add locationIDs and stacktraces
+	for stacktraceID := range stacktraceSamples {
+		locationIds := h.stacktraces.slice[stacktraceID].LocationIDs
+		stacktraceLocations := make([]*profile.Location, len(locationIds))
 
-			for i, locId := range locationIds {
-				loc, ok := locations[locId]
+		for i, locId := range locationIds {
+			loc, ok := locations[locId]
+			if !ok {
+				locFound := h.locations.slice[locId]
+				mapping, ok := mappings[locFound.MappingId]
 				if !ok {
-					locFound := h.locations.slice[locId]
-					mapping, ok := mappings[locFound.MappingId]
-					if !ok {
-						mappingFound := h.mappings.slice[locFound.MappingId]
-						mapping = &profile.Mapping{
-							ID:              mappingFound.Id,
-							Start:           mappingFound.MemoryStart,
-							Limit:           mappingFound.MemoryLimit,
-							Offset:          mappingFound.FileOffset,
-							File:            h.strings.slice[mappingFound.Filename],
-							BuildID:         h.strings.slice[mappingFound.BuildId],
-							HasFunctions:    mappingFound.HasFunctions,
-							HasFilenames:    mappingFound.HasFilenames,
-							HasLineNumbers:  mappingFound.HasLineNumbers,
-							HasInlineFrames: mappingFound.HasInlineFrames,
-						}
-						mappings[locFound.MappingId] = mapping
+					mappingFound := h.mappings.slice[locFound.MappingId]
+					mapping = &profile.Mapping{
+						ID:              mappingFound.Id,
+						Start:           mappingFound.MemoryStart,
+						Limit:           mappingFound.MemoryLimit,
+						Offset:          mappingFound.FileOffset,
+						File:            h.strings.slice[mappingFound.Filename],
+						BuildID:         h.strings.slice[mappingFound.BuildId],
+						HasFunctions:    mappingFound.HasFunctions,
+						HasFilenames:    mappingFound.HasFilenames,
+						HasLineNumbers:  mappingFound.HasLineNumbers,
+						HasInlineFrames: mappingFound.HasInlineFrames,
 					}
-					loc = &profile.Location{
-						ID:       locFound.Id,
-						Address:  locFound.Address,
-						IsFolded: locFound.IsFolded,
-						Mapping:  mapping,
-						Line:     make([]profile.Line, len(locFound.Line)),
-					}
-					for i, line := range locFound.Line {
-						fn, ok := functions[line.FunctionId]
-						if !ok {
-							fnFound := h.functions.slice[line.FunctionId]
-							fn = &profile.Function{
-								ID:         fnFound.Id,
-								Name:       h.strings.slice[fnFound.Name],
-								SystemName: h.strings.slice[fnFound.SystemName],
-								Filename:   h.strings.slice[fnFound.Filename],
-								StartLine:  fnFound.StartLine,
-							}
-							functions[line.FunctionId] = fn
-						}
-						loc.Line[i] = profile.Line{
-							Line:     line.Line,
-							Function: fn,
-						}
-					}
-					locations[locId] = loc
+					mappings[locFound.MappingId] = mapping
 				}
-				stacktraceLocations[i] = loc
+				loc = &profile.Location{
+					ID:       locFound.Id,
+					Address:  locFound.Address,
+					IsFolded: locFound.IsFolded,
+					Mapping:  mapping,
+					Line:     make([]profile.Line, len(locFound.Line)),
+				}
+				for i, line := range locFound.Line {
+					fn, ok := functions[line.FunctionId]
+					if !ok {
+						fnFound := h.functions.slice[line.FunctionId]
+						fn = &profile.Function{
+							ID:         fnFound.Id,
+							Name:       h.strings.slice[fnFound.Name],
+							SystemName: h.strings.slice[fnFound.SystemName],
+							Filename:   h.strings.slice[fnFound.Filename],
+							StartLine:  fnFound.StartLine,
+						}
+						functions[line.FunctionId] = fn
+					}
+					loc.Line[i] = profile.Line{
+						Line:     line.Line,
+						Function: fn,
+					}
+				}
+				locations[locId] = loc
 			}
-			stacktraceSamples[s.StacktraceID] = &profile.Sample{
-				Location: stacktraceLocations,
-				Value:    []int64{s.Value},
-			}
+			stacktraceLocations[i] = loc
 		}
+		stacktraceSamples[stacktraceID].Location = stacktraceLocations
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
+
 	result := &profile.Profile{
 		Sample:   lo.Values(stacktraceSamples),
 		Location: lo.Values(locations),
@@ -695,7 +661,7 @@ func (h *Head) MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*pr
 		Mapping:  lo.Values(mappings),
 	}
 	normalizeProfileIds(result)
-	return result, nil
+	return result
 }
 
 func normalizeProfileIds(p *profile.Profile) {
@@ -779,7 +745,7 @@ func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesR
 	response := &ingestv1.SeriesResponse{}
 	uniqu := map[model.Fingerprint]struct{}{}
 	for _, selector := range selectors {
-		if err := h.index.forMatchingLabels(selector, func(lbs phlaremodel.Labels, fp model.Fingerprint) error {
+		if err := h.profiles.index.forMatchingLabels(selector, func(lbs phlaremodel.Labels, fp model.Fingerprint) error {
 			if _, ok := uniqu[fp]; ok {
 				return nil
 			}
@@ -811,31 +777,15 @@ func (h *Head) Close() error {
 
 // Flush closes the head and writes data to disk
 func (h *Head) Flush(ctx context.Context) error {
-	if len(h.profiles.slice) == 0 {
+	if h.profiles.empty() {
 		level.Info(h.logger).Log("msg", "head empty - no block written")
 		return os.RemoveAll(h.headPath)
 	}
 
 	files := make([]block.File, len(h.tables)+1)
 
-	// write index
-	indexPath := filepath.Join(h.headPath, block.IndexFilename)
-	if err := h.index.WriteTo(ctx, indexPath); err != nil {
-		return errors.Wrap(err, "flushing of index")
-	}
-	files[0].RelPath = block.IndexFilename
-	h.meta.Stats.NumSeries = uint64(h.index.totalSeries.Load())
-	files[0].TSDB = &block.TSDBFile{
-		NumSeries: h.meta.Stats.NumSeries,
-	}
-
-	// add index file size
-	if stat, err := os.Stat(indexPath); err == nil {
-		files[0].SizeBytes = uint64(stat.Size())
-	}
-
 	for idx, t := range h.tables {
-		numRows, numRowGroups, err := t.Flush()
+		numRows, numRowGroups, err := t.Flush(ctx)
 		if err != nil {
 			return errors.Wrapf(err, "flushing of table %s", t.Name())
 		}
@@ -844,6 +794,19 @@ func (h *Head) Flush(ctx context.Context) error {
 			NumRowGroups: numRowGroups,
 			NumRows:      numRows,
 		}
+	}
+
+	// get stats of index
+	indexPath := filepath.Join(h.headPath, block.IndexFilename)
+	files[0].RelPath = block.IndexFilename
+	h.meta.Stats.NumSeries = uint64(h.profiles.index.totalSeries.Load())
+	files[0].TSDB = &block.TSDBFile{
+		NumSeries: h.meta.Stats.NumSeries,
+	}
+
+	// add index file size
+	if stat, err := os.Stat(indexPath); err == nil {
+		files[0].SizeBytes = uint64(stat.Size())
 	}
 
 	for idx, t := range h.tables {
@@ -862,7 +825,7 @@ func (h *Head) Flush(ctx context.Context) error {
 		return files[i].RelPath < files[j].RelPath
 	})
 	h.meta.Files = files
-	h.meta.Stats.NumProfiles = uint64(h.index.totalProfiles.Load())
+	h.meta.Stats.NumProfiles = uint64(h.profiles.index.totalProfiles.Load())
 	h.meta.Stats.NumSamples = h.totalSamples.Load()
 
 	if _, err := h.meta.WriteToFile(h.logger, h.headPath); err != nil {

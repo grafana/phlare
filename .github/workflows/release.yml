@@ -5,6 +5,9 @@ on:
     # run only against tags
     tags:
       - "v*"
+      # do not run for weekly release tags
+      - "!v0.0.0-weekly*"
+
 permissions:
   contents: write
   packages: write

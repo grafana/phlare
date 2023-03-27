@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -38,17 +37,17 @@ import (
 func TestCreateLocalDir(t *testing.T) {
 	dataPath := t.TempDir()
 	localFile := dataPath + "/local"
-	require.NoError(t, ioutil.WriteFile(localFile, []byte("d"), 0o644))
+	require.NoError(t, os.WriteFile(localFile, []byte("d"), 0o644))
 	_, err := New(context.Background(), Config{
 		DataPath:         dataPath,
 		MaxBlockDuration: 30 * time.Minute,
-	})
+	}, NoLimit)
 	require.Error(t, err)
 	require.NoError(t, os.Remove(localFile))
 	_, err = New(context.Background(), Config{
 		DataPath:         dataPath,
 		MaxBlockDuration: 30 * time.Minute,
-	})
+	}, NoLimit)
 	require.NoError(t, err)
 }
 
@@ -86,9 +85,9 @@ func (f *fakeBidiServerMergeProfilesStacktraces) Receive() (*ingestv1.MergeProfi
 	return res, nil
 }
 
-func (f *PhlareDB) ingesterClient() (ingesterv1connect.IngesterServiceClient, func()) {
+func (q Queriers) ingesterClient() (ingesterv1connect.IngesterServiceClient, func()) {
 	mux := http.NewServeMux()
-	mux.Handle(ingesterv1connect.NewIngesterServiceHandler(&ingesterHandlerPhlareDB{f}))
+	mux.Handle(ingesterv1connect.NewIngesterServiceHandler(&ingesterHandlerPhlareDB{q}))
 	serv := testhelper.NewInMemoryServer(mux)
 
 	var httpClient *http.Client = serv.Client()
@@ -101,7 +100,8 @@ func (f *PhlareDB) ingesterClient() (ingesterv1connect.IngesterServiceClient, fu
 }
 
 type ingesterHandlerPhlareDB struct {
-	*PhlareDB
+	Queriers
+	// *PhlareDB
 }
 
 func (i *ingesterHandlerPhlareDB) Push(context.Context, *connect.Request[pushv1.PushRequest]) (*connect.Response[pushv1.PushResponse], error) {
@@ -142,7 +142,7 @@ func TestMergeProfilesStacktraces(t *testing.T) {
 	db, err := New(context.Background(), Config{
 		DataPath:         testDir,
 		MaxBlockDuration: time.Duration(100000) * time.Minute, // we will manually flush
-	})
+	}, NoLimit)
 	require.NoError(t, err)
 	defer require.NoError(t, db.Close())
 
@@ -154,7 +154,7 @@ func TestMergeProfilesStacktraces(t *testing.T) {
 	// create client
 	ctx := context.Background()
 
-	client, cleanup := db.ingesterClient()
+	client, cleanup := db.Queriers().ingesterClient()
 	defer cleanup()
 
 	t.Run("request the one existing series", func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestMergeProfilesStacktraces(t *testing.T) {
 			Profiles: []bool{true},
 		}))
 
-		// expect empty resp to signal it is finished
+		// expect empty response
 		resp, err = bidi.Receive()
 		require.NoError(t, err)
 		require.Nil(t, resp.Result)
@@ -270,7 +270,7 @@ func TestMergeProfilesPprof(t *testing.T) {
 	db, err := New(context.Background(), Config{
 		DataPath:         testDir,
 		MaxBlockDuration: time.Duration(100000) * time.Minute, // we will manually flush
-	})
+	}, NoLimit)
 	require.NoError(t, err)
 	defer require.NoError(t, db.Close())
 
@@ -282,7 +282,7 @@ func TestMergeProfilesPprof(t *testing.T) {
 	// create client
 	ctx := context.Background()
 
-	client, cleanup := db.ingesterClient()
+	client, cleanup := db.Queriers().ingesterClient()
 	defer cleanup()
 
 	t.Run("request the one existing series", func(t *testing.T) {
@@ -386,6 +386,22 @@ func TestMergeProfilesPprof(t *testing.T) {
 		}))
 		require.NoError(t, bidi.CloseRequest())
 	})
+
+	t.Run("timerange with no Profiles", func(t *testing.T) {
+		bidi := client.MergeProfilesPprof(ctx)
+		require.NoError(t, bidi.Send(&ingestv1.MergeProfilesPprofRequest{
+			Request: &ingestv1.SelectProfilesRequest{
+				LabelSelector: `{pod="my-pod"}`,
+				Type:          mustParseProfileSelector(t, "process_cpu:cpu:nanoseconds:cpu:nanoseconds"),
+				Start:         0,
+				End:           1,
+			},
+		}))
+		_, err := bidi.Receive()
+		require.NoError(t, err)
+		_, err = bidi.Receive()
+		require.NoError(t, err)
+	})
 }
 
 func TestFilterProfiles(t *testing.T) {
@@ -450,14 +466,8 @@ func TestFilterProfiles(t *testing.T) {
 	}, filtered)
 }
 
-type fakeBlock struct {
-	id   string
-	size uint64 // in mbytes
-}
-
 type fakeVolumeFS struct {
 	mock.Mock
-	blocks []fakeBlock
 }
 
 func (f *fakeVolumeFS) HasHighDiskUtilization(path string) (*diskutil.VolumeStats, error) {
@@ -469,6 +479,7 @@ func (f *fakeVolumeFS) Open(path string) (fs.File, error) {
 	args := f.Called(path)
 	return args[0].(fs.File), args.Error(1)
 }
+
 func (f *fakeVolumeFS) RemoveAll(path string) error {
 	args := f.Called(path)
 	return args.Error(0)

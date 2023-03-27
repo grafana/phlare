@@ -4,6 +4,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	minBytes     = 10 * 1024
+	maxBytes     = 15 * 1024 * 1024
+	bucketsCount = 30
+)
+
 type metrics struct {
 	receivedCompressedBytes   *prometheus.HistogramVec
 	receivedDecompressedBytes *prometheus.HistogramVec
@@ -17,18 +23,18 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 				Namespace: "phlare",
 				Name:      "distributor_received_compressed_bytes",
 				Help:      "The number of compressed bytes per profile received by the distributor.",
-				Buckets:   prometheus.ExponentialBucketsRange(10*1024, 15*1024*1024, 30),
+				Buckets:   prometheus.ExponentialBucketsRange(minBytes, maxBytes, bucketsCount),
 			},
-			[]string{"type"},
+			[]string{"type", "tenant"},
 		),
 		receivedDecompressedBytes: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Namespace: "phlare",
 				Name:      "distributor_received_decompressed_bytes",
 				Help:      "The number of decompressed bytes per profiles received by the distributor.",
-				Buckets:   prometheus.ExponentialBucketsRange(10*1024, 15*1024*1024, 30),
+				Buckets:   prometheus.ExponentialBucketsRange(minBytes, maxBytes, bucketsCount),
 			},
-			[]string{"type"},
+			[]string{"type", "tenant"},
 		),
 		receivedSamples: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -37,7 +43,7 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 				Help:      "The number of samples per profile name received by the distributor.",
 				Buckets:   prometheus.ExponentialBucketsRange(100, 100000, 30),
 			},
-			[]string{"type"},
+			[]string{"type", "tenant"},
 		),
 	}
 	if reg != nil {

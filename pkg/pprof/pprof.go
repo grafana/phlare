@@ -99,21 +99,28 @@ func RawFromBytes(input []byte) (*Profile, error) {
 }
 
 // Read Profile from Bytes
-func FromBytes(input []byte) (*profilev1.Profile, error) {
+func FromBytes(input []byte) (*profilev1.Profile, int, error) {
 	p, err := RawFromBytes(input)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-
+	uncompressedSize := p.buf.Len()
 	p.buf.Reset()
 	bufPool.Put(p.buf)
 
-	return p.Profile, nil
+	return p.Profile, uncompressedSize, nil
 }
 
 func FromProfile(p *profile.Profile) (*profilev1.Profile, error) {
 	r := profilev1.ProfileFromVTPool()
 	strings := make(map[string]int)
+
+	r.Sample = make([]*profilev1.Sample, 0, len(p.Sample))
+	r.SampleType = make([]*profilev1.ValueType, 0, len(p.SampleType))
+	r.Location = make([]*profilev1.Location, 0, len(p.Location))
+	r.Mapping = make([]*profilev1.Mapping, 0, len(p.Mapping))
+	r.Function = make([]*profilev1.Function, 0, len(p.Function))
+
 	addString(strings, "")
 	for _, st := range p.SampleType {
 		r.SampleType = append(r.SampleType, &profilev1.ValueType{
@@ -344,6 +351,7 @@ var currentTime = time.Now
 //   - Removing empty samples.
 //   - Then remove unused references.
 //   - Ensure that the profile has a time_nanos set
+//   - Removes addresses from symbolized profiles.
 func (p *Profile) Normalize() {
 	// if the profile has no time, set it to now
 	if p.TimeNanos == 0 {
@@ -351,7 +359,7 @@ func (p *Profile) Normalize() {
 	}
 
 	p.ensureHasMapping()
-
+	p.clearAddresses()
 	// first we sort the samples location ids.
 	hashes := p.hasher.Hashes(p.Sample)
 
@@ -394,6 +402,22 @@ func (p *Profile) Normalize() {
 
 	// Remove references to removed samples.
 	p.clearSampleReferences(removedSamples)
+}
+
+// Removes addresses from symbolized profiles.
+func (p *Profile) clearAddresses() {
+	for _, m := range p.Mapping {
+		if m.HasFunctions {
+			m.MemoryLimit = 0
+			m.FileOffset = 0
+			m.MemoryStart = 0
+		}
+	}
+	for _, l := range p.Location {
+		if p.Mapping[l.MappingId-1].HasFunctions {
+			l.Address = 0
+		}
+	}
 }
 
 // ensureHasMapping ensures all locations have at least a mapping.

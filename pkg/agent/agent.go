@@ -93,6 +93,7 @@ func (a *Agent) ActiveTargets() map[string][]*Target {
 		for _, target := range tg.activeTargets {
 			result[g] = append(result[g], target)
 		}
+		tg.mtx.RUnlock()
 	}
 	return result
 }
@@ -102,9 +103,8 @@ func (a *Agent) DroppedTargets() []*Target {
 
 	for _, tg := range a.groups {
 		tg.mtx.RLock()
-		for _, target := range tg.droppedTargets {
-			result = append(result, target)
-		}
+		result = append(result, tg.droppedTargets...)
+		tg.mtx.RUnlock()
 	}
 	return result
 }

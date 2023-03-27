@@ -10,9 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/model/labels"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	v1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
@@ -31,12 +32,14 @@ func TestIndex(t *testing.T) {
 				lb1 := phlaremodel.Labels([]*typesv1.LabelPair{
 					{Name: "__name__", Value: "memory"},
 					{Name: "__sample__type__", Value: "bytes"},
+					{Name: "__profile_type__", Value: "::::"},
 					{Name: "bar", Value: fmt.Sprint(j)},
 				})
 				sort.Sort(lb1)
 				lb2 := phlaremodel.Labels([]*typesv1.LabelPair{
 					{Name: "__name__", Value: "memory"},
 					{Name: "__sample__type__", Value: "count"},
+					{Name: "__profile_type__", Value: "::::"},
 					{Name: "bar", Value: fmt.Sprint(j)},
 				})
 				sort.Sort(lb2)
@@ -60,22 +63,17 @@ func TestIndex(t *testing.T) {
 	wg.Wait()
 
 	// Testing Matching
-	total := 0
-	err = a.forMatchingProfiles([]*labels.Matcher{
-		labels.MustNewMatcher(labels.MatchEqual, "__name__", "memory"),
-		labels.MustNewMatcher(labels.MatchRegexp, "bar", "[0-9]"),
-		labels.MustNewMatcher(labels.MatchNotEqual, "buzz", "bar"),
-	}, func(_ phlaremodel.Labels, _ model.Fingerprint, _ *v1.Profile) error {
-		total++
-		return nil
+	ctx := testContext(t)
+	fps, err := a.selectMatchingFPs(ctx, &ingestv1.SelectProfilesRequest{
+		LabelSelector: `memory{bar=~"[0-9]", buzz!="bar"}`,
+		Type:          &typesv1.ProfileType{},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 2*10*10*10, total)
-	require.Equal(t, 10*10*10, len(a.allProfiles()))
+	require.Len(t, fps, 20)
 
 	names, err := a.ix.LabelNames(nil)
 	require.NoError(t, err)
-	require.Equal(t, []string{"__name__", "__sample__type__", "bar"}, names)
+	require.Equal(t, []string{"__name__", "__profile_type__", "__sample__type__", "bar"}, names)
 
 	values, err := a.ix.LabelValues("__sample__type__", nil)
 	require.NoError(t, err)
@@ -119,7 +117,7 @@ func TestWriteRead(t *testing.T) {
 	}
 
 	tmpFile := t.TempDir() + "/test.db"
-	err = a.WriteTo(context.Background(), tmpFile)
+	_, err = a.writeTo(context.Background(), tmpFile)
 	require.NoError(t, err)
 
 	r, err := index.NewFileReader(tmpFile)
@@ -149,5 +147,101 @@ func TestWriteRead(t *testing.T) {
 		require.Equal(t, 1, len(chks))
 		require.Equal(t, int64(0), chks[0].MinTime)
 		require.Equal(t, int64(9), chks[0].MaxTime)
+	}
+}
+
+func Test_rowRangeIter(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		r        rowRange
+		expected []int64
+	}{
+		{"empty", rowRange{}, []int64{}},
+		{"first-element", rowRange{0, 1}, []int64{0}},
+		{"first-3-elements", rowRange{0, 3}, []int64{0, 1, 2}},
+		{"empty-offset", rowRange{10, 0}, []int64{}},
+		{"one-element-offset", rowRange{10, 1}, []int64{10}},
+		{"two elements-offset", rowRange{10, 2}, []int64{10, 11}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := rowRanges{tc.r: 0xff}.iter()
+			result := []int64{}
+			for it.Next() {
+				result = append(result, it.At().RowNumber())
+				assert.Equal(t, model.Fingerprint(0xff), it.At().fp)
+			}
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func Test_rowRangesIter(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		r               rowRanges
+		expRows         []int64
+		expFingerprints []model.Fingerprint
+	}{
+		{name: "empty"},
+		{
+			name: "empty-with-empty-elements",
+			r: rowRanges{
+				rowRange{0, 0}:  0xff,
+				rowRange{10, 0}: 0xff,
+			},
+		},
+		{
+			name: "three-elements-no-gaps",
+			r: rowRanges{
+				rowRange{1, 3}: 0xfa,
+				rowRange{4, 3}: 0xfb,
+				rowRange{7, 3}: 0xfc,
+			},
+			expRows:         []int64{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			expFingerprints: []model.Fingerprint{0xfa, 0xfa, 0xfa, 0xfb, 0xfb, 0xfb, 0xfc, 0xfc, 0xfc},
+		},
+		{
+			name: "starting-form-zero",
+			r: rowRanges{
+				rowRange{0, 3}: 0xf0,
+			},
+			expRows:         []int64{0, 1, 2},
+			expFingerprints: []model.Fingerprint{0xf0, 0xf0, 0xf0},
+		},
+		{
+			name: "two-with-gaps",
+			r: rowRanges{
+				rowRange{1, 3}: 0xfa,
+				rowRange{5, 0}: 0xfb,
+				rowRange{7, 3}: 0xfc,
+			},
+			expRows:         []int64{1, 2, 3, 7, 8, 9},
+			expFingerprints: []model.Fingerprint{0xfa, 0xfa, 0xfa, 0xfc, 0xfc, 0xfc},
+		},
+		{
+			name: "two-with-0-length-in-between",
+			r: rowRanges{
+				rowRange{1, 3}: 0xfa,
+				rowRange{4, 0}: 0xfb,
+				rowRange{7, 3}: 0xfc,
+			},
+			expRows:         []int64{1, 2, 3, 7, 8, 9},
+			expFingerprints: []model.Fingerprint{0xfa, 0xfa, 0xfa, 0xfc, 0xfc, 0xfc},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := tc.r.iter()
+			var (
+				rows         []int64
+				fingerprints []model.Fingerprint
+			)
+
+			for it.Next() {
+				rows = append(rows, it.At().RowNumber())
+				fingerprints = append(fingerprints, it.At().fp)
+			}
+			assert.Equal(t, tc.expRows, rows)
+			assert.Equal(t, tc.expFingerprints, fingerprints)
+		})
 	}
 }
