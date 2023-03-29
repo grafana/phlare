@@ -203,7 +203,9 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 			d.metrics.receivedSamples.WithLabelValues(profName, tenantID).Observe(float64(len(p.Sample)))
 			totalPushUncompressedBytes += int64(p.SizeBytes())
 			p.Normalize()
-			d.metrics.receivedSamplesBytes.WithLabelValues(profName, tenantID).Observe(float64(sampleSizeBytes(p.Profile)))
+			symbolsSize, samplesSize := profileSizeBytes(p.Profile)
+			d.metrics.receivedSamplesBytes.WithLabelValues(profName, tenantID).Observe(float64(samplesSize))
+			d.metrics.receivedSymbolsBytes.WithLabelValues(profName, tenantID).Observe(float64(symbolsSize))
 
 			// zip the data back into the buffer
 			bw := bytes.NewBuffer(raw.RawProfile[:0])
@@ -284,17 +286,19 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 	}
 }
 
-// sampleSizeBytes returns the size of samples in bytes.
-func sampleSizeBytes(p *googlev1.Profile) int64 {
-	var size int64
-	for _, s := range p.Sample {
-		size += int64(8 * len(s.Value))
-		for _, v := range s.Label {
-			size += int64(len(p.StringTable[v.Key]))
-			size += int64(len(p.StringTable[v.Str]))
-		}
-	}
-	return size
+// profileSizeBytes returns the size of symbols and samples in bytes.
+func profileSizeBytes(p *googlev1.Profile) (symbols, samples int64) {
+	fullSize := p.SizeVT()
+	// remove samples
+	samplesSlice := p.Sample
+	p.Sample = nil
+
+	symbols = int64(p.SizeVT())
+	samples = int64(fullSize) - symbols
+
+	// restore samples
+	p.Sample = samplesSlice
+	return
 }
 
 func (d *Distributor) sendProfiles(ctx context.Context, ingester ring.InstanceDesc, profileTrackers []*profileTracker, pushTracker *pushTracker) {
