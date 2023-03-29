@@ -103,9 +103,6 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 		return nil, err
 	}
 	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querier.NewGRPCRoundTripper(frontendSvc), f.auth)
-
-	// f.Server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.RenderHandler)))
-	// f.Server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.LabelValuesHandler)))
 	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
 	return frontendSvc, nil
 }
