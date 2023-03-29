@@ -103,6 +103,9 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 		return nil, err
 	}
 	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querier.NewGRPCRoundTripper(frontendSvc), f.auth)
+
+	// f.Server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.RenderHandler)))
+	// f.Server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.LabelValuesHandler)))
 	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
 	return frontendSvc, nil
 }
@@ -264,7 +267,8 @@ func (f *Phlare) initDistributor() (services.Service, error) {
 
 	// initialise direct pusher, this overwrites the default HTTP client
 	f.pusherClient = d
-
+	pyroscopePath := "/pyroscope/ingest"
+	f.Server.HTTP.Handle(pyroscopePath, util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(pyroscope.NewPyroscopeIngestHandler(d, f.logger)))
 	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d, f.auth)
 	f.Server.HTTP.Path("/distributor/ring").Methods("GET", "POST").Handler(d)
 	f.IndexPage.AddLinks(api.DefaultWeight, "Distributor", []api.IndexPageLink{
@@ -370,8 +374,7 @@ func (f *Phlare) initIngester() (_ services.Service, err error) {
 		return nil, err
 	}
 	ingesterv1connect.RegisterIngesterServiceHandler(f.Server.HTTP, svc, f.auth)
-	pyroscopePath := "/pyroscope/ingest"
-	f.Server.HTTP.Handle(pyroscopePath, util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(pyroscope.NewPyroscopeIngestHandler(svc, f.logger)))
+
 	return svc, nil
 }
 
