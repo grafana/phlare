@@ -296,6 +296,16 @@ func profileSizeBytes(p *googlev1.Profile) (symbols, samples int64) {
 	symbols = int64(p.SizeVT())
 	samples = int64(fullSize) - symbols
 
+	// count labels in samples
+	samplesLabels := 0
+	for _, s := range samplesSlice {
+		for _, l := range s.Label {
+			samplesLabels += len(p.StringTable[l.Key]) + len(p.StringTable[l.Str]) + len(p.StringTable[l.NumUnit])
+		}
+	}
+	symbols -= int64(samplesLabels)
+	samples += int64(samplesLabels)
+
 	// restore samples
 	p.Sample = samplesSlice
 	return
