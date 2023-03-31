@@ -53,11 +53,12 @@ func (c *phlareClient) httpClient() *http.Client {
 	return c.client
 }
 
-type flagger interface {
+type commander interface {
 	Flag(name, help string) *kingpin.FlagClause
+	Arg(name, help string) *kingpin.ArgClause
 }
 
-func addPhlareClient(cmd flagger) *phlareClient {
+func addPhlareClient(cmd commander) *phlareClient {
 	client := &phlareClient{}
 
 	cmd.Flag("url", "URL of the profile store.").Default("http://localhost:4100").Envar(envPrefix + "URL").StringVar(&client.URL)

@@ -95,7 +95,7 @@ func (p *queryParams) parseFromTo() (from time.Time, to time.Time, err error) {
 	return from, to, nil
 }
 
-func addQueryParams(queryCmd flagger) *queryParams {
+func addQueryParams(queryCmd commander) *queryParams {
 	var (
 		params = &queryParams{}
 	)
