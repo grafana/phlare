@@ -146,6 +146,14 @@ func (m *headMetrics) register(reg prometheus.Registerer) {
 	m.rowsWritten = util.RegisterOrGet(reg, m.rowsWritten)
 	m.sampleValuesIngested = util.RegisterOrGet(reg, m.sampleValuesIngested)
 	m.sampleValuesReceived = util.RegisterOrGet(reg, m.sampleValuesReceived)
+	m.flushedFileSizeBytes = util.RegisterOrGet(reg, m.flushedFileSizeBytes)
+	m.flushedBlockSizeBytes = util.RegisterOrGet(reg, m.flushedBlockSizeBytes)
+	m.flushedBlockDurationSeconds = util.RegisterOrGet(reg, m.flushedBlockDurationSeconds)
+	m.flushedBlockSeries = util.RegisterOrGet(reg, m.flushedBlockSeries)
+	m.flushedBlockSamples = util.RegisterOrGet(reg, m.flushedBlockSamples)
+	m.flusehdBlockProfiles = util.RegisterOrGet(reg, m.flusehdBlockProfiles)
+	m.blockDurationSeconds = util.RegisterOrGet(reg, m.blockDurationSeconds)
+	m.flushedBlocks = util.RegisterOrGet(reg, m.flushedBlocks)
 }
 
 func contextWithHeadMetrics(ctx context.Context, m *headMetrics) context.Context {
