@@ -55,6 +55,7 @@ import (
 	"github.com/grafana/phlare/pkg/util/build"
 	"github.com/grafana/phlare/pkg/validation"
 	"github.com/grafana/phlare/pkg/validation/exporter"
+	"github.com/grafana/phlare/public"
 )
 
 // The various modules that make up Phlare.
@@ -452,6 +453,13 @@ func (f *Phlare) initServer() (services.Service, error) {
 
 	// register static assets
 	f.Server.HTTP.PathPrefix("/static/").Handler(http.FileServer(http.FS(api.StaticFiles)))
+
+	// register ui
+	uiAssets, err := public.Assets()
+	if err != nil {
+		return nil, fmt.Errorf("unable to initialize the ui: %w", err)
+	}
+	f.Server.HTTP.PathPrefix("/ui/").Handler(http.StripPrefix("/ui/", http.FileServer(uiAssets)))
 
 	// register index page
 	f.IndexPage = api.NewIndexPageContent()
