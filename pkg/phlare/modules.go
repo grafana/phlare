@@ -29,6 +29,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v2"
 
+	"github.com/grafana/phlare/public"
+
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
@@ -55,7 +57,6 @@ import (
 	"github.com/grafana/phlare/pkg/util/build"
 	"github.com/grafana/phlare/pkg/validation"
 	"github.com/grafana/phlare/pkg/validation/exporter"
-	"github.com/grafana/phlare/public"
 )
 
 // The various modules that make up Phlare.
