@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18.15.0
-          cache: true
+          cache: yarn
       # setup docker buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
