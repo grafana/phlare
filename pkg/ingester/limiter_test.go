@@ -14,6 +14,7 @@ import (
 type fakeLimits struct {
 	maxLocalSeriesPerTenant  int
 	maxGlobalSeriesPerTenant int
+	ingestionTenantShardSize int
 }
 
 func (f *fakeLimits) MaxLocalSeriesPerTenant(userID string) int {
@@ -22,6 +23,10 @@ func (f *fakeLimits) MaxLocalSeriesPerTenant(userID string) int {
 
 func (f *fakeLimits) MaxGlobalSeriesPerTenant(userID string) int {
 	return f.maxGlobalSeriesPerTenant
+}
+
+func (f *fakeLimits) IngestionTenantShardSize(userID string) int {
+	return f.ingestionTenantShardSize
 }
 
 type fakeRingCount struct {
