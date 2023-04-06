@@ -69,6 +69,10 @@ func (r MockRing) ShuffleShard(identifier string, size int) ring.ReadRing {
 		return r
 	}
 
+	if rf := int(r.replicationFactor); size < rf {
+		size = rf
+	}
+
 	return &MockRing{
 		ingesters:         r.ingesters[:size],
 		replicationFactor: r.replicationFactor,
