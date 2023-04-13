@@ -17,7 +17,8 @@ func Test_Diff_Tree(t *testing.T) {
 		{locations: []string{"c", "a"}, value: 8},
 	})
 
-	res := DiffTree(tr, tr2, 1024)
+	res, err := DiffTree(tr, tr2, 1024)
+	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "c", "b"}, res.Names)
 	assert.Equal(t, int64(8), res.MaxSelf)
 	assert.Equal(t, int64(15), res.Total)
@@ -41,7 +42,8 @@ func Test_Diff_Tree_With_Different_Structure(t *testing.T) {
 		{locations: []string{"e", "a"}, value: 12},
 	})
 
-	res := DiffTree(tr, tr2, 1024)
+	res, err := DiffTree(tr, tr2, 1024)
+	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "e", "d", "c", "b"}, res.Names)
 	assert.Equal(t, int64(12), res.MaxSelf)
 	assert.Equal(t, int64(30), res.Total)
@@ -68,8 +70,24 @@ func Test_Diff_Tree_With_MaxNodes(t *testing.T) {
 		{locations: []string{"c", "a"}, value: 8},
 	})
 
-	res := DiffTree(tr, tr2, 2)
+	res, err := DiffTree(tr, tr2, 2)
+	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "other"}, res.Names)
 	assert.Equal(t, int64(12), res.MaxSelf)
 	assert.Equal(t, int64(15), res.Total)
+}
+
+func Test_Diff_Tree_With_NegativeNodes(t *testing.T) {
+	tr := newTree([]stacktraces{
+		{locations: []string{"b", "a"}, value: 1},
+		{locations: []string{"c", "a"}, value: -2},
+	})
+
+	tr2 := newTree([]stacktraces{
+		{locations: []string{"b", "a"}, value: 4},
+		{locations: []string{"c", "a"}, value: -8},
+	})
+
+	_, err := DiffTree(tr, tr2, 1024)
+	assert.Error(t, err)
 }

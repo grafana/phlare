@@ -2,16 +2,16 @@ package querier
 
 import (
 	"bytes"
+	"fmt"
+
+	"github.com/pyroscope-io/pyroscope/pkg/structs/cappedarr"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
-	"github.com/pyroscope-io/pyroscope/pkg/structs/cappedarr"
 )
 
 // DiffTree generates the FlameGraph struct from 2 trees.
-// They must be the response trees from CombineTree (i.e. all children nodes
-// must be the same length). The Flamebearer struct returned from this function
-// is different to the one returned from Tree.FlamebearerStruct(). It has the
-// following structure:
+// Notice that the resulting FlameGraph IS NOT has the following structure,
+// and can't be used interchangeably with a 'single' FlameGraph:
 //
 //	i+0 = x offset, left  tree
 //	i+1 = total   , left  tree
@@ -20,7 +20,14 @@ import (
 //	i+4 = total   , right tree
 //	i+5 = self    , right tree
 //	i+6 = index in the names array
-func DiffTree(left, right *tree, maxNodes int) *querierv1.FlameGraph {
+func DiffTree(left, right *tree, maxNodes int) (*querierv1.FlameGraph, error) {
+	// The algorithm doesn't work properly with negative nodes
+	// Although it's possible to silently drop these nodes
+	// Let's fail early and analyze properly with real data when the issue happens
+	err := assertPositiveTrees(left, right)
+	if err != nil {
+		return nil, err
+	}
 	leftTree, rightTree := combineTree(left, right)
 
 	totalLeft := addTotalRoot(leftTree)
@@ -36,7 +43,6 @@ func DiffTree(left, right *tree, maxNodes int) *querierv1.FlameGraph {
 	leftNodes, xLeftOffsets := leftTree.root, []int64{0}
 	rghtNodes, xRghtOffsets := rightTree.root, []int64{0}
 	levels := []int{0}
-	// TODO: dangerous conversion
 	minVal := int64(combineMinValues(leftTree, rightTree, maxNodes))
 	nameLocationCache := map[string]int{}
 
@@ -49,8 +55,7 @@ func DiffTree(left, right *tree, maxNodes int) *querierv1.FlameGraph {
 		level := levels[0]
 		levels = levels[1:]
 
-		// both left.Name and rght.Name must be the same
-		name := string(left.name)
+		name := left.name
 		if left.total >= minVal || rght.total >= minVal || name == "other" {
 			i, ok := nameLocationCache[name]
 			if !ok {
@@ -130,7 +135,7 @@ func DiffTree(left, right *tree, maxNodes int) *querierv1.FlameGraph {
 	deltaEncoding(res.Levels, 0, 7)
 	deltaEncoding(res.Levels, 3, 7)
 
-	return res
+	return res, nil
 }
 
 // addTotalRoot updates the tree root with a 'total' node
@@ -252,6 +257,50 @@ func combineIterateWithTotal(leftTree, rightTree *tree, cb func(uint64, uint64) 
 			rghtNodes = append(rghtNode.children, rghtNodes...)
 		}
 	}
+}
+
+// isPositiveTree returns whether a tree only contain positive values
+func isPositiveTree(t *tree) bool {
+	stack := Stack[*node]{}
+	for _, node := range t.root {
+		stack.Push(node)
+	}
+
+	for {
+		current, hasMoreNodes := stack.Pop()
+		if !hasMoreNodes {
+			break
+		}
+
+		if current.self < 0 {
+			return false
+		}
+
+		for _, child := range current.children {
+			stack.Push(child)
+		}
+	}
+
+	return true
+}
+
+func assertPositiveTrees(left *tree, right *tree) error {
+	leftRes := isPositiveTree(left)
+	rightRes := isPositiveTree(right)
+
+	if !leftRes && !rightRes {
+		return fmt.Errorf("both trees require only positive values")
+	}
+
+	if !leftRes {
+		return fmt.Errorf("left tree require only positive values")
+	}
+
+	if !rightRes {
+		return fmt.Errorf("left tree require only positive values")
+	}
+
+	return nil
 }
 
 func deltaEncoding(levels []*querierv1.Level, start, step int) {
