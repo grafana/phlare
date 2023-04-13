@@ -178,10 +178,10 @@ func (l *limiter) convertGlobalToLocalLimit(tenantID string, globalLimit int) in
 	// (global limit / number of ingesters) * replication factor
 	numIngesters := l.ring.HealthyInstancesCount()
 
-	// May happen because the number of ingesters is asynchronously updated.
+	// No healthy ingester may happen because the number of ingesters is asynchronously updated.
 	// If happens, we just temporarily ignore the global limit.
-	if numIngesters > 0 {
-		return int((float64(globalLimit) / float64(numIngesters)) * float64(l.replicationFactor))
+	if numIngesters == 0 {
+		return 0
 	}
 
 	// If the number of available ingesters is greater than the tenant's shard
