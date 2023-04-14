@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/pyroscope-io/pyroscope/pkg/util/attime"
 	"google.golang.org/grpc/codes"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
@@ -92,17 +93,12 @@ func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStackt
 		return nil, nil, err
 	}
 
-	// default start and end to now-1h
-	start := model.TimeFromUnixNano(time.Now().Add(-1 * time.Hour).UnixNano())
-	end := model.TimeFromUnixNano(time.Now().UnixNano())
+	v := req.URL.Query()
 
-	if from := req.Form.Get("from"); from != "" {
-		from, err := parseRelativeTime(from)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse from: %w", err)
-		}
-		start = end.Add(-from)
-	}
+	// parse time using pyroscope's attime parser
+	start := model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano())
+	end := model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano())
+
 	return &querierv1.SelectMergeStacktracesRequest{
 		Start:         int64(start),
 		End:           int64(end),
