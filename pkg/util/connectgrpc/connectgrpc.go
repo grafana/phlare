@@ -105,6 +105,9 @@ func decodeRequest[Req any](req *httpgrpc.HTTPRequest) (*connect.Request[Req], e
 }
 
 func encodeRequest[Req any](req *connect.Request[Req]) (*httpgrpc.HTTPRequest, error) {
+	if req.Spec().Procedure == "" {
+		return nil, errors.New("cannot encode a request with empty procedure")
+	}
 	out := &httpgrpc.HTTPRequest{
 		Method:  http.MethodPost,
 		Url:     req.Spec().Procedure,
