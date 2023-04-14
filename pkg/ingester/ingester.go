@@ -13,6 +13,7 @@ import (
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	ingesterv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
@@ -50,9 +51,9 @@ type Ingester struct {
 	logger    log.Logger
 	phlarectx context.Context
 
-	lifecycler        *ring.Lifecycler
-	lifecyclerWatcher *services.FailureWatcher
-	rpEnforcer        *retentionPolicyEnforcer
+	lifecycler         *ring.Lifecycler
+	subservices        *services.Manager
+	subservicesWatcher *services.FailureWatcher
 
 	storageBucket phlareobjstore.Bucket
 
@@ -98,38 +99,40 @@ func New(phlarectx context.Context, cfg Config, dbConfig phlaredb.Config, storag
 		return nil, err
 	}
 
-	i.lifecyclerWatcher = services.NewFailureWatcher()
-	i.lifecyclerWatcher.WatchService(i.lifecycler)
-	i.rpEnforcer = newRetentionPolicyEnforcer(i, defaultRetentionPolicy())
+	rpEnforcer := newRetentionPolicyEnforcer(i, defaultRetentionPolicy())
+	i.subservices, err = services.NewManager(i.lifecycler, rpEnforcer)
+	if err != nil {
+		return nil, errors.Wrap(err, "services manager")
+	}
+	i.subservicesWatcher = services.NewFailureWatcher()
+	i.subservicesWatcher.WatchManager(i.subservices)
 	i.Service = services.NewBasicService(i.starting, i.running, i.stopping)
 	return i, nil
 }
 
 func (i *Ingester) starting(ctx context.Context) error {
-	// pass new context to lifecycler, so that it doesn't stop automatically when Ingester's service context is done
-	err := i.lifecycler.StartAsync(context.Background())
-	if err != nil {
-		return err
-	}
-
-	err = i.lifecycler.AwaitRunning(ctx)
-	if err != nil {
-		return err
-	}
-
-	if err = i.rpEnforcer.StartAsync(ctx); err != nil {
-		return err
-	}
-	return i.rpEnforcer.AwaitRunning(ctx)
+	return services.StartManagerAndAwaitHealthy(ctx, i.subservices)
 }
 
 func (i *Ingester) running(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case err := <-i.lifecyclerWatcher.Chan(): // handle lifecycler errors
+	case err := <-i.subservicesWatcher.Chan(): // handle lifecycler errors
 		return fmt.Errorf("lifecycler failed: %w", err)
 	}
+}
+
+func (i *Ingester) stopping(_ error) error {
+	errs := multierror.New()
+	errs.Add(services.StopManagerAndAwaitStopped(context.Background(), i.subservices))
+	// stop all instances
+	i.instancesMtx.RLock()
+	defer i.instancesMtx.RUnlock()
+	for _, inst := range i.instances {
+		errs.Add(inst.Stop())
+	}
+	return errs.Err()
 }
 
 func (i *Ingester) GetOrCreateInstance(tenantID string) (*instance, error) { //nolint:revive
@@ -220,19 +223,6 @@ func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushReq
 		}
 		return connect.NewResponse(&pushv1.PushResponse{}), nil
 	})
-}
-
-func (i *Ingester) stopping(_ error) error {
-	errs := multierror.New()
-	errs.Add(services.StopAndAwaitTerminated(context.Background(), i.lifecycler))
-	errs.Add(services.StopAndAwaitTerminated(context.Background(), i.rpEnforcer))
-	// stop all instances
-	i.instancesMtx.RLock()
-	defer i.instancesMtx.RUnlock()
-	for _, inst := range i.instances {
-		errs.Add(inst.Stop())
-	}
-	return errs.Err()
 }
 
 func (i *Ingester) Flush(ctx context.Context, req *connect.Request[ingesterv1.FlushRequest]) (*connect.Response[ingesterv1.FlushResponse], error) {
