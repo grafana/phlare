@@ -52,6 +52,7 @@ type Ingester struct {
 
 	lifecycler        *ring.Lifecycler
 	lifecyclerWatcher *services.FailureWatcher
+	rpEnforcer        *retentionPolicyEnforcer
 
 	storageBucket phlareobjstore.Bucket
 
@@ -99,6 +100,7 @@ func New(phlarectx context.Context, cfg Config, dbConfig phlaredb.Config, storag
 
 	i.lifecyclerWatcher = services.NewFailureWatcher()
 	i.lifecyclerWatcher.WatchService(i.lifecycler)
+	i.rpEnforcer = newRetentionPolicyEnforcer(i, defaultRetentionPolicy())
 	i.Service = services.NewBasicService(i.starting, i.running, i.stopping)
 	return i, nil
 }
@@ -115,7 +117,10 @@ func (i *Ingester) starting(ctx context.Context) error {
 		return err
 	}
 
-	return nil
+	if err = i.rpEnforcer.StartAsync(ctx); err != nil {
+		return err
+	}
+	return i.rpEnforcer.AwaitRunning(ctx)
 }
 
 func (i *Ingester) running(ctx context.Context) error {
@@ -220,6 +225,7 @@ func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushReq
 func (i *Ingester) stopping(_ error) error {
 	errs := multierror.New()
 	errs.Add(services.StopAndAwaitTerminated(context.Background(), i.lifecycler))
+	errs.Add(services.StopAndAwaitTerminated(context.Background(), i.rpEnforcer))
 	// stop all instances
 	i.instancesMtx.RLock()
 	defer i.instancesMtx.RUnlock()
