@@ -210,6 +210,7 @@ func (f *Phlare) initQuerier() (services.Service, error) {
 	}
 
 	f.Server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.RenderHandler)))
+	f.Server.HTTP.Handle("/pyroscope/render-diff", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.RenderDiffHandler)))
 	f.Server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.LabelValuesHandler)))
 
 	sm, err := services.NewManager(querierSvc, worker)

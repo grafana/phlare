@@ -63,12 +63,61 @@ func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (q *Querier) RenderDiffHandler(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Left
+	leftSelectParams, leftProfileType, err := parseSelectProfilesRequest(renderRequestFieldNames{
+		query: "leftQuery",
+		from:  "leftFrom",
+		until: "leftUntil",
+	}, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	rightSelectParams, rightProfileType, err := parseSelectProfilesRequest(renderRequestFieldNames{
+		query: "rightQuery",
+		from:  "rightFrom",
+		until: "rightUntil",
+	}, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// TODO: check profile types?
+	if leftProfileType.ID != rightProfileType.ID {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, err := q.Diff(req.Context(), connect.NewRequest(leftSelectParams), connect.NewRequest(rightSelectParams))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, leftProfileType, FormatDiff)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
 func (q *Querier) RenderHandler(w http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	selectParams, profileType, err := parseSelectProfilesRequest(req)
+	selectParams, profileType, err := parseSelectProfilesRequest(renderRequestFieldNames{
+		query: "query",
+		from:  "from",
+		until: "until",
+	}, req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -79,15 +128,21 @@ func (q *Querier) RenderHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, profileType)); err != nil {
+	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, profileType, FormatSingle)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
+type renderRequestFieldNames struct {
+	query string
+	from  string
+	until string
+}
+
 // render/render?format=json&from=now-12h&until=now&query=pyroscope.server.cpu
-func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStacktracesRequest, *typesv1.ProfileType, error) {
-	selector, ptype, err := parseQuery(req)
+func parseSelectProfilesRequest(fieldNames renderRequestFieldNames, req *http.Request) (*querierv1.SelectMergeStacktracesRequest, *typesv1.ProfileType, error) {
+	selector, ptype, err := parseQuery(fieldNames.query, req)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -95,8 +150,10 @@ func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStackt
 	v := req.URL.Query()
 
 	// parse time using pyroscope's attime parser
-	start := model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano())
-	end := model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano())
+	start := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.from)).UnixNano())
+	end := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.until)).UnixNano())
+	//	start := model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano())
+	//	end := model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano())
 
 	return &querierv1.SelectMergeStacktracesRequest{
 		Start:         int64(start),
@@ -106,15 +163,15 @@ func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStackt
 	}, ptype, nil
 }
 
-func parseQuery(req *http.Request) (string, *typesv1.ProfileType, error) {
-	q := req.Form.Get("query")
+func parseQuery(fieldName string, req *http.Request) (string, *typesv1.ProfileType, error) {
+	q := req.Form.Get(fieldName)
 	if q == "" {
-		return "", nil, fmt.Errorf("query is required")
+		return "", nil, fmt.Errorf("'%s' is required", fieldName)
 	}
 
 	parsedSelector, err := parser.ParseMetricSelector(q)
 	if err != nil {
-		return "", nil, status.Error(codes.InvalidArgument, "failed to parse query")
+		return "", nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse '%s'", fieldName))
 	}
 
 	sel := make([]*labels.Matcher, 0, len(parsedSelector))
@@ -127,12 +184,12 @@ func parseQuery(req *http.Request) (string, *typesv1.ProfileType, error) {
 		}
 	}
 	if nameLabel == nil {
-		return "", nil, status.Error(codes.InvalidArgument, "query must contain a profile-type selection")
+		return "", nil, status.Error(codes.InvalidArgument, fmt.Sprintf("'%s' must contain a profile-type selection", fieldName))
 	}
 
 	profileSelector, err := phlaremodel.ParseProfileTypeSelector(nameLabel.Value)
 	if err != nil {
-		return "", nil, status.Error(codes.InvalidArgument, "failed to parse query")
+		return "", nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse '%s'", fieldName))
 	}
 	return convertMatchersToString(sel), profileSelector, nil
 }

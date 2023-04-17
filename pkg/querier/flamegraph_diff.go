@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/pyroscope-io/pyroscope/pkg/structs/cappedarr"
-	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
-	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
+
+const MaxNodes = 8192
 
 type FlamegraphDiff querierv1.FlameGraph
 
@@ -142,14 +142,8 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, error)
 	return res, nil
 }
 
-// ExportToFlamebearer defers to the single's ExportToFlamebearer implementation
-// Then sets the Metadata.Format appropriately
-func (fd *FlamegraphDiff) ExportToFlamebearer(profileType *typesv1.ProfileType) *flamebearer.FlamebearerProfile {
-	f := (*querierv1.FlameGraph)(fd)
-	fb := ExportToFlamebearer(f, profileType)
-	fb.FlamebearerProfileV1.Metadata.Format = "double"
-
-	return fb
+func (fd *FlamegraphDiff) ToFlamegraph() *querierv1.FlameGraph {
+	return (*querierv1.FlameGraph)(fd)
 }
 
 // addTotalRoot updates the tree root with a 'total' node

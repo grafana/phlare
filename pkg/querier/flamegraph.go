@@ -103,8 +103,15 @@ func NewFlameGraph(t *tree) *querierv1.FlameGraph {
 	}
 }
 
+type FlamegraphFormat string
+
+const (
+	FormatSingle FlamegraphFormat = "single"
+	FormatDiff                    = "double"
+)
+
 // ExportToFlamebearer exports the flamegraph to a Flamebearer struct.
-func ExportToFlamebearer(fg *querierv1.FlameGraph, profileType *typesv1.ProfileType) *flamebearer.FlamebearerProfile {
+func ExportToFlamebearer(fg *querierv1.FlameGraph, profileType *typesv1.ProfileType, format FlamegraphFormat) *flamebearer.FlamebearerProfile {
 	unit := metadata.Units(profileType.SampleUnit)
 	sampleRate := uint32(100)
 
@@ -130,7 +137,7 @@ func ExportToFlamebearer(fg *querierv1.FlameGraph, profileType *typesv1.ProfileT
 				Levels:   levels,
 			},
 			Metadata: flamebearer.FlamebearerMetadataV1{
-				Format:     "single",
+				Format:     string(format),
 				Units:      unit,
 				Name:       profileType.SampleType,
 				SampleRate: sampleRate,

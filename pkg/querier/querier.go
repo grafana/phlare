@@ -209,7 +209,40 @@ func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.Ser
 	}), nil
 }
 
+func (q *Querier) Diff(ctx context.Context, req1 *connect.Request[querierv1.SelectMergeStacktracesRequest], req2 *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
+	// TODO: do this in parallel
+	res1, err := q.selectTree(ctx, req1)
+	if err != nil {
+		return nil, err
+	}
+
+	res2, err := q.selectTree(ctx, req2)
+	if err != nil {
+		return nil, err
+	}
+
+	fd, err := NewFlamegraphDiff(res1, res2, MaxNodes)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
+		Flamegraph: fd.ToFlamegraph(),
+	}), nil
+}
+
 func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
+	t, err := q.selectTree(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
+		Flamegraph: NewFlameGraph(t),
+	}), nil
+}
+
+func (q *Querier) selectTree(ctx context.Context, req *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*tree, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMergeStacktraces")
 	defer func() {
 		sp.LogFields(
@@ -264,9 +297,7 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: NewFlameGraph(newTree(st)),
-	}), nil
+	return newTree(st), nil
 }
 
 func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {
