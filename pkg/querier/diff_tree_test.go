@@ -3,6 +3,7 @@ package querier
 import (
 	"testing"
 
+	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +18,7 @@ func Test_Diff_Tree(t *testing.T) {
 		{locations: []string{"c", "a"}, value: 8},
 	})
 
-	res, err := DiffTree(tr, tr2, 1024)
+	res, err := NewFlamegraphDiff(tr, tr2, 1024)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "c", "b"}, res.Names)
 	assert.Equal(t, int64(8), res.MaxSelf)
@@ -42,7 +43,7 @@ func Test_Diff_Tree_With_Different_Structure(t *testing.T) {
 		{locations: []string{"e", "a"}, value: 12},
 	})
 
-	res, err := DiffTree(tr, tr2, 1024)
+	res, err := NewFlamegraphDiff(tr, tr2, 1024)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "e", "d", "c", "b"}, res.Names)
 	assert.Equal(t, int64(12), res.MaxSelf)
@@ -70,7 +71,7 @@ func Test_Diff_Tree_With_MaxNodes(t *testing.T) {
 		{locations: []string{"c", "a"}, value: 8},
 	})
 
-	res, err := DiffTree(tr, tr2, 2)
+	res, err := NewFlamegraphDiff(tr, tr2, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "other"}, res.Names)
 	assert.Equal(t, int64(12), res.MaxSelf)
@@ -88,6 +89,23 @@ func Test_Diff_Tree_With_NegativeNodes(t *testing.T) {
 		{locations: []string{"c", "a"}, value: -8},
 	})
 
-	_, err := DiffTree(tr, tr2, 1024)
+	_, err := NewFlamegraphDiff(tr, tr2, 1024)
 	assert.Error(t, err)
+}
+
+func Test_FlamegraphDiff_ExportToFlamebearer(t *testing.T) {
+	tr := newTree([]stacktraces{})
+	fd, err := NewFlamegraphDiff(tr, tr, 1024)
+	assert.NoError(t, err)
+
+	fb := fd.ExportToFlamebearer(&typesv1.ProfileType{
+		ID:         "memory:inuse_space:bytes:space:bytes",
+		Name:       "memory",
+		SampleType: "inuse_space",
+		SampleUnit: "bytes",
+		PeriodType: "space",
+		PeriodUnit: "bytes",
+	})
+
+	assert.Equal(t, "double", fb.Metadata.Format)
 }

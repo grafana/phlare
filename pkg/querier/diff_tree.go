@@ -5,13 +5,17 @@ import (
 	"fmt"
 
 	"github.com/pyroscope-io/pyroscope/pkg/structs/cappedarr"
+	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
+	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
 
-// DiffTree generates the FlameGraph struct from 2 trees.
-// Notice that the resulting FlameGraph IS NOT has the following structure,
-// and can't be used interchangeably with a 'single' FlameGraph:
+type FlamegraphDiff querierv1.FlameGraph
+
+// NewFlamegraphDiff generates a FlamegraphDiff from 2 trees.
+// Notice that the resulting FlameGraph can't be used interchangeably with a 'single' Flamegraph
+// Since it has the following structure:
 //
 //	i+0 = x offset, left  tree
 //	i+1 = total   , left  tree
@@ -20,7 +24,7 @@ import (
 //	i+4 = total   , right tree
 //	i+5 = self    , right tree
 //	i+6 = index in the names array
-func DiffTree(left, right *tree, maxNodes int) (*querierv1.FlameGraph, error) {
+func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, error) {
 	// The algorithm doesn't work properly with negative nodes
 	// Although it's possible to silently drop these nodes
 	// Let's fail early and analyze properly with real data when the issue happens
@@ -33,7 +37,7 @@ func DiffTree(left, right *tree, maxNodes int) (*querierv1.FlameGraph, error) {
 	totalLeft := addTotalRoot(leftTree)
 	totalRight := addTotalRoot(rightTree)
 
-	res := &querierv1.FlameGraph{
+	res := &FlamegraphDiff{
 		Names:   []string{},
 		Levels:  []*querierv1.Level{},
 		Total:   totalLeft + totalRight,
@@ -136,6 +140,16 @@ func DiffTree(left, right *tree, maxNodes int) (*querierv1.FlameGraph, error) {
 	deltaEncoding(res.Levels, 3, 7)
 
 	return res, nil
+}
+
+// ExportToFlamebearer defers to the single's ExportToFlamebearer implementation
+// Then sets the Metadata.Format appropriately
+func (fd *FlamegraphDiff) ExportToFlamebearer(profileType *typesv1.ProfileType) *flamebearer.FlamebearerProfile {
+	f := (*querierv1.FlameGraph)(fd)
+	fb := ExportToFlamebearer(f, profileType)
+	fb.FlamebearerProfileV1.Metadata.Format = "double"
+
+	return fb
 }
 
 // addTotalRoot updates the tree root with a 'total' node
