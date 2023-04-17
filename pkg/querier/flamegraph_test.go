@@ -57,7 +57,7 @@ func Test_ExportToFlamebearer(t *testing.T) {
 			SampleUnit: "bytes",
 			PeriodType: "space",
 			PeriodUnit: "bytes",
-		})
+		}, FormatSingle)
 	require.Equal(t, expected, actual)
 }
 

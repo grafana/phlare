@@ -113,11 +113,7 @@ func (q *Querier) RenderHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	selectParams, profileType, err := parseSelectProfilesRequest(renderRequestFieldNames{
-		query: "query",
-		from:  "from",
-		until: "until",
-	}, req)
+	selectParams, profileType, err := parseSelectProfilesRequest(renderRequestFieldNames{}, req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -142,6 +138,13 @@ type renderRequestFieldNames struct {
 
 // render/render?format=json&from=now-12h&until=now&query=pyroscope.server.cpu
 func parseSelectProfilesRequest(fieldNames renderRequestFieldNames, req *http.Request) (*querierv1.SelectMergeStacktracesRequest, *typesv1.ProfileType, error) {
+	if fieldNames == (renderRequestFieldNames{}) {
+		fieldNames = renderRequestFieldNames{
+			query: "query",
+			from:  "from",
+			until: "until",
+		}
+	}
 	selector, ptype, err := parseQuery(fieldNames.query, req)
 	if err != nil {
 		return nil, nil, err

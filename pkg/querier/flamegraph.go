@@ -107,7 +107,7 @@ type FlamegraphFormat string
 
 const (
 	FormatSingle FlamegraphFormat = "single"
-	FormatDiff                    = "double"
+	FormatDiff   FlamegraphFormat = "double"
 )
 
 // ExportToFlamebearer exports the flamegraph to a Flamebearer struct.
