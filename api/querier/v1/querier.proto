@@ -13,6 +13,7 @@ service QuerierService {
   rpc SelectMergeStacktraces(SelectMergeStacktracesRequest) returns (SelectMergeStacktracesResponse) {}
   rpc SelectMergeProfile(SelectMergeProfileRequest) returns (google.v1.Profile) {}
   rpc SelectSeries(SelectSeriesRequest) returns (SelectSeriesResponse) {}
+  rpc Diff(DiffRequest) returns (DiffResponse) {}
 }
 
 message ProfileTypesRequest {}
@@ -51,6 +52,16 @@ message SelectMergeStacktracesRequest {
 }
 
 message SelectMergeStacktracesResponse {
+  FlameGraph flamegraph = 1;
+}
+
+// TODO
+message DiffRequest {
+  SelectMergeStacktracesRequest left = 1;
+  SelectMergeStacktracesRequest right = 2;
+}
+
+message DiffResponse {
   FlameGraph flamegraph = 1;
 }
 

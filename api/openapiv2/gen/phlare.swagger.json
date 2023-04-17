@@ -441,6 +441,14 @@
         }
       }
     },
+    "v1DiffResponse": {
+      "type": "object",
+      "properties": {
+        "flamegraph": {
+          "$ref": "#/definitions/v1FlameGraph"
+        }
+      }
+    },
     "v1FlameGraph": {
       "type": "object",
       "properties": {
@@ -838,6 +846,25 @@
         }
       },
       "description": "Each Sample records values encountered in some program\ncontext. The program context is typically a stack trace, perhaps\naugmented with auxiliary information like the thread-id, some\nindicator of a higher level request being handled etc."
+    },
+    "v1SelectMergeStacktracesRequest": {
+      "type": "object",
+      "properties": {
+        "profileTypeID": {
+          "type": "string"
+        },
+        "labelSelector": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string",
+          "format": "int64"
+        },
+        "end": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
     },
     "v1SelectMergeStacktracesResponse": {
       "type": "object",

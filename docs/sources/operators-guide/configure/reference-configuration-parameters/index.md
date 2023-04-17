@@ -191,6 +191,11 @@ limits:
   # CLI flag: -validation.max-label-names-per-series
   [max_label_names_per_series: <int> | default = 30]
 
+  # The tenant's shard size used by shuffle-sharding. Must be set both on
+  # ingesters and distributors. 0 disables shuffle sharding.
+  # CLI flag: -distributor.ingestion-tenant-shard-size
+  [ingestion_tenant_shard_size: <int> | default = 0]
+
   # Maximum number of active series of profiles per tenant, per ingester. 0 to
   # disable.
   # CLI flag: -ingester.max-local-series-per-tenant

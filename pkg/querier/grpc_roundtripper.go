@@ -47,3 +47,7 @@ func (f *grpcRoundTripper) SelectMergeProfile(ctx context.Context, in *connect.R
 func (f *grpcRoundTripper) SelectSeries(ctx context.Context, in *connect.Request[querierv1.SelectSeriesRequest]) (*connect.Response[querierv1.SelectSeriesResponse], error) {
 	return connectgrpc.RoundTripUnary[querierv1.SelectSeriesRequest, querierv1.SelectSeriesResponse](f, ctx, in)
 }
+
+func (f *grpcRoundTripper) Diff(ctx context.Context, in *connect.Request[querierv1.DiffRequest]) (*connect.Response[querierv1.DiffResponse], error) {
+	return connectgrpc.RoundTripUnary[querierv1.DiffRequest, querierv1.DiffResponse](f, ctx, in)
+}

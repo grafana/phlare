@@ -95,7 +95,10 @@ func (q *Querier) RenderDiffHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	res, err := q.Diff(req.Context(), connect.NewRequest(leftSelectParams), connect.NewRequest(rightSelectParams))
+	res, err := q.Diff(req.Context(), connect.NewRequest(&querierv1.DiffRequest{
+		Left:  leftSelectParams,
+		Right: rightSelectParams,
+	}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
