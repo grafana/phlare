@@ -29,7 +29,6 @@ import (
 
 	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
-	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/distributor"
@@ -96,7 +95,8 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.registerQuerierHandlers(querier.NewGRPCRoundTripper(frontendSvc))
+	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc), f.Cfg.MultitenancyEnabled)
+
 	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
 	return frontendSvc, nil
 }
@@ -181,26 +181,13 @@ func (f *Phlare) setupWorkerTimeout() {
 	}
 }
 
-func (f *Phlare) registerQuerierHandlers(svc querierv1connect.QuerierServiceHandler) {
-	var (
-		handlers = querier.NewHTTPHandlers(svc)
-		wrap     = func(fn http.HandlerFunc) http.Handler {
-			return util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(fn)
-		}
-	)
-
-	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, svc, f.auth)
-	f.Server.HTTP.Handle("/pyroscope/render", wrap(handlers.Render))
-	f.Server.HTTP.Handle("/pyroscope/label-values", wrap(handlers.LabelValues))
-}
-
 func (f *Phlare) initQuerier() (services.Service, error) {
 	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, log.With(f.logger, "component", "querier"), f.auth)
 	if err != nil {
 		return nil, err
 	}
 	if !f.isModuleActive(QueryFrontend) {
-		f.registerQuerierHandlers(querierSvc)
+		f.API.RegisterQuerier(querierSvc, f.Cfg.MultitenancyEnabled)
 	}
 	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, querier.NewGRPCHandler(querierSvc), log.With(f.logger, "component", "querier-worker"), f.reg)
 	if err != nil {

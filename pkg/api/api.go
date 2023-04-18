@@ -20,6 +20,7 @@ import (
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
+	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/api/openapiv2"
 	"github.com/grafana/phlare/pkg/agent"
@@ -192,9 +193,12 @@ func (a *API) RegisterRing(r http.Handler) {
 }
 
 // RegisterQuerier registers the endpoints associated with the querier.
-func (a *API) RegisterQuerier(querierSvc *querier.Querier, multitenancyEnabled bool) {
-	a.server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.RenderHandler)))
-	a.server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.LabelValuesHandler)))
+func (a *API) RegisterQuerier(svc querierv1connect.QuerierServiceHandler, multitenancyEnabled bool) {
+	handlers := querier.NewHTTPHandlers(svc)
+	querierv1connect.RegisterQuerierServiceHandler(a.server.HTTP, svc, a.auth)
+
+	a.server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(handlers.Render)))
+	a.server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(handlers.LabelValues)))
 }
 
 func (a *API) RegisterAgent(ag *agent.Agent) error {
