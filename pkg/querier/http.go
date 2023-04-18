@@ -9,20 +9,30 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/gogo/status"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/pyroscope-io/pyroscope/pkg/util/attime"
 	"google.golang.org/grpc/codes"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
+	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 )
 
+func NewHTTPHandlers(svc querierv1connect.QuerierServiceHandler) *QueryHandlers {
+	return &QueryHandlers{svc}
+}
+
+type QueryHandlers struct {
+	upstream querierv1connect.QuerierServiceHandler
+}
+
 // LabelValuesHandler only returns the label values for the given label name.
 // This is mostly for fulfilling the pyroscope API and won't be used in the future.
 // /label-values?label=__name__
-func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
+func (q *QueryHandlers) LabelValues(w http.ResponseWriter, req *http.Request) {
 	label := req.URL.Query().Get("label")
 	if label == "" {
 		http.Error(w, "label parameter is required", http.StatusBadRequest)
@@ -34,7 +44,7 @@ func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
 	)
 
 	if label == "__name__" {
-		response, err := q.ProfileTypes(req.Context(), connect.NewRequest(&querierv1.ProfileTypesRequest{}))
+		response, err := q.upstream.ProfileTypes(req.Context(), connect.NewRequest(&querierv1.ProfileTypesRequest{}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -43,7 +53,7 @@ func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
 			res = append(res, t.ID)
 		}
 	} else {
-		response, err := q.LabelValues(req.Context(), connect.NewRequest(&querierv1.LabelValuesRequest{}))
+		response, err := q.upstream.LabelValues(req.Context(), connect.NewRequest(&querierv1.LabelValuesRequest{}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -63,7 +73,7 @@ func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (q *Querier) RenderHandler(w http.ResponseWriter, req *http.Request) {
+func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -73,7 +83,7 @@ func (q *Querier) RenderHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	res, err := q.SelectMergeStacktraces(req.Context(), connect.NewRequest(selectParams))
+	res, err := q.upstream.SelectMergeStacktraces(req.Context(), connect.NewRequest(selectParams))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -105,8 +115,8 @@ func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStackt
 		p.MaxNodes = int64(mn)
 	}
 
-	p.Start = attime.Parse(v.Get("from")).Unix()
-	p.End = attime.Parse(v.Get("until")).Unix()
+	p.Start = int64(model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano()))
+	p.End = int64(model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano()))
 
 	return p, ptype, nil
 }
