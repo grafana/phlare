@@ -119,17 +119,17 @@ func (a *API) newRoute(path string, handler http.Handler, isPrefix, auth, gzip b
 func (a *API) RegisterAPI(statusService statusv1.StatusServiceServer) error {
 	// register index page
 	a.RegisterRoute("/", indexHandler("", a.indexPage), false, true, "GET")
-	// register grpc-gateway api
-	a.RegisterRoutesWithPrefix("/api", a.grpcGatewayMux, false, true, "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS")
 	// expose openapiv2 definition
 	openapiv2Handler, err := openapiv2.Handler()
 	if err != nil {
 		return fmt.Errorf("unable to initialize openapiv2 handler: %w", err)
 	}
-	a.RegisterRoute("/api/openapiv2", openapiv2Handler, false, true, "GET")
+	a.RegisterRoute("/api/swagger.json", openapiv2Handler, false, true, "GET")
 	a.indexPage.AddLinks(openAPIDefinitionWeight, "OpenAPI definition", []IndexPageLink{
 		{Desc: "Swagger JSON", Path: "/api/swagger.json"},
 	})
+	// register grpc-gateway api
+	a.RegisterRoutesWithPrefix("/api", a.grpcGatewayMux, false, true, "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS")
 	// register fgprof
 	a.RegisterRoute("/debug/fgprof", fgprof.Handler(), false, true, "GET")
 	// register static assets

@@ -458,6 +458,11 @@ func (f *Phlare) initAPI() (services.Service, error) {
 		return nil, err
 	}
 	f.API = a
+
+	if err := f.API.RegisterAPI(f.statusService()); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 

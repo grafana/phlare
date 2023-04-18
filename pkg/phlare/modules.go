@@ -405,10 +405,6 @@ func (f *Phlare) initServer() (services.Service, error) {
 	f.Server.HTTPServer.Handler = h2c.NewHandler(f.Server.HTTPServer.Handler, &http2.Server{})
 	f.Server.HTTPServer.Handler = util.RecoveryHTTPMiddleware.Wrap(f.Server.HTTPServer.Handler)
 
-	if err := f.API.RegisterAPI(f.statusService()); err != nil {
-		return nil, err
-	}
-
 	return s, nil
 }
 
