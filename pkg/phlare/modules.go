@@ -27,13 +27,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v2"
 
-	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/distributor"
 	"github.com/grafana/phlare/pkg/frontend"
-	"github.com/grafana/phlare/pkg/frontend/frontendpb/frontendpbconnect"
 	"github.com/grafana/phlare/pkg/ingester"
 	objstoreclient "github.com/grafana/phlare/pkg/objstore/client"
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
@@ -41,7 +39,6 @@ import (
 	"github.com/grafana/phlare/pkg/querier"
 	"github.com/grafana/phlare/pkg/querier/worker"
 	"github.com/grafana/phlare/pkg/scheduler"
-	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
@@ -95,9 +92,9 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	f.API.RegisterQueryFrontend(frontendSvc)
 	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc), f.Cfg.MultitenancyEnabled)
 
-	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
 	return frontendSvc, nil
 }
 
@@ -160,8 +157,9 @@ func (f *Phlare) initQueryScheduler() (services.Service, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "query-scheduler init")
 	}
-	schedulerpbconnect.RegisterSchedulerForFrontendHandler(f.Server.HTTP, s)
-	schedulerpbconnect.RegisterSchedulerForQuerierHandler(f.Server.HTTP, s)
+
+	f.API.RegisterQueryScheduler(s)
+
 	return s, nil
 }
 
@@ -343,7 +341,8 @@ func (f *Phlare) initIngester() (_ services.Service, err error) {
 	if err != nil {
 		return nil, err
 	}
-	ingesterv1connect.RegisterIngesterServiceHandler(f.Server.HTTP, svc, f.auth)
+
+	f.API.RegisterIngester(svc)
 
 	return svc, nil
 }

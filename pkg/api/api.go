@@ -19,14 +19,20 @@ import (
 	"github.com/grafana/dskit/kv/memberlist"
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
+	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
 	"github.com/grafana/phlare/api/openapiv2"
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/distributor"
+	"github.com/grafana/phlare/pkg/frontend"
+	"github.com/grafana/phlare/pkg/frontend/frontendpb/frontendpbconnect"
+	"github.com/grafana/phlare/pkg/ingester"
 	"github.com/grafana/phlare/pkg/ingester/pyroscope"
 	"github.com/grafana/phlare/pkg/querier"
+	"github.com/grafana/phlare/pkg/scheduler"
+	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/gziphandler"
 	"github.com/grafana/phlare/pkg/validation/exporter"
@@ -177,6 +183,7 @@ func (a *API) RegisterDistributor(d *distributor.Distributor, multitenancyEnable
 	})
 }
 
+// RegisterMemberlistKV registers the endpoints associated with the memberlist KV store.
 func (a *API) RegisterMemberlistKV(pathPrefix string, kvs *memberlist.KVInitService) {
 	a.RegisterRoute("/memberlist", MemberlistStatusHandler(pathPrefix, kvs), false, true, "GET")
 	a.indexPage.AddLinks(memberlistWeight, "Memberlist", []IndexPageLink{
@@ -201,6 +208,7 @@ func (a *API) RegisterQuerier(svc querierv1connect.QuerierServiceHandler, multit
 	a.server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(handlers.LabelValues)))
 }
 
+// RegisterAgent registers the endpoints associated with the agent.
 func (a *API) RegisterAgent(ag *agent.Agent) error {
 	// register endpoint at grpc gateway
 	if err := agentv1.RegisterAgentServiceHandlerServer(context.Background(), a.grpcGatewayMux, ag); err != nil {
@@ -209,4 +217,20 @@ func (a *API) RegisterAgent(ag *agent.Agent) error {
 	agentv1connect.RegisterAgentServiceHandler(a.server.HTTP, ag.ConnectHandler())
 
 	return nil
+}
+
+// RegisterIngester registers the endpoints associated with the ingester.
+func (a *API) RegisterIngester(svc *ingester.Ingester) {
+	ingesterv1connect.RegisterIngesterServiceHandler(a.server.HTTP, svc, a.auth)
+}
+
+// RegisterQueryFrontend registers the endpoints associated with the query frontend.
+func (a *API) RegisterQueryFrontend(frontendSvc *frontend.Frontend) {
+	frontendpbconnect.RegisterFrontendForQuerierHandler(a.server.HTTP, frontendSvc, a.auth)
+}
+
+// RegisterQueryScheduler registers the endpoints associated with the query scheduler.
+func (a *API) RegisterQueryScheduler(s *scheduler.Scheduler) {
+	schedulerpbconnect.RegisterSchedulerForFrontendHandler(a.server.HTTP, s)
+	schedulerpbconnect.RegisterSchedulerForQuerierHandler(a.server.HTTP, s)
 }
