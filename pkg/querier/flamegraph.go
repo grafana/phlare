@@ -2,6 +2,7 @@ package querier
 
 import (
 	"github.com/pyroscope-io/pyroscope/pkg/storage/metadata"
+	"github.com/pyroscope-io/pyroscope/pkg/structs/cappedarr"
 	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
 	"github.com/samber/lo"
 
@@ -15,7 +16,7 @@ type stackNode struct {
 	node    *node
 }
 
-func NewFlameGraph(t *tree) *querierv1.FlameGraph {
+func NewFlameGraph(t *tree, maxNodes int) *querierv1.FlameGraph {
 	var total, max int64
 	for _, node := range t.root {
 		total += node.total
@@ -28,6 +29,8 @@ func NewFlameGraph(t *tree) *querierv1.FlameGraph {
 			stackIntPool.Put(stack)
 		}
 	}()
+
+	minVal := minValue(t, maxNodes)
 
 	stack := stackNodePool.Get().(*Stack[stackNode])
 	defer stackNodePool.Put(stack)
@@ -45,37 +48,40 @@ func NewFlameGraph(t *tree) *querierv1.FlameGraph {
 		var i int
 		var ok bool
 		name := current.node.name
-		if i, ok = nameLocationCache[name]; !ok {
-			i = len(names)
-			if i == 0 {
-				name = "total"
+		if current.node.total >= minVal || name == "other" {
+			if i, ok = nameLocationCache[name]; !ok {
+				i = len(names)
+				if i == 0 {
+					name = "total"
+				}
+				nameLocationCache[name] = i
+				names = append(names, name)
 			}
-			nameLocationCache[name] = i
-			names = append(names, name)
-		}
 
-		if current.level == len(res) {
-			s := stackIntPool.Get().(*Stack[int64])
-			s.Reset()
-			res = append(res, s)
-		}
+			if current.level == len(res) {
+				s := stackIntPool.Get().(*Stack[int64])
+				s.Reset()
+				res = append(res, s)
+			}
 
-		// i+0 = x offset
-		// i+1 = total
-		// i+2 = self
-		// i+3 = index in names array
-		level := res[current.level]
-		level.Push(int64(i))
-		level.Push((current.node.self))
-		level.Push((current.node.total))
-		level.Push(int64(current.xOffset))
-		current.xOffset += int(current.node.self)
+			// i+0 = x offset
+			// i+1 = total
+			// i+2 = self
+			// i+3 = index in names array
+			level := res[current.level]
+			level.Push(int64(i))
+			level.Push((current.node.self))
+			level.Push((current.node.total))
+			level.Push(int64(current.xOffset))
+			current.xOffset += int(current.node.self)
 
-		for _, child := range current.node.children {
-			stack.Push(stackNode{xOffset: current.xOffset, level: current.level + 1, node: child})
-			current.xOffset += int(child.total)
+			for _, child := range current.node.children {
+				stack.Push(stackNode{xOffset: current.xOffset, level: current.level + 1, node: child})
+				current.xOffset += int(child.total)
+			}
 		}
 	}
+
 	result := make([][]int64, len(res))
 	for i := range result {
 		result[i] = res[i].Slice()
@@ -137,4 +143,25 @@ func ExportToFlamebearer(fg *querierv1.FlameGraph, profileType *typesv1.ProfileT
 			},
 		},
 	}
+}
+
+const maxNodesDefault = 2048
+
+// minValue returns the minimum "total" value a node in a tree has to have to show up in
+// the resulting flamegraph
+func minValue(t *tree, maxNodes int) int64 {
+	if maxNodes == -1 {
+		return 0
+	} else if maxNodes == 0 {
+		return maxNodesDefault
+	}
+	c := cappedarr.New(maxNodes)
+	nodes := t.root
+	for len(nodes) > 0 {
+		node := nodes[0]
+		nodes = nodes[1:]
+		c.Push(uint64(node.total))
+		nodes = append(node.children, nodes...)
+	}
+	return int64(c.MinValue())
 }

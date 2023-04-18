@@ -217,6 +217,7 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 			otlog.String("end", model.Time(req.Msg.End).Time().String()),
 			otlog.String("selector", req.Msg.LabelSelector),
 			otlog.String("profile_id", req.Msg.ProfileTypeID),
+			otlog.Int64("max_nodes", req.Msg.MaxNodes),
 		)
 		sp.Finish()
 	}()
@@ -265,7 +266,7 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 		return nil, err
 	}
 	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: NewFlameGraph(newTree(st)),
+		Flamegraph: NewFlameGraph(newTree(st), int(req.Msg.MaxNodes)),
 	}), nil
 }
 

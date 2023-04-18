@@ -710,6 +710,11 @@ func (m *SelectMergeStacktracesRequest) MarshalToSizedBufferVT(dAtA []byte) (int
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.MaxNodes != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.MaxNodes))
+		i--
+		dAtA[i] = 0x28
+	}
 	if m.End != 0 {
 		i = encodeVarint(dAtA, i, uint64(m.End))
 		i--
@@ -1256,6 +1261,9 @@ func (m *SelectMergeStacktracesRequest) SizeVT() (n int) {
 	}
 	if m.End != 0 {
 		n += 1 + sov(uint64(m.End))
+	}
+	if m.MaxNodes != 0 {
+		n += 1 + sov(uint64(m.MaxNodes))
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -2166,6 +2174,25 @@ func (m *SelectMergeStacktracesRequest) UnmarshalVT(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.End |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxNodes", wireType)
+			}
+			m.MaxNodes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MaxNodes |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

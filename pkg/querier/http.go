@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/bufbuild/connect-go"
 	"github.com/gogo/status"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/pyroscope-io/pyroscope/pkg/util/attime"
 	"google.golang.org/grpc/codes"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
@@ -92,23 +92,23 @@ func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStackt
 		return nil, nil, err
 	}
 
-	// default start and end to now-1h
-	start := model.TimeFromUnixNano(time.Now().Add(-1 * time.Hour).UnixNano())
-	end := model.TimeFromUnixNano(time.Now().UnixNano())
-
-	if from := req.Form.Get("from"); from != "" {
-		from, err := parseRelativeTime(from)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse from: %w", err)
-		}
-		start = end.Add(-from)
-	}
-	return &querierv1.SelectMergeStacktracesRequest{
-		Start:         int64(start),
-		End:           int64(end),
+	p := &querierv1.SelectMergeStacktracesRequest{
 		LabelSelector: selector,
 		ProfileTypeID: ptype.ID,
-	}, ptype, nil
+	}
+
+	v := req.URL.Query()
+	if mn, err := strconv.Atoi(v.Get("max-nodes")); err == nil && mn != 0 {
+		p.MaxNodes = int64(mn)
+	}
+	if mn, err := strconv.Atoi(v.Get("maxNodes")); err == nil && mn != 0 {
+		p.MaxNodes = int64(mn)
+	}
+
+	p.Start = attime.Parse(v.Get("from")).Unix()
+	p.End = attime.Parse(v.Get("until")).Unix()
+
+	return p, ptype, nil
 }
 
 func parseQuery(req *http.Request) (string, *typesv1.ProfileType, error) {
@@ -140,17 +140,6 @@ func parseQuery(req *http.Request) (string, *typesv1.ProfileType, error) {
 		return "", nil, status.Error(codes.InvalidArgument, "failed to parse query")
 	}
 	return convertMatchersToString(sel), profileSelector, nil
-}
-
-func parseRelativeTime(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "now-")
-
-	d, err := model.ParseDuration(s)
-	if err != nil {
-		return 0, err
-	}
-	return time.Duration(d), nil
 }
 
 func convertMatchersToString(matchers []*labels.Matcher) string {
