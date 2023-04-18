@@ -153,7 +153,7 @@ func minValue(t *tree, maxNodes int) int64 {
 	if maxNodes == -1 {
 		return 0
 	} else if maxNodes == 0 {
-		return maxNodesDefault
+		maxNodes = maxNodesDefault
 	}
 	c := cappedarr.New(maxNodes)
 	nodes := t.root
