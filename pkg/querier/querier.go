@@ -209,7 +209,6 @@ func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.Ser
 	}), nil
 }
 
-// func (q *Querier) Diff(ctx context.Context, req1 *connect.Request[querierv1.SelectMergeStacktracesRequest], req2 *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
 func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffRequest]) (*connect.Response[querierv1.DiffResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "Diff")
 	defer func() {
