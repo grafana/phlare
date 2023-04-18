@@ -17,6 +17,12 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/gorilla/mux"
 	"github.com/grafana/dskit/kv/memberlist"
+	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/weaveworks/common/middleware"
+	"github.com/weaveworks/common/server"
+
+	"github.com/grafana/phlare/public"
+
 	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
@@ -36,10 +42,6 @@ import (
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/gziphandler"
 	"github.com/grafana/phlare/pkg/validation/exporter"
-	"github.com/grafana/phlare/public"
-	grpcgw "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/weaveworks/common/middleware"
-	"github.com/weaveworks/common/server"
 )
 
 type Config struct {
@@ -95,6 +97,7 @@ func (a *API) RegisterRoutesWithPrefix(prefix string, handler http.Handler, auth
 	a.newRoute(prefix, handler, true, auth, gzipEnabled, methods...)
 }
 
+//nolint:unparam
 func (a *API) newRoute(path string, handler http.Handler, isPrefix, auth, gzip bool, methods ...string) (route *mux.Route) {
 	if auth {
 		handler = a.AuthMiddleware.Wrap(handler)
