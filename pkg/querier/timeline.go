@@ -6,7 +6,7 @@ import (
 	v1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
 
-// NewTimeline generates a Pyroscope Timeline
+// NewTimeline generates a FlamebearerTimeline
 // It assumes:
 // * Ordered
 // * startMs is earlier than the first series value
@@ -14,8 +14,8 @@ import (
 func NewTimeline(series *v1.Series, startMs int64, endMs int64, durationDeltaSec int64) *flamebearer.FlamebearerTimelineV1 {
 	// ms to seconds
 	startSec := startMs / 1000
-
 	points := series.GetPoints()
+	res := make([]uint64, len(points))
 
 	if len(points) < 1 {
 		return &flamebearer.FlamebearerTimelineV1{
@@ -25,49 +25,46 @@ func NewTimeline(series *v1.Series, startMs int64, endMs int64, durationDeltaSec
 		}
 	}
 
-	firstAvailableData := points[0]
-	lastAvailableData := points[len(points)-1]
-
-	// Backfill with 0s for data that's not available
-	backFillStart := backfill(startMs, firstAvailableData.Timestamp, durationDeltaSec)
-	backFillEnd := backfill(lastAvailableData.Timestamp, endMs, durationDeltaSec)
-
-	samples := make([]uint64, len(points))
-
 	i := 0
 	prev := points[0]
-	for _, p := range points {
-		backfillNum := sizeToBackfill(prev.Timestamp, p.Timestamp, durationDeltaSec)
+	for _, curr := range points {
+		backfillNum := sizeToBackfill(prev.Timestamp, curr.Timestamp, durationDeltaSec)
 
 		if backfillNum > 0 {
 			// backfill + newValue
-			bf := append(backfill(prev.Timestamp, p.Timestamp, durationDeltaSec), uint64(p.Value))
+			bf := append(backfill(prev.Timestamp, curr.Timestamp, durationDeltaSec), uint64(curr.Value))
 
 			// break the slice
-			first := samples[:i]
-			second := samples[i:]
+			first := res[:i]
+			second := res[i:]
 
 			// add new backfilled items
 			first = append(first, bf...)
 
 			// concatenate the three slices to form the new slice
-			samples = append(first, second...)
-			prev = p
+			res = append(first, second...)
+			prev = curr
 			i = i + int(backfillNum)
 		} else {
-			samples[i] = uint64(p.Value)
-			prev = p
+			res[i] = uint64(curr.Value)
+			prev = curr
 			i = i + 1
 		}
 	}
 
-	samples = append(backFillStart, samples...)
-	samples = append(samples, backFillEnd...)
+	// Backfill with 0s for data that's not available
+	firstAvailableData := points[0]
+	lastAvailableData := points[len(points)-1]
+	backFillHead := backfill(startMs, firstAvailableData.Timestamp, durationDeltaSec)
+	backFillTail := backfill(lastAvailableData.Timestamp, endMs, durationDeltaSec)
+
+	res = append(backFillHead, res...)
+	res = append(res, backFillTail...)
 
 	timeline := &flamebearer.FlamebearerTimelineV1{
 		StartTime:     startSec,
 		DurationDelta: durationDeltaSec,
-		Samples:       samples,
+		Samples:       res,
 	}
 
 	return timeline
@@ -78,7 +75,7 @@ func NewTimeline(series *v1.Series, startMs int64, endMs int64, durationDeltaSec
 func sizeToBackfill(startMs int64, endMs int64, stepSec int64) int64 {
 	startSec := startMs / 1000
 	endSec := endMs / 1000
-	size := ((endSec - startSec) - stepSec) / stepSec
+	size := ((endSec - startSec) / stepSec) - 1
 	return size
 }
 
