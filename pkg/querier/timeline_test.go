@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/querier"
-	"github.com/stretchr/testify/assert"
 )
 
 const TimelineStepSec = 10

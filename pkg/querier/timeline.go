@@ -1,8 +1,9 @@
 package querier
 
 import (
-	v1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
+
+	v1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
 
 // NewTimeline generates a Pyroscope Timeline
