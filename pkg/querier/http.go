@@ -87,8 +87,37 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// TODO: where to do this?
+	timelineStep := 10
+	series, err := q.upstream.SelectSeries(req.Context(),
+		connect.NewRequest(&querierv1.SelectSeriesRequest{
+			ProfileTypeID: selectParams.ProfileTypeID,
+			LabelSelector: selectParams.LabelSelector,
+			Start:         selectParams.Start,
+			End:           selectParams.End,
+			Step:          float64(timelineStep),
+		}))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(series.Msg.Series) > 1 {
+		http.Error(w, fmt.Sprintf("can't construct timeline since multiple series have been returned: '%d'", len(series.Msg.Series)), http.StatusBadRequest)
+		return
+	}
+
+	seriesVal := &typesv1.Series{}
+	if len(series.Msg.Series) == 1 {
+		seriesVal = series.Msg.Series[0]
+	}
+
+	fb := ExportToFlamebearer(res.Msg.Flamegraph, profileType)
+	fb.Timeline = NewTimeline(seriesVal, selectParams.Start, selectParams.End, int64(timelineStep))
+
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, profileType)); err != nil {
+	if err := json.NewEncoder(w).Encode(fb); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

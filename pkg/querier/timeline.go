@@ -7,33 +7,40 @@ import (
 
 // NewTimeline generates a Pyroscope Timeline
 // It assumes:
-// * 10 second step
 // * Ordered
-// * Non-zero
 // * startMs is earlier than the first series value
 // * endMs is after the last series value
-func NewTimeline(series *v1.Series, startMs int64, endMs int64) *flamebearer.FlamebearerTimelineV1 {
+func NewTimeline(series *v1.Series, startMs int64, endMs int64, durationDeltaSec int64) *flamebearer.FlamebearerTimelineV1 {
+	// ms to seconds
+	startSec := startMs / 1000
+
 	points := series.GetPoints()
-	durationDeltaInSec := int64(10)
+
+	if len(points) < 1 {
+		return &flamebearer.FlamebearerTimelineV1{
+			StartTime:     startSec,
+			DurationDelta: durationDeltaSec,
+			Samples:       backfill(startMs, endMs, durationDeltaSec),
+		}
+	}
 
 	firstAvailableData := points[0]
 	lastAvailableData := points[len(points)-1]
 
-	// TODO: what if it returns < 0
 	// Backfill with 0s for data that's not available
-	backFillStart := backfill(startMs, firstAvailableData.Timestamp, durationDeltaInSec)
-	backFillEnd := backfill(lastAvailableData.Timestamp, endMs, durationDeltaInSec)
+	backFillStart := backfill(startMs, firstAvailableData.Timestamp, durationDeltaSec)
+	backFillEnd := backfill(lastAvailableData.Timestamp, endMs, durationDeltaSec)
 
 	samples := make([]uint64, len(points))
 
 	i := 0
 	prev := points[0]
 	for _, p := range points {
-		backfillNum := needsToBackfill(prev.Timestamp, p.Timestamp, durationDeltaInSec)
+		backfillNum := sizeToBackfill(prev.Timestamp, p.Timestamp, durationDeltaSec)
 
 		if backfillNum > 0 {
 			// backfill + newValue
-			bf := append(backfill(prev.Timestamp, p.Timestamp, durationDeltaInSec), uint64(p.Value))
+			bf := append(backfill(prev.Timestamp, p.Timestamp, durationDeltaSec), uint64(p.Value))
 
 			// break the slice
 			first := samples[:i]
@@ -57,17 +64,17 @@ func NewTimeline(series *v1.Series, startMs int64, endMs int64) *flamebearer.Fla
 	samples = append(samples, backFillEnd...)
 
 	timeline := &flamebearer.FlamebearerTimelineV1{
-		// ms to seconds
-		StartTime:     startMs / 1000,
-		DurationDelta: durationDeltaInSec,
-		// Each point corresponds to 10 seconds
-		Samples: samples,
+		StartTime:     startSec,
+		DurationDelta: durationDeltaSec,
+		Samples:       samples,
 	}
 
 	return timeline
 }
 
-func needsToBackfill(startMs int64, endMs int64, stepSec int64) int64 {
+// sizeToBackfill indicates how many items are needed to backfill
+// if none are needed, a negative value is returned
+func sizeToBackfill(startMs int64, endMs int64, stepSec int64) int64 {
 	startSec := startMs / 1000
 	endSec := endMs / 1000
 	size := ((endSec - startSec) - stepSec) / stepSec
@@ -75,10 +82,7 @@ func needsToBackfill(startMs int64, endMs int64, stepSec int64) int64 {
 }
 
 func backfill(startMs int64, endMs int64, stepSec int64) []uint64 {
-	startSec := startMs / 1000
-	endSec := endMs / 1000
-
-	size := ((endSec - startSec) - stepSec) / stepSec
+	size := sizeToBackfill(startMs, endMs, stepSec)
 	if size <= 0 {
 		size = 0
 	}
