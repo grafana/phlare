@@ -298,20 +298,21 @@ func (f *Phlare) setupModuleManager() error {
 	deps := map[string][]string{
 		All: {Agent, Ingester, Distributor, QueryScheduler, QueryFrontend, Querier},
 
-		Agent:          {Server},
-		Distributor:    {Overrides, Ring, Server, UsageReport},
-		Querier:        {Server, MemberlistKV, Ring, UsageReport},
-		QueryFrontend:  {OverridesExporter, Server, MemberlistKV, UsageReport},
-		QueryScheduler: {Overrides, Server, MemberlistKV, UsageReport},
-		Ingester:       {Overrides, Server, MemberlistKV, Storage, UsageReport},
+		Server:         {GRPCGateway},
+		API:            {Server},
+		Agent:          {API},
+		Distributor:    {Overrides, Ring, API, UsageReport},
+		Querier:        {API, MemberlistKV, Ring, UsageReport},
+		QueryFrontend:  {OverridesExporter, API, MemberlistKV, UsageReport},
+		QueryScheduler: {Overrides, API, MemberlistKV, UsageReport},
+		Ingester:       {Overrides, API, MemberlistKV, Storage, UsageReport},
 
 		UsageReport:       {Storage, MemberlistKV},
 		Overrides:         {RuntimeConfig},
 		OverridesExporter: {Overrides, MemberlistKV},
-		RuntimeConfig:     {Server},
-		Ring:              {Server, MemberlistKV},
-		MemberlistKV:      {Server},
-		Server:            {GRPCGateway},
+		RuntimeConfig:     {API},
+		Ring:              {API, MemberlistKV},
+		MemberlistKV:      {API},
 	}
 
 	for mod, targets := range deps {
