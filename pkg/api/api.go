@@ -39,46 +39,41 @@ import (
 	"github.com/grafana/phlare/pkg/querier"
 	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
-	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/gziphandler"
 	"github.com/grafana/phlare/pkg/validation/exporter"
 )
 
 type Config struct {
 	// The following configs are injected by the upstream caller.
-	ServerPrefix       string               `yaml:"-"`
 	HTTPAuthMiddleware middleware.Interface `yaml:"-"`
+	GrpcAuthMiddleware connect.Option       `yaml:"-"`
 }
 
 type API struct {
-	AuthMiddleware middleware.Interface
+	httpAuthMiddleware middleware.Interface
+	grpcGatewayMux     *grpcgw.ServeMux
+	grpcAuthMiddleware connect.Option
 
 	cfg       Config
 	server    *server.Server
 	logger    log.Logger
 	indexPage *IndexPageContent
-
-	grpcGatewayMux *grpcgw.ServeMux
-	auth           connect.Option
 }
 
-func New(cfg Config, s *server.Server, grpcGatewayMux *grpcgw.ServeMux, auth connect.Option, logger log.Logger) (*API, error) {
-	// Ensure the encoded path is used. Required for the rules API
-	s.HTTP.UseEncodedPath()
-
+func New(cfg Config, s *server.Server, grpcGatewayMux *grpcgw.ServeMux, logger log.Logger) (*API, error) {
 	api := &API{
-		cfg:            cfg,
-		AuthMiddleware: cfg.HTTPAuthMiddleware,
-		server:         s,
-		logger:         logger,
-		indexPage:      NewIndexPageContent(),
-		grpcGatewayMux: grpcGatewayMux,
-		auth:           auth,
+		cfg:                cfg,
+		httpAuthMiddleware: cfg.HTTPAuthMiddleware,
+		server:             s,
+		logger:             logger,
+		indexPage:          NewIndexPageContent(),
+		grpcGatewayMux:     grpcGatewayMux,
+		grpcAuthMiddleware: cfg.GrpcAuthMiddleware,
 	}
 
 	// If no authentication middleware is present in the config, use the default authentication middleware.
 	if cfg.HTTPAuthMiddleware == nil {
-		api.AuthMiddleware = middleware.AuthenticateUser
+		api.httpAuthMiddleware = middleware.AuthenticateUser
 	}
 
 	return api, nil
@@ -100,7 +95,7 @@ func (a *API) RegisterRoutesWithPrefix(prefix string, handler http.Handler, auth
 //nolint:unparam
 func (a *API) newRoute(path string, handler http.Handler, isPrefix, auth, gzip bool, methods ...string) (route *mux.Route) {
 	if auth {
-		handler = a.AuthMiddleware.Wrap(handler)
+		handler = a.httpAuthMiddleware.Wrap(handler)
 	}
 	if gzip {
 		handler = gziphandler.GzipHandler(handler)
@@ -177,9 +172,9 @@ func (a *API) RegisterOverridesExporter(oe *exporter.OverridesExporter) {
 }
 
 // RegisterDistributor registers the endpoints associated with the distributor.
-func (a *API) RegisterDistributor(d *distributor.Distributor, multitenancyEnabled bool) {
-	a.server.HTTP.Handle("/pyroscope/ingest", util.AuthenticateUser(multitenancyEnabled).Wrap(pyroscope.NewPyroscopeIngestHandler(d, a.logger)))
-	pushv1connect.RegisterPusherServiceHandler(a.server.HTTP, d, a.auth)
+func (a *API) RegisterDistributor(d *distributor.Distributor) {
+	a.RegisterRoute("/pyroscope/ingest", pyroscope.NewPyroscopeIngestHandler(d, a.logger), true, true, "POST")
+	pushv1connect.RegisterPusherServiceHandler(a.server.HTTP, d, a.grpcAuthMiddleware)
 	a.RegisterRoute("/distributor/ring", d, false, true, "GET", "POST")
 	a.indexPage.AddLinks(defaultWeight, "Distributor", []IndexPageLink{
 		{Desc: "Ring status", Path: "/distributor/ring"},
@@ -203,12 +198,12 @@ func (a *API) RegisterRing(r http.Handler) {
 }
 
 // RegisterQuerier registers the endpoints associated with the querier.
-func (a *API) RegisterQuerier(svc querierv1connect.QuerierServiceHandler, multitenancyEnabled bool) {
+func (a *API) RegisterQuerier(svc querierv1connect.QuerierServiceHandler) {
 	handlers := querier.NewHTTPHandlers(svc)
-	querierv1connect.RegisterQuerierServiceHandler(a.server.HTTP, svc, a.auth)
+	querierv1connect.RegisterQuerierServiceHandler(a.server.HTTP, svc, a.grpcAuthMiddleware)
 
-	a.server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(handlers.Render)))
-	a.server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(multitenancyEnabled).Wrap(http.HandlerFunc(handlers.LabelValues)))
+	a.RegisterRoute("/pyroscope/render", http.HandlerFunc(handlers.Render), true, true, "GET")
+	a.RegisterRoute("/pyroscope/label-values", http.HandlerFunc(handlers.LabelValues), true, true, "GET")
 }
 
 // RegisterAgent registers the endpoints associated with the agent.
@@ -224,12 +219,12 @@ func (a *API) RegisterAgent(ag *agent.Agent) error {
 
 // RegisterIngester registers the endpoints associated with the ingester.
 func (a *API) RegisterIngester(svc *ingester.Ingester) {
-	ingesterv1connect.RegisterIngesterServiceHandler(a.server.HTTP, svc, a.auth)
+	ingesterv1connect.RegisterIngesterServiceHandler(a.server.HTTP, svc, a.grpcAuthMiddleware)
 }
 
 // RegisterQueryFrontend registers the endpoints associated with the query frontend.
 func (a *API) RegisterQueryFrontend(frontendSvc *frontend.Frontend) {
-	frontendpbconnect.RegisterFrontendForQuerierHandler(a.server.HTTP, frontendSvc, a.auth)
+	frontendpbconnect.RegisterFrontendForQuerierHandler(a.server.HTTP, frontendSvc, a.grpcAuthMiddleware)
 }
 
 // RegisterQueryScheduler registers the endpoints associated with the query scheduler.

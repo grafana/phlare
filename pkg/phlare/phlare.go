@@ -270,6 +270,12 @@ func New(cfg Config) (*Phlare, error) {
 		cfg.AgentConfig.ClientConfig.URL.String(),
 		phlare.auth,
 	)
+
+	cfg.API = api.Config{
+		HTTPAuthMiddleware: util.AuthenticateUser(cfg.MultitenancyEnabled),
+		GrpcAuthMiddleware: phlare.auth,
+	}
+
 	return phlare, nil
 }
 
@@ -451,9 +457,7 @@ func initLogger(cfg *server.Config) log.Logger {
 }
 
 func (f *Phlare) initAPI() (services.Service, error) {
-	f.Cfg.API.ServerPrefix = f.Cfg.Server.PathPrefix
-
-	a, err := api.New(f.Cfg.API, f.Server, f.grpcGatewayMux, f.auth, util.Logger)
+	a, err := api.New(f.Cfg.API, f.Server, f.grpcGatewayMux, util.Logger)
 	if err != nil {
 		return nil, err
 	}

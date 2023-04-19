@@ -93,7 +93,7 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 		return nil, err
 	}
 	f.API.RegisterQueryFrontend(frontendSvc)
-	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc), f.Cfg.MultitenancyEnabled)
+	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc))
 
 	return frontendSvc, nil
 }
@@ -185,7 +185,7 @@ func (f *Phlare) initQuerier() (services.Service, error) {
 		return nil, err
 	}
 	if !f.isModuleActive(QueryFrontend) {
-		f.API.RegisterQuerier(querierSvc, f.Cfg.MultitenancyEnabled)
+		f.API.RegisterQuerier(querierSvc)
 	}
 	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, querier.NewGRPCHandler(querierSvc), log.With(f.logger, "component", "querier-worker"), f.reg)
 	if err != nil {
@@ -247,7 +247,7 @@ func (f *Phlare) initDistributor() (services.Service, error) {
 	// initialise direct pusher, this overwrites the default HTTP client
 	f.pusherClient = d
 
-	f.API.RegisterDistributor(d, f.Cfg.MultitenancyEnabled)
+	f.API.RegisterDistributor(d)
 	return d, nil
 }
 
