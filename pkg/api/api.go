@@ -50,12 +50,12 @@ type Config struct {
 }
 
 type API struct {
+	server             *server.Server
 	httpAuthMiddleware middleware.Interface
 	grpcGatewayMux     *grpcgw.ServeMux
 	grpcAuthMiddleware connect.Option
 
 	cfg       Config
-	server    *server.Server
 	logger    log.Logger
 	indexPage *IndexPageContent
 }
