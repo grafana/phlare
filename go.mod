@@ -278,5 +278,6 @@ replace (
 	// merged upstream yet.
 	github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20220708130638-bd88e10a3d91
 	github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.41.0
+	github.com/pyroscope-io/pyroscope => ../../pyroscope/pyroscope
 	google.golang.org/grpc => google.golang.org/grpc v1.44.0
 )
