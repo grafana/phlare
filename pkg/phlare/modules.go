@@ -266,8 +266,9 @@ func (f *Phlare) initDistributor() (services.Service, error) {
 
 	// initialise direct pusher, this overwrites the default HTTP client
 	f.pusherClient = d
-	pyroscopePath := "/pyroscope/ingest"
-	f.Server.HTTP.Handle(pyroscopePath, util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(pyroscope.NewPyroscopeIngestHandler(d, f.logger)))
+	pyroscopeHandler := util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(pyroscope.NewPyroscopeIngestHandler(d, f.logger))
+	f.Server.HTTP.Handle("/pyroscope/ingest", pyroscopeHandler)
+	f.Server.HTTP.Handle("/ingest", pyroscopeHandler)
 	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d, f.auth)
 	f.Server.HTTP.Path("/distributor/ring").Methods("GET", "POST").Handler(d)
 	f.IndexPage.AddLinks(api.DefaultWeight, "Distributor", []api.IndexPageLink{
