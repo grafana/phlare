@@ -137,7 +137,7 @@ func (a *API) RegisterAPI(statusService statusv1.StatusServiceServer) error {
 	if err != nil {
 		return fmt.Errorf("unable to initialize the ui: %w", err)
 	}
-	a.RegisterRoutesWithPrefix("/ui/", http.FileServer(uiAssets), false, true, "GET")
+	a.RegisterRoutesWithPrefix("/ui/", http.StripPrefix("/ui/", http.FileServer(uiAssets)), false, true, "GET")
 	// register status service providing config and buildinfo at grpc gateway
 	if err := statusv1.RegisterStatusServiceHandlerServer(context.Background(), a.grpcGatewayMux, statusService); err != nil {
 		return err
