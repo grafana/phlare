@@ -113,11 +113,6 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(resSeries.Msg.Series) > 1 {
-		http.Error(w, fmt.Sprintf("can't construct timeline since multiple series have been returned: '%d'", len(resSeries.Msg.Series)), http.StatusBadRequest)
-		return
-	}
-
 	seriesVal := &typesv1.Series{}
 	if len(resSeries.Msg.Series) == 1 {
 		seriesVal = resSeries.Msg.Series[0]
