@@ -271,7 +271,7 @@ func New(cfg Config) (*Phlare, error) {
 		phlare.auth,
 	)
 
-	cfg.API = api.Config{
+	phlare.Cfg.API = api.Config{
 		HTTPAuthMiddleware: util.AuthenticateUser(cfg.MultitenancyEnabled),
 		GrpcAuthMiddleware: phlare.auth,
 	}
