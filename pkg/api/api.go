@@ -173,7 +173,9 @@ func (a *API) RegisterOverridesExporter(oe *exporter.OverridesExporter) {
 
 // RegisterDistributor registers the endpoints associated with the distributor.
 func (a *API) RegisterDistributor(d *distributor.Distributor) {
-	a.RegisterRoute("/pyroscope/ingest", pyroscope.NewPyroscopeIngestHandler(d, a.logger), true, true, "POST")
+	pyroscopeHandler := pyroscope.NewPyroscopeIngestHandler(d, a.logger)
+	a.RegisterRoute("/ingest", pyroscopeHandler, true, true, "POST")
+	a.RegisterRoute("/pyroscope/ingest", pyroscopeHandler, true, true, "POST")
 	pushv1connect.RegisterPusherServiceHandler(a.server.HTTP, d, a.grpcAuthMiddleware)
 	a.RegisterRoute("/distributor/ring", d, false, true, "GET", "POST")
 	a.indexPage.AddLinks(defaultWeight, "Distributor", []IndexPageLink{
