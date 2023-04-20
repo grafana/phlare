@@ -23,7 +23,7 @@ func CalcPointInterval(fromMs int64, untilMs int64) float64 {
 	calculatedIntervalNano := time.Duration((untilNano - fromNano) / resolution)
 
 	if calculatedIntervalNano < DefaultMinInterval {
-		return float64(DefaultMinInterval.Seconds())
+		return DefaultMinInterval.Seconds()
 	}
 
 	return roundInterval(calculatedIntervalNano).Seconds()

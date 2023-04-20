@@ -50,6 +50,7 @@ func Test_Backfill_Data_Start_End(t *testing.T) {
 }
 
 func Test_Backfill_Data_Middle(t *testing.T) {
+	TestDate := time.Now()
 	startTime := TestDate.Add(-1 * time.Minute).UnixMilli()
 	endTime := TestDate.Add(1 * time.Minute).UnixMilli()
 
@@ -73,6 +74,7 @@ func Test_Backfill_Data_Middle(t *testing.T) {
 }
 
 func Test_Backfill_All(t *testing.T) {
+	TestDate := time.Now()
 	startTime := TestDate.Add(-1 * time.Minute).UnixMilli()
 	endTime := TestDate.Add(1 * time.Minute).UnixMilli()
 

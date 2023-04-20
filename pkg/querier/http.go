@@ -101,7 +101,7 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 				LabelSelector: selectParams.LabelSelector,
 				Start:         selectParams.Start,
 				End:           selectParams.End,
-				Step:          float64(timelineStep),
+				Step:          timelineStep,
 			}))
 
 		return err

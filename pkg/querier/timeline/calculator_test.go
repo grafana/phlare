@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grafana/phlare/pkg/querier/timeline"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/grafana/phlare/pkg/querier/timeline"
 )
 
 func Test_CalcPointInterval(t *testing.T) {
