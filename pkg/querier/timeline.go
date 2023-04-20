@@ -6,7 +6,8 @@ import (
 	v1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
 
-// NewTimeline generates a FlamebearerTimeline
+// NewTimeline generates a FlamebearerTimeline,
+// backfilling any missing data with zeros
 // It assumes:
 // * Ordered
 // * startMs is earlier than the first series value

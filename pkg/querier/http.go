@@ -18,6 +18,7 @@ import (
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
+	"github.com/grafana/phlare/pkg/querier/timeline"
 )
 
 func NewHTTPHandlers(svc querierv1connect.QuerierServiceHandler) *QueryHandlers {
@@ -88,8 +89,7 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// TODO: where to do this?
-	timelineStep := 10
+	timelineStep := timeline.CalcPointInterval(selectParams.Start, selectParams.End)
 	series, err := q.upstream.SelectSeries(req.Context(),
 		connect.NewRequest(&querierv1.SelectSeriesRequest{
 			ProfileTypeID: selectParams.ProfileTypeID,
