@@ -1,4 +1,4 @@
-package querier
+package timeline
 
 import (
 	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
@@ -6,13 +6,13 @@ import (
 	v1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )
 
-// NewTimeline generates a FlamebearerTimeline,
+// New generates a FlamebearerTimeline,
 // backfilling any missing data with zeros
 // It assumes:
 // * Ordered
 // * startMs is earlier than the first series value
 // * endMs is after the last series value
-func NewTimeline(series *v1.Series, startMs int64, endMs int64, durationDeltaSec int64) *flamebearer.FlamebearerTimelineV1 {
+func New(series *v1.Series, startMs int64, endMs int64, durationDeltaSec int64) *flamebearer.FlamebearerTimelineV1 {
 	// ms to seconds
 	startSec := startMs / 1000
 	points := series.GetPoints()

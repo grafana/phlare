@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/pyroscope-io/pyroscope/pkg/util/attime"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
@@ -83,38 +84,47 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	res, err := q.upstream.SelectMergeStacktraces(req.Context(), connect.NewRequest(selectParams))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+
+	var resFlame *connect.Response[querierv1.SelectMergeStacktracesResponse]
+	g, ctx := errgroup.WithContext(req.Context())
+	g.Go(func() error {
+		resFlame, err = q.upstream.SelectMergeStacktraces(ctx, connect.NewRequest(selectParams))
+		return err
+	})
 
 	timelineStep := timeline.CalcPointInterval(selectParams.Start, selectParams.End)
-	series, err := q.upstream.SelectSeries(req.Context(),
-		connect.NewRequest(&querierv1.SelectSeriesRequest{
-			ProfileTypeID: selectParams.ProfileTypeID,
-			LabelSelector: selectParams.LabelSelector,
-			Start:         selectParams.Start,
-			End:           selectParams.End,
-			Step:          float64(timelineStep),
-		}))
+	var resSeries *connect.Response[querierv1.SelectSeriesResponse]
+	g.Go(func() error {
+		resSeries, err = q.upstream.SelectSeries(req.Context(),
+			connect.NewRequest(&querierv1.SelectSeriesRequest{
+				ProfileTypeID: selectParams.ProfileTypeID,
+				LabelSelector: selectParams.LabelSelector,
+				Start:         selectParams.Start,
+				End:           selectParams.End,
+				Step:          float64(timelineStep),
+			}))
+
+		return err
+	})
+
+	err = g.Wait()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if len(series.Msg.Series) > 1 {
-		http.Error(w, fmt.Sprintf("can't construct timeline since multiple series have been returned: '%d'", len(series.Msg.Series)), http.StatusBadRequest)
+	if len(resSeries.Msg.Series) > 1 {
+		http.Error(w, fmt.Sprintf("can't construct timeline since multiple series have been returned: '%d'", len(resSeries.Msg.Series)), http.StatusBadRequest)
 		return
 	}
 
 	seriesVal := &typesv1.Series{}
-	if len(series.Msg.Series) == 1 {
-		seriesVal = series.Msg.Series[0]
+	if len(resSeries.Msg.Series) == 1 {
+		seriesVal = resSeries.Msg.Series[0]
 	}
 
-	fb := ExportToFlamebearer(res.Msg.Flamegraph, profileType)
-	fb.Timeline = NewTimeline(seriesVal, selectParams.Start, selectParams.End, int64(timelineStep))
+	fb := ExportToFlamebearer(resFlame.Msg.Flamegraph, profileType)
+	fb.Timeline = timeline.New(seriesVal, selectParams.Start, selectParams.End, int64(timelineStep))
 
 	w.Header().Add("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(fb); err != nil {

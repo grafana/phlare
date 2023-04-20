@@ -8,11 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	TestDate = time.Date(2023, time.April, 18, 1, 2, 3, 4, time.UTC)
-)
-
 func Test_CalcPointInterval(t *testing.T) {
+	TestDate := time.Date(2023, time.April, 18, 1, 2, 3, 4, time.UTC)
+
 	testCases := []struct {
 		name  string
 		start time.Time
