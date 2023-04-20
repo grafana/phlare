@@ -11,7 +11,6 @@
 
       "@webapp/components/ExportData": ["./public/app/overrides/components/ExportData"],
       "@webapp/components/TimelineChart/ContextMenu.plugin": ["./public/app/overrides/components/TimelineChart/ContextMenu.plugin"],
-      "@webapp/components/TimelineChart/Tooltip.plugin": ["./public/app/overrides/components/TimelineChart/Tooltip.plugin"],
       "@webapp/components/AppSelector/Label": ["./public/app/overrides/components/AppSelector/Label"],
 
       "@webapp/redux/store": ["./public/app/redux/store"],

@@ -43,10 +43,6 @@ module.exports = {
         __dirname,
         '../../public/app/overrides/components/TimelineChart/ContextMenu.plugin'
       ),
-      '@webapp/components/TimelineChart/Tooltip.plugin': path.resolve(
-        __dirname,
-        '../../public/app/overrides/components/TimelineChart/Tooltip.plugin'
-      ),
       '@webapp/components/AppSelector/Label': path.resolve(
         __dirname,
         '../../public/app/overrides/components/AppSelector/Label'
