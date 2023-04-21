@@ -21,7 +21,7 @@ module.exports = {
   },
   output: {
     clean: true,
-    path: path.resolve(__dirname, '../../public/build'),
+    path: path.resolve(__dirname, '../../public/build/assets'),
     filename: '[name].[contenthash].js',
     publicPath: '',
   },
