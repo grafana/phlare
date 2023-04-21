@@ -315,6 +315,7 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 }
 
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
+	// todo wait group for flushing.
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
 
 	for i, fp := range seriesFingerprints {

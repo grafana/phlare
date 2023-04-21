@@ -15,6 +15,7 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/google/uuid"
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/services"
 	"github.com/oklog/ulid"
@@ -24,7 +25,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 
+	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
+	pushv1 "github.com/grafana/phlare/api/gen/proto/go/push/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
@@ -32,6 +35,7 @@ import (
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
+	"github.com/grafana/phlare/pkg/pprof"
 	diskutil "github.com/grafana/phlare/pkg/util/disk"
 )
 
@@ -295,6 +299,38 @@ func (f *PhlareDB) Head() *Head {
 	f.headLock.RLock()
 	defer f.headLock.RUnlock()
 	return f.head
+}
+
+// Ingest ingest a given a set of profiles into the head block.
+func (f *PhlareDB) Ingest(ctx context.Context, req *pushv1.PushRequest) ([]error, []int64) {
+	var (
+		errors []error
+		sizes  []int64
+		head   = f.Head()
+	)
+
+	for _, series := range req.Series {
+		for _, sample := range series.Samples {
+			// todo: log the request into the wall.
+			// we should have a single wall per head block.
+			err := pprof.FromBytes(sample.RawProfile, func(p *profilev1.Profile, size int) error {
+				sizes = append(sizes, int64(size))
+				id, err := uuid.Parse(sample.ID)
+				if err != nil {
+					errors = append(errors, err) // todo this should 400
+				}
+				// todo insert with the transaction id and keep only the highest one.
+				if err = head.Ingest(ctx, p, id, series.Labels...); err != nil {
+					errors = append(errors, err)
+				}
+				return nil
+			})
+			if err != nil {
+				errors = append(errors, err) // todo this should 400
+			}
+		}
+	}
+	return errors, sizes
 }
 
 func (f *PhlareDB) Queriers() Queriers {

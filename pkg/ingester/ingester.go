@@ -9,19 +9,16 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/google/uuid"
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
 	"github.com/prometheus/client_golang/prometheus"
 
-	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingesterv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	pushv1 "github.com/grafana/phlare/api/gen/proto/go/push/v1"
 	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb"
-	"github.com/grafana/phlare/pkg/pprof"
 	"github.com/grafana/phlare/pkg/tenant"
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
@@ -184,36 +181,43 @@ func (i *Ingester) forInstance(ctx context.Context, f func(*instance) error) err
 	return f(instance)
 }
 
+// Push implements pushv1.PushServer and pushes a set of profiles to right instance for the given tenant.
+// Returns an error if one of the profiles was rejected with an error.
+// All profiles are pushed even if some of them were rejected.
 func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushRequest]) (*connect.Response[pushv1.PushResponse], error) {
 	return forInstanceUnary(ctx, i, func(instance *instance) (*connect.Response[pushv1.PushResponse], error) {
 		level.Debug(instance.logger).Log("msg", "message received by ingester push")
-		for _, series := range req.Msg.Series {
-			for _, sample := range series.Samples {
-				err := pprof.FromBytes(sample.RawProfile, func(p *profilev1.Profile, size int) error {
-					id, err := uuid.Parse(sample.ID)
-					if err != nil {
-						return err
+		errs, sizes := instance.Ingest(ctx, req.Msg)
+		if errs != nil {
+			for i, err := range errs {
+				reason := validation.ReasonOf(err)
+				if reason != validation.Unknown {
+					validation.DiscardedProfiles.WithLabelValues(string(reason), instance.tenantID).Add(float64(1))
+					validation.DiscardedBytes.WithLabelValues(string(reason), instance.tenantID).Add(float64(sizes[i]))
+					switch validation.ReasonOf(err) {
+					case validation.OutOfOrder:
+						return connect.NewResponse(&pushv1.PushResponse{}), connect.NewError(connect.CodeInvalidArgument, err)
+					case validation.SeriesLimit:
+						return connect.NewResponse(&pushv1.PushResponse{}), connect.NewError(connect.CodeResourceExhausted, err)
 					}
-					if err = instance.Head().Ingest(ctx, p, id, series.Labels...); err != nil {
-						reason := validation.ReasonOf(err)
-						if reason != validation.Unknown {
-							validation.DiscardedProfiles.WithLabelValues(string(reason), instance.tenantID).Add(float64(1))
-							validation.DiscardedBytes.WithLabelValues(string(reason), instance.tenantID).Add(float64(size))
-							switch validation.ReasonOf(err) {
-							case validation.OutOfOrder:
-								return connect.NewError(connect.CodeInvalidArgument, err)
-							case validation.SeriesLimit:
-								return connect.NewError(connect.CodeResourceExhausted, err)
-							}
-						}
-					}
-					return err
-				})
-				if err != nil {
-					return nil, err
 				}
 			}
 		}
+
+		if len(errs) > 0 {
+			// first figure the final code and build the error message.
+			connectErr := connect.NewError(connect.CodeInvalidArgument, multierror.New(errs...).Err())
+			// then add details.
+			for _, err := range errs {
+				details, err := connect.NewErrorDetail(nil)
+				if err != nil {
+					return connect.NewResponse(&pushv1.PushResponse{}), err
+				}
+				connectErr.AddDetail(details)
+			}
+			return nil, connectErr
+		}
+
 		return connect.NewResponse(&pushv1.PushResponse{}), nil
 	})
 }
