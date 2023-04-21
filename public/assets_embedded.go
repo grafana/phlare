@@ -33,9 +33,9 @@ func NewIndexHandler() (http.HandlerFunc, error) {
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Write(p)
+		_, err := w.Write(p)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}, nil
 }

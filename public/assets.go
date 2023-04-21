@@ -17,7 +17,7 @@ func NewIndexHandler() (http.HandlerFunc, error) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write([]byte("This route is not available in dev mode."))
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}, nil
 }
