@@ -4,6 +4,7 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const {
   dependencies: pyroOSSDeps,
 } = require('../../node_modules/pyroscope-oss/package.json');
+const webpack = require('webpack');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 
 // this is so that we don't import dependencies twice, once from pyroscope-oss and another from here
@@ -21,7 +22,7 @@ module.exports = {
   },
   output: {
     clean: true,
-    path: path.resolve(__dirname, '../../public/build/assets'),
+    path: path.resolve(__dirname, '../../public/build'),
     filename: '[name].[contenthash].js',
     publicPath: '',
   },

@@ -15,4 +15,9 @@ module.exports = merge(common, {
   optimization: {
     runtimeChunk: 'single',
   },
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env.BASEPATH': JSON.stringify(''),
+    }),
+  ],
 });
