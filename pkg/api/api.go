@@ -138,10 +138,15 @@ func (a *API) RegisterAPI(statusService statusv1.StatusServiceServer) error {
 		return fmt.Errorf("unable to initialize the ui: %w", err)
 	}
 
+	uiIndexHandler, err := public.NewIndexHandler()
+	if err != nil {
+		return fmt.Errorf("unable to initialize the ui: %w", err)
+	}
+
 	// All assets are served as static files
 	a.RegisterRoutesWithPrefix("/ui/assets/", http.StripPrefix("/ui/", http.FileServer(uiAssets)), false, true, "GET")
 	// Serve index to all other pages
-	a.RegisterRoutesWithPrefix("/ui/", http.HandlerFunc(public.ServeIndex), false, true, "GET")
+	a.RegisterRoutesWithPrefix("/ui/", uiIndexHandler, false, true, "GET")
 
 	// register status service providing config and buildinfo at grpc gateway
 	if err := statusv1.RegisterStatusServiceHandlerServer(context.Background(), a.grpcGatewayMux, statusService); err != nil {
