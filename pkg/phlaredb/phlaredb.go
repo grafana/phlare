@@ -311,15 +311,12 @@ func (f *PhlareDB) Ingest(ctx context.Context, req *pushv1.PushRequest) ([]error
 
 	for _, series := range req.Series {
 		for _, sample := range series.Samples {
-			// todo: log the request into the wall.
-			// we should have a single wall per head block.
 			err := pprof.FromBytes(sample.RawProfile, func(p *profilev1.Profile, size int) error {
 				sizes = append(sizes, int64(size))
 				id, err := uuid.Parse(sample.ID)
 				if err != nil {
 					errors = append(errors, err) // todo this should 400
 				}
-				// todo insert with the transaction id and keep only the highest one.
 				if err = head.Ingest(ctx, p, id, series.Labels...); err != nil {
 					errors = append(errors, err)
 				}

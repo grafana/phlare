@@ -316,6 +316,13 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
 	// todo wait group for flushing.
+	// we should error out if we are flushing or flushed.
+
+	// todo: log the request into the wall.
+	// todo: We want minimize writes and the size of WAL this means:
+	// 1. Avoid duplicates data.
+	// 2. Writes a wal per table.
+	// 3. Replay Wal on startup to build the head.
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
 
 	for i, fp := range seriesFingerprints {
