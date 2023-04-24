@@ -446,6 +446,14 @@
       "properties": {
         "flamegraph": {
           "$ref": "#/definitions/v1FlameGraph"
+        },
+        "leftTicks": {
+          "type": "string",
+          "format": "int64"
+        },
+        "rightTicks": {
+          "type": "string",
+          "format": "int64"
         }
       }
     },

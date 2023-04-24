@@ -116,7 +116,14 @@ func (q *QueryHandlers) RenderDiff(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, leftProfileType, FormatDiff)); err != nil {
+	fb := ExportToFlamebearer(res.Msg.Flamegraph, leftProfileType, FormatDiff)
+	fmt.Println("leftTicks", fb.LeftTicks)
+	fmt.Println("rightTicks", fb.RightTicks)
+	fb.LeftTicks = uint64(res.Msg.LeftTicks)
+	fb.RightTicks = uint64(res.Msg.RightTicks)
+
+	//	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, leftProfileType, FormatDiff)); err != nil {
+	if err := json.NewEncoder(w).Encode(fb); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -24,15 +24,15 @@ type FlamegraphDiff querierv1.FlameGraph
 //	i+4 = total   , right tree
 //	i+5 = self    , right tree
 //	i+6 = index in the names array
-func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, error) {
+func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, int64, int64, error) {
 	// The algorithm doesn't work properly with negative nodes
 	// Although it's possible to silently drop these nodes
 	// Let's fail early and analyze properly with real data when the issue happens
 	err := assertPositiveTrees(left, right)
 	if err != nil {
-		return nil, err
+		return nil, 0, 0, err
 	}
-	leftTree, rightTree := combineTree(left, right)
+	leftTree, rightTree := CombineTree(left, right)
 
 	totalLeft := addTotalRoot(leftTree)
 	totalRight := addTotalRoot(rightTree)
@@ -139,7 +139,7 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, error)
 	deltaEncoding(res.Levels, 0, 7)
 	deltaEncoding(res.Levels, 3, 7)
 
-	return res, nil
+	return res, totalLeft, totalRight, nil
 }
 
 func (fd *FlamegraphDiff) ToFlamegraph() *querierv1.FlameGraph {
@@ -157,17 +157,52 @@ func addTotalRoot(t *tree) int64 {
 	return total
 }
 
-// combineTree aligns 2 trees by making them having the same structure with the
+// CombineTree aligns 2 trees by making them having the same structure with the
 // same number of nodes
-func combineTree(leftTree, rightTree *tree) (*tree, *tree) {
+func CombineTree(leftTree, rightTree *tree) (*tree, *tree) {
+	leftTotal := int64(0)
+	for _, l := range leftTree.root {
+		leftTotal = leftTotal + l.total
+	}
+
+	rightTotal := int64(0)
+	for _, l := range rightTree.root {
+		rightTotal = rightTotal + l.total
+	}
+
+	// TODO: differently from pyroscope, there could be multiple roots
+	// so we add a fake root
+	leftTree = &tree{
+		root: []*node{
+			&node{
+				children: leftTree.root,
+				total:    leftTotal,
+				self:     0,
+			},
+		},
+	}
+
+	rightTree = &tree{
+		root: []*node{
+			&node{
+				children: rightTree.root,
+				total:    rightTotal,
+				self:     0,
+			},
+		},
+	}
+
 	leftNodes := leftTree.root
 	rghtNodes := rightTree.root
 
 	for len(leftNodes) > 0 {
 		left, rght := leftNodes[0], rghtNodes[0]
+
 		leftNodes, rghtNodes = leftNodes[1:], rghtNodes[1:]
 
-		left.children, rght.children = combineNodes(left.children, rght.children)
+		newLeftChildren, newRightChildren := combineNodes(left.children, rght.children)
+
+		left.children, rght.children = newLeftChildren, newRightChildren
 		leftNodes = append(leftNodes, left.children...)
 		rghtNodes = append(rghtNodes, rght.children...)
 	}
@@ -192,6 +227,7 @@ func combineNodes(leftNodes, rghtNodes []*node) ([]*node, []*node) {
 		case -1:
 			leftResult = append(leftResult, left)
 			rghtResult = append(rghtResult, &node{name: left.name})
+
 			leftNodes = leftNodes[1:]
 		case 1:
 			leftResult = append(leftResult, &node{name: rght.name})

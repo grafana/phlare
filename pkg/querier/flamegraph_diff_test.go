@@ -17,7 +17,7 @@ func Test_Diff_Tree(t *testing.T) {
 		{locations: []string{"c", "a"}, value: 8},
 	})
 
-	res, err := NewFlamegraphDiff(tr, tr2, 1024)
+	res, _, _, err := NewFlamegraphDiff(tr, tr2, 1024)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "c", "b"}, res.Names)
 	assert.Equal(t, int64(8), res.MaxSelf)
@@ -42,7 +42,7 @@ func Test_Diff_Tree_With_Different_Structure(t *testing.T) {
 		{locations: []string{"e", "a"}, value: 12},
 	})
 
-	res, err := NewFlamegraphDiff(tr, tr2, 1024)
+	res, _, _, err := NewFlamegraphDiff(tr, tr2, 1024)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "e", "d", "c", "b"}, res.Names)
 	assert.Equal(t, int64(12), res.MaxSelf)
@@ -70,7 +70,7 @@ func Test_Diff_Tree_With_MaxNodes(t *testing.T) {
 		{locations: []string{"c", "a"}, value: 8},
 	})
 
-	res, err := NewFlamegraphDiff(tr, tr2, 2)
+	res, _, _, err := NewFlamegraphDiff(tr, tr2, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"total", "a", "other"}, res.Names)
 	assert.Equal(t, int64(12), res.MaxSelf)
@@ -88,6 +88,19 @@ func Test_Diff_Tree_With_NegativeNodes(t *testing.T) {
 		{locations: []string{"c", "a"}, value: -8},
 	})
 
-	_, err := NewFlamegraphDiff(tr, tr2, 1024)
+	_, _, _, err := NewFlamegraphDiff(tr, tr2, 1024)
 	assert.Error(t, err)
+}
+
+func Test_DiffBla(t *testing.T) {
+	tr := newTree([]stacktraces{
+		{locations: []string{"b", "a"}, value: 1},
+	})
+
+	tr2 := newTree([]stacktraces{
+		{locations: []string{"c", "a", "b", "k"}, value: 8},
+	})
+
+	_, _, _, err := NewFlamegraphDiff(tr, tr2, 1024)
+	assert.NoError(t, err)
 }

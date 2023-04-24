@@ -63,6 +63,8 @@ message DiffRequest {
 
 message DiffResponse {
   FlameGraph flamegraph = 1;
+  int64 leftTicks = 2;
+  int64 rightTicks = 3;
 }
 
 message FlameGraph {

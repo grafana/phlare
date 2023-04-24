@@ -899,6 +899,16 @@ func (m *DiffResponse) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.RightTicks != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.RightTicks))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.LeftTicks != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.LeftTicks))
+		i--
+		dAtA[i] = 0x10
+	}
 	if m.Flamegraph != nil {
 		size, err := m.Flamegraph.MarshalToSizedBufferVT(dAtA[:i])
 		if err != nil {
@@ -1440,6 +1450,12 @@ func (m *DiffResponse) SizeVT() (n int) {
 	if m.Flamegraph != nil {
 		l = m.Flamegraph.SizeVT()
 		n += 1 + l + sov(uint64(l))
+	}
+	if m.LeftTicks != 0 {
+		n += 1 + sov(uint64(m.LeftTicks))
+	}
+	if m.RightTicks != 0 {
+		n += 1 + sov(uint64(m.RightTicks))
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -2635,6 +2651,44 @@ func (m *DiffResponse) UnmarshalVT(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeftTicks", wireType)
+			}
+			m.LeftTicks = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LeftTicks |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RightTicks", wireType)
+			}
+			m.RightTicks = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RightTicks |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])
