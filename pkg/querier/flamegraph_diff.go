@@ -35,8 +35,8 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*querierv1.FlameGraphDi
 	}
 	leftTree, rightTree := CombineTree(left, right)
 
-	totalLeft := addTotalRoot(leftTree)
-	totalRight := addTotalRoot(rightTree)
+	totalLeft := leftTree.root[0].total
+	totalRight := rightTree.root[0].total
 
 	res := &querierv1.FlameGraphDiff{
 		Names:      []string{},
@@ -145,19 +145,9 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*querierv1.FlameGraphDi
 	return res, nil
 }
 
-// addTotalRoot updates the tree root with a 'total' node
-func addTotalRoot(t *tree) int64 {
-	var total int64
-	for _, node := range t.root {
-		total += node.total
-	}
-
-	t.root = []*node{{children: t.root, total: total, name: "total"}}
-	return total
-}
-
 // CombineTree aligns 2 trees by making them having the same structure with the
 // same number of nodes
+// It also makes the tree have a single root
 func CombineTree(leftTree, rightTree *tree) (*tree, *tree) {
 	leftTotal := int64(0)
 	for _, l := range leftTree.root {
@@ -172,23 +162,19 @@ func CombineTree(leftTree, rightTree *tree) (*tree, *tree) {
 	// TODO: differently from pyroscope, there could be multiple roots
 	// so we add a fake root
 	leftTree = &tree{
-		root: []*node{
-			&node{
-				children: leftTree.root,
-				total:    leftTotal,
-				self:     0,
-			},
-		},
+		root: []*node{{
+			children: leftTree.root,
+			total:    leftTotal,
+			self:     0,
+		}},
 	}
 
 	rightTree = &tree{
-		root: []*node{
-			&node{
-				children: rightTree.root,
-				total:    rightTotal,
-				self:     0,
-			},
-		},
+		root: []*node{{
+			children: rightTree.root,
+			total:    rightTotal,
+			self:     0,
+		}},
 	}
 
 	leftNodes := leftTree.root
