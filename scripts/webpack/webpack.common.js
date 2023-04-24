@@ -106,14 +106,7 @@ module.exports = {
     children: false,
     source: false,
   },
-  plugins: [
-    new MiniCssExtractPlugin({}),
-    new HtmlWebpackPlugin({
-      filename: path.resolve(__dirname, '../../public/build/index.html'),
-      template: path.resolve(__dirname, '../../public/templates/index.html'),
-      chunksSortMode: 'none',
-    }),
-  ],
+  plugins: [new MiniCssExtractPlugin({})],
   module: {
     rules: [
       // CSS
