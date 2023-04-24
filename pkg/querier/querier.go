@@ -63,6 +63,8 @@ type Querier struct {
 	ingesterQuerier *IngesterQuerier
 }
 
+const maxNodesDefault = int64(2048)
+
 func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactory, logger log.Logger, clientsOptions ...connect.ClientOption) (*Querier, error) {
 	q := &Querier{
 		cfg:           cfg,
@@ -217,7 +219,6 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 			otlog.String("end", model.Time(req.Msg.End).Time().String()),
 			otlog.String("selector", req.Msg.LabelSelector),
 			otlog.String("profile_id", req.Msg.ProfileTypeID),
-			otlog.Int64("max_nodes", req.Msg.MaxNodes),
 		)
 		sp.Finish()
 	}()
@@ -265,8 +266,12 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
+	if req.Msg.MaxNodes == nil {
+		mn := maxNodesDefault
+		req.Msg.MaxNodes = &mn
+	}
 	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: NewFlameGraph(newTree(st), int(req.Msg.MaxNodes)),
+		Flamegraph: NewFlameGraph(newTree(st), *req.Msg.MaxNodes),
 	}), nil
 }
 

@@ -17,7 +17,7 @@ type stackNode struct {
 	node    *node
 }
 
-func NewFlameGraph(t *tree, maxNodes int) *querierv1.FlameGraph {
+func NewFlameGraph(t *tree, maxNodes int64) *querierv1.FlameGraph {
 	var total, max int64
 	for _, node := range t.root {
 		total += node.total
@@ -159,40 +159,36 @@ func ExportToFlamebearer(fg *querierv1.FlameGraph, profileType *typesv1.ProfileT
 	}
 }
 
-const maxNodesDefault = 2048
-
 // minValue returns the minimum "total" value a node in a tree has to have to show up in
 // the resulting flamegraph
-func (t *tree) minValue(maxNodes int) int64 {
-	if maxNodes == -1 {
+func (t *tree) minValue(maxNodes int64) int64 {
+	if maxNodes == -1 { // -1 means show all nodes
 		return 0
-	} else if maxNodes == 0 {
-		maxNodes = maxNodesDefault
 	}
 	nodes := t.root
 
-	minHeap := &minHeap{}
-	heap.Init(minHeap)
+	mh := &minHeap{}
+	heap.Init(mh)
 
 	for len(nodes) > 0 {
 		node := nodes[0]
 		nodes = nodes[1:]
 		number := node.total
 
-		if minHeap.Len() < maxNodes {
-			heap.Push(minHeap, number)
+		if mh.Len() < int(maxNodes) {
+			heap.Push(mh, number)
 		} else {
-			if number > (*minHeap)[0] {
-				heap.Pop(minHeap)
-				heap.Push(minHeap, number)
+			if number > (*mh)[0] {
+				heap.Pop(mh)
+				heap.Push(mh, number)
 				nodes = append(node.children, nodes...)
 			}
 		}
 	}
 
-	if minHeap.Len() < maxNodes {
+	if mh.Len() < int(maxNodes) {
 		return 0
 	}
 
-	return (*minHeap)[0]
+	return (*mh)[0]
 }

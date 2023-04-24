@@ -102,21 +102,22 @@ func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStackt
 		return nil, nil, err
 	}
 
+	v := req.URL.Query()
 	p := &querierv1.SelectMergeStacktracesRequest{
 		LabelSelector: selector,
 		ProfileTypeID: ptype.ID,
+		Start:         int64(model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano())),
+		End:           int64(model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano())),
 	}
 
-	v := req.URL.Query()
-	if mn, err := strconv.Atoi(v.Get("max-nodes")); err == nil && mn != 0 {
-		p.MaxNodes = int64(mn)
+	var mn int64
+	if v, err := strconv.Atoi(v.Get("max-nodes")); err == nil && v != 0 {
+		mn = int64(v)
 	}
-	if mn, err := strconv.Atoi(v.Get("maxNodes")); err == nil && mn != 0 {
-		p.MaxNodes = int64(mn)
+	if v, err := strconv.Atoi(v.Get("maxNodes")); err == nil && v != 0 {
+		mn = int64(v)
 	}
-
-	p.Start = int64(model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano()))
-	p.End = int64(model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano()))
+	p.MaxNodes = &mn
 
 	return p, ptype, nil
 }
