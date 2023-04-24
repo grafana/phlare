@@ -222,18 +222,33 @@ func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffR
 		sp.Finish()
 	}()
 
-	// TODO: do this in parallel
-	res1, err := q.selectTree(ctx, req.Msg.Left)
-	if err != nil {
+	var leftTree, rightTree *tree
+	g, gCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		res, err := q.selectTree(gCtx, req.Msg.Left)
+		if err != nil {
+			return err
+		}
+
+		leftTree = res
+		return nil
+	})
+
+	g.Go(func() error {
+		res, err := q.selectTree(ctx, req.Msg.Right)
+		if err != nil {
+			return err
+		}
+		rightTree = res
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	res2, err := q.selectTree(ctx, req.Msg.Right)
-	if err != nil {
-		return nil, err
-	}
-
-	fd, err := NewFlamegraphDiff(res1, res2, MaxNodes)
+	fd, err := NewFlamegraphDiff(leftTree, rightTree, MaxNodes)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
