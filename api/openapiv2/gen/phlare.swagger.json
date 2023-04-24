@@ -445,15 +445,7 @@
       "type": "object",
       "properties": {
         "flamegraph": {
-          "$ref": "#/definitions/v1FlameGraph"
-        },
-        "leftTicks": {
-          "type": "string",
-          "format": "int64"
-        },
-        "rightTicks": {
-          "type": "string",
-          "format": "int64"
+          "$ref": "#/definitions/v1FlameGraphDiff"
         }
       }
     },
@@ -477,6 +469,39 @@
           "format": "int64"
         },
         "maxSelf": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v1FlameGraphDiff": {
+      "type": "object",
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1Level"
+          }
+        },
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "maxSelf": {
+          "type": "string",
+          "format": "int64"
+        },
+        "leftTicks": {
+          "type": "string",
+          "format": "int64"
+        },
+        "rightTicks": {
           "type": "string",
           "format": "int64"
         }

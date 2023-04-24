@@ -233,15 +233,13 @@ func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffR
 		return nil, err
 	}
 
-	fd, totalLeft, totalRight, err := NewFlamegraphDiff(res1, res2, MaxNodes)
+	fd, err := NewFlamegraphDiff(res1, res2, MaxNodes)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	return connect.NewResponse(&querierv1.DiffResponse{
-		LeftTicks:  totalLeft,
-		RightTicks: totalRight,
-		Flamegraph: fd.ToFlamegraph(),
+		Flamegraph: fd,
 	}), nil
 }
 

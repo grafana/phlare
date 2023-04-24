@@ -62,9 +62,7 @@ message DiffRequest {
 }
 
 message DiffResponse {
-  FlameGraph flamegraph = 1;
-  int64 leftTicks = 2;
-  int64 rightTicks = 3;
+  FlameGraphDiff flamegraph = 1;
 }
 
 message FlameGraph {
@@ -72,6 +70,16 @@ message FlameGraph {
   repeated Level levels = 2;
   int64 total = 3;
   int64 max_self = 4;
+}
+
+message FlameGraphDiff {
+  repeated string names = 1;
+  repeated Level levels = 2;
+  int64 total = 3;
+  int64 max_self = 4;
+
+  int64 leftTicks = 5;
+  int64 rightTicks = 6;
 }
 
 message Level {

@@ -116,14 +116,7 @@ func (q *QueryHandlers) RenderDiff(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Add("Content-Type", "application/json")
-	fb := ExportToFlamebearer(res.Msg.Flamegraph, leftProfileType, FormatDiff)
-	fmt.Println("leftTicks", fb.LeftTicks)
-	fmt.Println("rightTicks", fb.RightTicks)
-	fb.LeftTicks = uint64(res.Msg.LeftTicks)
-	fb.RightTicks = uint64(res.Msg.RightTicks)
-
-	//	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, leftProfileType, FormatDiff)); err != nil {
-	if err := json.NewEncoder(w).Encode(fb); err != nil {
+	if err := json.NewEncoder(w).Encode(ExportDiffToFlamebearer(res.Msg.Flamegraph, leftProfileType)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -173,7 +166,7 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		seriesVal = resSeries.Msg.Series[0]
 	}
 
-	fb := ExportToFlamebearer(resFlame.Msg.Flamegraph, profileType, FormatSingle)
+	fb := ExportToFlamebearer(resFlame.Msg.Flamegraph, profileType)
 	fb.Timeline = timeline.New(seriesVal, selectParams.Start, selectParams.End, int64(timelineStep))
 
 	w.Header().Add("Content-Type", "application/json")

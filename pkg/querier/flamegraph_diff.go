@@ -11,11 +11,12 @@ import (
 
 const MaxNodes = 8192
 
-type FlamegraphDiff querierv1.FlameGraph
-
-// NewFlamegraphDiff generates a FlamegraphDiff from 2 trees.
+// NewFlamegraphDiff generates a FlameGraphDiff from 2 trees.
+// It also prunes the final tree based on the maxNodes parameter
 // Notice that the resulting FlameGraph can't be used interchangeably with a 'single' Flamegraph
-// Since it has the following structure:
+// Due to many differences:
+// * Nodes
+// * It's structure is different
 //
 //	i+0 = x offset, left  tree
 //	i+1 = total   , left  tree
@@ -24,24 +25,26 @@ type FlamegraphDiff querierv1.FlameGraph
 //	i+4 = total   , right tree
 //	i+5 = self    , right tree
 //	i+6 = index in the names array
-func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, int64, int64, error) {
+func NewFlamegraphDiff(left, right *tree, maxNodes int) (*querierv1.FlameGraphDiff, error) {
 	// The algorithm doesn't work properly with negative nodes
 	// Although it's possible to silently drop these nodes
 	// Let's fail early and analyze properly with real data when the issue happens
 	err := assertPositiveTrees(left, right)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, err
 	}
 	leftTree, rightTree := CombineTree(left, right)
 
 	totalLeft := addTotalRoot(leftTree)
 	totalRight := addTotalRoot(rightTree)
 
-	res := &FlamegraphDiff{
-		Names:   []string{},
-		Levels:  []*querierv1.Level{},
-		Total:   totalLeft + totalRight,
-		MaxSelf: 0,
+	res := &querierv1.FlameGraphDiff{
+		Names:      []string{},
+		Levels:     []*querierv1.Level{},
+		Total:      totalLeft + totalRight,
+		MaxSelf:    0,
+		LeftTicks:  totalLeft,
+		RightTicks: totalRight,
 	}
 
 	leftNodes, xLeftOffsets := leftTree.root, []int64{0}
@@ -139,11 +142,7 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*FlamegraphDiff, int64,
 	deltaEncoding(res.Levels, 0, 7)
 	deltaEncoding(res.Levels, 3, 7)
 
-	return res, totalLeft, totalRight, nil
-}
-
-func (fd *FlamegraphDiff) ToFlamegraph() *querierv1.FlameGraph {
-	return (*querierv1.FlameGraph)(fd)
+	return res, nil
 }
 
 // addTotalRoot updates the tree root with a 'total' node
