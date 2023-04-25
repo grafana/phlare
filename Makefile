@@ -108,7 +108,7 @@ go/deps:
 
 .PHONY: go/bin-debug
 go/bin-debug:
-	$(MAKE) go/bin 'GO_FLAGS=-ldflags "-extldflags \"-static\" $(GO_LDFLAGS)" -tags netgo'
+	$(MAKE) go/bin 'GO_FLAGS=-ldflags "-extldflags \"-static\" $(GO_LDFLAGS)" -tags "netgo $(EMBEDASSETS)"'
 
 .PHONY: go/bin
 go/bin:
