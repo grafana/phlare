@@ -100,7 +100,6 @@ export async function renderDiff(
     rightQuery: props.rightQuery,
     rightFrom: props.rightFrom,
     rightUntil: props.rightUntil,
-    format: 'json',
   });
 
   const response = await request(`/pyroscope/render-diff?${params}`, {

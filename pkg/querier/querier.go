@@ -236,7 +236,7 @@ func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffR
 	})
 
 	g.Go(func() error {
-		res, err := q.selectTree(ctx, req.Msg.Right)
+		res, err := q.selectTree(gCtx, req.Msg.Right)
 		if err != nil {
 			return err
 		}

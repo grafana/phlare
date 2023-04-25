@@ -55,7 +55,6 @@ message SelectMergeStacktracesResponse {
   FlameGraph flamegraph = 1;
 }
 
-// TODO
 message DiffRequest {
   SelectMergeStacktracesRequest left = 1;
   SelectMergeStacktracesRequest right = 2;

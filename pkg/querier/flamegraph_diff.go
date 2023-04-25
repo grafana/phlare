@@ -33,7 +33,7 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*querierv1.FlameGraphDi
 	if err != nil {
 		return nil, err
 	}
-	leftTree, rightTree := CombineTree(left, right)
+	leftTree, rightTree := combineTree(left, right)
 
 	totalLeft := leftTree.root[0].total
 	totalRight := rightTree.root[0].total
@@ -145,10 +145,10 @@ func NewFlamegraphDiff(left, right *tree, maxNodes int) (*querierv1.FlameGraphDi
 	return res, nil
 }
 
-// CombineTree aligns 2 trees by making them having the same structure with the
+// combineTree aligns 2 trees by making them having the same structure with the
 // same number of nodes
 // It also makes the tree have a single root
-func CombineTree(leftTree, rightTree *tree) (*tree, *tree) {
+func combineTree(leftTree, rightTree *tree) (*tree, *tree) {
 	leftTotal := int64(0)
 	for _, l := range leftTree.root {
 		leftTotal = leftTotal + l.total
@@ -159,8 +159,8 @@ func CombineTree(leftTree, rightTree *tree) (*tree, *tree) {
 		rightTotal = rightTotal + l.total
 	}
 
-	// TODO: differently from pyroscope, there could be multiple roots
-	// so we add a fake root
+	// differently from pyroscope, there could be multiple roots
+	// so we add a fake root as expected
 	leftTree = &tree{
 		root: []*node{{
 			children: leftTree.root,
@@ -271,7 +271,7 @@ func combineMinValues(leftTree, rightTree *tree, maxNodes int) uint64 {
 	return c.MinValue()
 }
 
-// // iterate both trees, both trees must be returned from CombineTree
+// iterate both trees, both trees must be returned from combineTree
 func combineIterateWithTotal(leftTree, rightTree *tree, cb func(uint64, uint64) bool) {
 	leftNodes, rghtNodes := leftTree.root, rightTree.root
 	i := 0

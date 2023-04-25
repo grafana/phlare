@@ -201,8 +201,6 @@ func parseSelectProfilesRequest(fieldNames renderRequestFieldNames, req *http.Re
 	// parse time using pyroscope's attime parser
 	start := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.from)).UnixNano())
 	end := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.until)).UnixNano())
-	//	start := model.TimeFromUnixNano(attime.Parse(v.Get("from")).UnixNano())
-	//	end := model.TimeFromUnixNano(attime.Parse(v.Get("until")).UnixNano())
 
 	return &querierv1.SelectMergeStacktracesRequest{
 		Start:         int64(start),
