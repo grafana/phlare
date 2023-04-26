@@ -24,6 +24,7 @@ import Icon from '@webapp/ui/Icon';
 import clsx from 'clsx';
 import { useWindowWidth } from '@react-hook/window-size';
 import { isRouteActive, ROUTES } from '../pages/routes';
+import Logo from '../static/logo.svg';
 import styles from './Sidebar.module.css';
 
 export function Sidebar() {
@@ -46,13 +47,13 @@ export function Sidebar() {
     <SidebarUI collapsed={collapsed}>
       <SidebarHeader>
         <div className={styles.logo}>
-          <div className="logo-main" />
+          <Logo className={styles.logoImg} />
           <span
             className={clsx(styles.logoText, {
               [styles.logoTextCollapsed]: collapsed,
             })}
           >
-            Grafana Pyroscope
+            Pyroscope
           </span>
         </div>
       </SidebarHeader>
