@@ -41,14 +41,25 @@ type rowRangeWithSeriesIndex struct {
 type rowRangesWithSeriesIndex []rowRangeWithSeriesIndex
 
 func (s rowRangesWithSeriesIndex) getSeriesIndex(rowNum int64) uint32 {
-	// todo: binary search
-	for _, rg := range s {
-		// it is possible that the series is not existing
-		if rg.rowRange == nil {
-			continue
+	l, r := 0, len(s)-1
+outer:
+	for l <= r {
+		mid := (l + r) / 2
+		// when mid is nil go the next element, if we are at the end, take original mid - 1 as upper limit
+		for s[mid].rowRange == nil {
+			mid += 1
+			if mid > r {
+				r = ((l + r) / 2) - 1
+				continue outer
+			}
 		}
-		if rg.rowNum <= rowNum && rg.rowNum+int64(rg.length) > rowNum {
-			return rg.seriesIndex
+		if s[mid].rowNum <= rowNum && s[mid].rowNum+int64(s[mid].length) > rowNum {
+			return s[mid].seriesIndex
+		}
+		if s[mid].rowNum > rowNum {
+			r = mid - 1
+		} else {
+			l = mid + 1
 		}
 	}
 	panic("series index not found")
