@@ -465,24 +465,24 @@ func labelsForProfile(p *profilev1.Profile, externalLabels ...*typesv1.LabelPair
 }
 
 // LabelValues returns the possible label values for a given label name.
-func (h *Head) LabelValues(ctx context.Context, req *connect.Request[ingestv1.LabelValuesRequest]) (*connect.Response[ingestv1.LabelValuesResponse], error) {
+func (h *Head) LabelValues(ctx context.Context, req *connect.Request[typesv1.LabelValuesRequest]) (*connect.Response[typesv1.LabelValuesResponse], error) {
 	values, err := h.profiles.index.ix.LabelValues(req.Msg.Name, nil)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&ingestv1.LabelValuesResponse{
-		Names: values,
+	return connect.NewResponse(&typesv1.LabelValuesResponse{
+		Names: lo.Keys(values),
 	}), nil
 }
 
 // LabelNames returns the possible label values for a given label name.
-func (h *Head) LabelNames(ctx context.Context, req *connect.Request[ingestv1.LabelNamesRequest]) (*connect.Response[ingestv1.LabelNamesResponse], error) {
+func (h *Head) LabelNames(ctx context.Context, req *connect.Request[typesv1.LabelNamesRequest]) (*connect.Response[typesv1.LabelNamesResponse], error) {
 	values, err := h.profiles.index.ix.LabelNames(nil)
 	if err != nil {
 		return nil, err
 	}
 	sort.Strings(values)
-	return connect.NewResponse(&ingestv1.LabelNamesResponse{
+	return connect.NewResponse(&typesv1.LabelNamesResponse{
 		Names: values,
 	}), nil
 }
@@ -742,7 +742,16 @@ func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesR
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "failed to label selector")
 		}
-		selectors = append(selectors, s)
+	}
+
+	return nil
+
+}
+
+func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	selectors, err := parseSelectors(req.Msg.Matchers)
+	if err != nil {
+		return nil, err
 	}
 	response := &ingestv1.SeriesResponse{}
 	uniqu := map[model.Fingerprint]struct{}{}
