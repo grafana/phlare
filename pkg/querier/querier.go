@@ -3,7 +3,6 @@ package querier
 import (
 	"context"
 	"flag"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -278,14 +277,10 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 		return nil, err
 	}
 
-	fmt.Println("req.Msg.MaxNodes", req.Msg.MaxNodes)
-	fmt.Println("*req.Msg.MaxNodes", *req.Msg.MaxNodes)
-	if req.Msg.MaxNodes == nil {
+	if req.Msg.MaxNodes == nil || *req.Msg.MaxNodes == 0 {
 		mn := maxNodesDefault
 		req.Msg.MaxNodes = &mn
 	}
-
-	fmt.Println("maxNodes", *req.Msg.MaxNodes)
 
 	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
 		Flamegraph: NewFlameGraph(t, *req.Msg.MaxNodes),
