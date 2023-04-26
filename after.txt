@@ -1,0 +1,12 @@
+goos: darwin
+goarch: amd64
+pkg: github.com/grafana/phlare/pkg/querier
+cpu: Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz
+BenchmarkSelectMergeStacktraces
+BenchmarkSelectMergeStacktraces-16    	       1	3214028408 ns/op	2690567472 B/op	    3822 allocs/op
+BenchmarkSelectMergeStacktraces-16    	       1	2440741100 ns/op	2690548056 B/op	    3805 allocs/op
+BenchmarkSelectMergeStacktraces-16    	       1	2480675136 ns/op	2690521448 B/op	    3780 allocs/op
+BenchmarkSelectMergeStacktraces-16    	       1	2463151691 ns/op	2690507960 B/op	    3747 allocs/op
+BenchmarkSelectMergeStacktraces-16    	       1	2498913372 ns/op	2690524328 B/op	    3748 allocs/op
+PASS
+ok  	github.com/grafana/phlare/pkg/querier	16.048s
