@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/bufbuild/connect-go"
@@ -202,12 +203,23 @@ func parseSelectProfilesRequest(fieldNames renderRequestFieldNames, req *http.Re
 	start := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.from)).UnixNano())
 	end := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.until)).UnixNano())
 
-	return &querierv1.SelectMergeStacktracesRequest{
+	p := &querierv1.SelectMergeStacktracesRequest{
 		Start:         int64(start),
 		End:           int64(end),
 		LabelSelector: selector,
 		ProfileTypeID: ptype.ID,
-	}, ptype, nil
+	}
+
+	var mn int64
+	if v, err := strconv.Atoi(v.Get("max-nodes")); err == nil && v != 0 {
+		mn = int64(v)
+	}
+	if v, err := strconv.Atoi(v.Get("maxNodes")); err == nil && v != 0 {
+		mn = int64(v)
+	}
+	p.MaxNodes = &mn
+
+	return p, ptype, nil
 }
 
 func parseQuery(fieldName string, req *http.Request) (string, *typesv1.ProfileType, error) {

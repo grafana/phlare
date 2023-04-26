@@ -896,6 +896,10 @@
         "end": {
           "type": "string",
           "format": "int64"
+        },
+        "maxNodes": {
+          "type": "string",
+          "format": "int64"
         }
       }
     },
