@@ -466,10 +466,34 @@ func labelsForProfile(p *profilev1.Profile, externalLabels ...*typesv1.LabelPair
 
 // LabelValues returns the possible label values for a given label name.
 func (h *Head) LabelValues(ctx context.Context, req *connect.Request[typesv1.LabelValuesRequest]) (*connect.Response[typesv1.LabelValuesResponse], error) {
-	values, err := h.profiles.index.ix.LabelValues(req.Msg.Name, nil)
+	selectors, err := parseSelectors(req.Msg.Matchers)
 	if err != nil {
 		return nil, err
 	}
+
+	// shortcut to index when matcher match all
+	if selectors.matchesAll() {
+		values, err := h.profiles.index.ix.LabelValues(req.Msg.Name, nil)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&typesv1.LabelValuesResponse{
+			Names: values,
+		}), nil
+	}
+
+	// aggregate all label values from series matching, when matchers are given.
+
+	values := make(map[string]struct{})
+	if err := h.forMatchingSelectors(selectors, func(lbs phlaremodel.Labels, fp model.Fingerprint) error {
+		if v := lbs.Get(req.Msg.Name); v != "" {
+			values[v] = struct{}{}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	return connect.NewResponse(&typesv1.LabelValuesResponse{
 		Names: lo.Keys(values),
 	}), nil
@@ -477,13 +501,36 @@ func (h *Head) LabelValues(ctx context.Context, req *connect.Request[typesv1.Lab
 
 // LabelNames returns the possible label values for a given label name.
 func (h *Head) LabelNames(ctx context.Context, req *connect.Request[typesv1.LabelNamesRequest]) (*connect.Response[typesv1.LabelNamesResponse], error) {
-	values, err := h.profiles.index.ix.LabelNames(nil)
+	selectors, err := parseSelectors(req.Msg.Matchers)
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(values)
+
+	// shortcut to index when matcher match all
+	if selectors.matchesAll() {
+		values, err := h.profiles.index.ix.LabelNames(nil)
+		if err != nil {
+			return nil, err
+		}
+		sort.Strings(values)
+		return connect.NewResponse(&typesv1.LabelNamesResponse{
+			Names: values,
+		}), nil
+	}
+
+	// aggregate all label values from series matching, when matchers are given.
+	values := make(map[string]struct{})
+	if err := h.forMatchingSelectors(selectors, func(lbs phlaremodel.Labels, fp model.Fingerprint) error {
+		for _, lbl := range lbs {
+			values[lbl.Name] = struct{}{}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	return connect.NewResponse(&typesv1.LabelNamesResponse{
-		Names: values,
+		Names: lo.Keys(values),
 	}), nil
 }
 
@@ -735,12 +782,44 @@ func (it *ProfileSelectorIterator) Err() error {
 	return nil
 }
 
-func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
-	selectors := make([][]*labels.Matcher, 0, len(req.Msg.Matchers))
-	for _, m := range req.Msg.Matchers {
+// selectors are composed of any amount of selectors which are ORed
+type selectors [][]*labels.Matcher
+
+func parseSelectors(selectorStrings []string) (selectors, error) {
+	sels := make([][]*labels.Matcher, 0, len(selectorStrings))
+	for _, m := range selectorStrings {
 		s, err := parser.ParseMetricSelector(m)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "failed to label selector")
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse label selector: %v", err))
+		}
+		sels = append(sels, s)
+	}
+
+	return sels, nil
+}
+
+func (sels selectors) matchesAll() bool {
+	if len(sels) == 0 {
+		return true
+	}
+
+	for _, sel := range sels {
+		if len(sel) == 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (h *Head) forMatchingSelectors(sels selectors, fn func(lbs phlaremodel.Labels, fp model.Fingerprint) error) error {
+	if sels.matchesAll() {
+		return h.profiles.index.forMatchingLabels(nil, fn)
+	}
+
+	for _, sel := range sels {
+		if err := h.profiles.index.forMatchingLabels(sel, fn); err != nil {
+			return err
 		}
 	}
 
@@ -755,17 +834,15 @@ func (h *Head) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesR
 	}
 	response := &ingestv1.SeriesResponse{}
 	uniqu := map[model.Fingerprint]struct{}{}
-	for _, selector := range selectors {
-		if err := h.profiles.index.forMatchingLabels(selector, func(lbs phlaremodel.Labels, fp model.Fingerprint) error {
-			if _, ok := uniqu[fp]; ok {
-				return nil
-			}
-			uniqu[fp] = struct{}{}
-			response.LabelsSet = append(response.LabelsSet, &typesv1.Labels{Labels: lbs})
+	if err := h.forMatchingSelectors(selectors, func(lbs phlaremodel.Labels, fp model.Fingerprint) error {
+		if _, ok := uniqu[fp]; ok {
 			return nil
-		}); err != nil {
-			return nil, err
 		}
+		uniqu[fp] = struct{}{}
+		response.LabelsSet = append(response.LabelsSet, &typesv1.Labels{Labels: lbs})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	sort.Slice(response.LabelsSet, func(i, j int) bool {
 		return phlaremodel.CompareLabelPairs(response.LabelsSet[i].Labels, response.LabelsSet[j].Labels) < 0
