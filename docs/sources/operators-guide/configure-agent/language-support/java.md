@@ -20,7 +20,7 @@ Visit our GitHub [releases](https://github.com/pyroscope-io/pyroscope-java/relea
 
 The latest release is also available on [Maven Central](https://search.maven.org/artifact/io.pyroscope/agent).
 
-# Profiling Java application
+## Profiling Java applications
 
 You can start pyroscope either from your apps's java code or attach it as javaagent
 
