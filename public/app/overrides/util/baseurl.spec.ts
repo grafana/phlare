@@ -1,4 +1,5 @@
-import basename from './baseurl';
+import baseurl from './baseurl';
+import { detectBaseurl } from './baseurl';
 
 function mockSelector(href: string) {
   const base = document.createElement('base');
@@ -7,10 +8,43 @@ function mockSelector(href: string) {
 }
 
 describe('baseurl', () => {
+  describe('no baseurl has been detected', () => {
+    it('returns undefined', () => {
+      const got = baseurl();
+      expect(got).toBe(undefined);
+    });
+  });
+
+  describe('base tag is set', () => {
+    describe('it contains /ui', () => {
+      it('removes /ui path', () => {
+        jest
+          .spyOn(document, 'querySelector')
+          .mockImplementationOnce(() => mockSelector('/pyroscope/ui'));
+
+        const got = baseurl();
+        expect(got).toBe('/pyroscope');
+      });
+    });
+
+    describe('it does not contain /ui', () => {
+      // Until we move the /ui page to the root, this is absolutely required
+      it('throws an error', () => {
+        jest
+          .spyOn(document, 'querySelector')
+          .mockImplementationOnce(() => mockSelector('/pyroscope/'));
+
+        expect(() => baseurl()).toThrowError();
+      });
+    });
+  });
+});
+
+describe('detectBaseurl', () => {
   describe('no baseURL meta tag set', () => {
-    it('defaults to window.locaion.host', () => {
-      const got = basename();
-      expect(got).toBe('http://localhost');
+    it('returns undefined', () => {
+      const got = detectBaseurl();
+      expect(got).toBe(undefined);
     });
   });
 
@@ -23,7 +57,7 @@ describe('baseurl', () => {
           .spyOn(document, 'querySelector')
           .mockImplementationOnce(() => mockSelector('/pyroscope'));
 
-        const got = basename();
+        const got = detectBaseurl();
         expect(got).toBe('http://localhost/pyroscope');
       });
     });
@@ -36,7 +70,7 @@ describe('baseurl', () => {
             mockSelector('http://localhost:9999/pyroscope')
           );
 
-        const got = basename();
+        const got = detectBaseurl();
         expect(got).toBe('http://localhost:9999/pyroscope');
       });
     });

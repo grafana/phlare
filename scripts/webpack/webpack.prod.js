@@ -12,10 +12,9 @@ module.exports = merge(common, {
     publicPath: 'assets',
   },
   plugins: [
-    new webpack.DefinePlugin({
-      //'process.env.BASEPATH': JSON.stringify('/ui'),
-      'process.env.BASEPATH': JSON.stringify('/pyroscope/ui'),
-    }),
+    //    new webpack.DefinePlugin({
+    //      'process.env.BASEPATH': JSON.stringify('/ui'),
+    //    }),
     // Duplicated in webpack.dev.js
     new HtmlWebpackPlugin({
       base: { href: '/ui/' },
