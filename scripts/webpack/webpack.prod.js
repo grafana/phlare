@@ -13,7 +13,8 @@ module.exports = merge(common, {
   },
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.BASEPATH': JSON.stringify('/ui'),
+      //'process.env.BASEPATH': JSON.stringify('/ui'),
+      'process.env.BASEPATH': JSON.stringify('/pyroscope/ui'),
     }),
     // Duplicated in webpack.dev.js
     new HtmlWebpackPlugin({
