@@ -149,7 +149,7 @@ func (a *API) RegisterAPI(statusService statusv1.StatusServiceServer) error {
 	a.RegisterRoutesWithPrefix("/ui/", uiIndexHandler, false, true, "GET")
 	// Redirect `/ui` to `/ui/`.
 	// See more: https://github.com/grafana/phlare/pull/649#issuecomment-1522958157.
-	a.RegisterRoute("/ui", http.RedirectHandler("/ui/", http.StatusMovedPermanently), false, true, "GET")
+	a.RegisterRoute("/ui", http.RedirectHandler("/ui/", http.StatusFound), false, true, "GET")
 
 	// register status service providing config and buildinfo at grpc gateway
 	if err := statusv1.RegisterStatusServiceHandlerServer(context.Background(), a.grpcGatewayMux, statusService); err != nil {
