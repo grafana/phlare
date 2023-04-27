@@ -5,7 +5,9 @@ description: "Instrumenting Ruby applications for continuous profiling"
 weight: 30
 ---
 
-# How to add Ruby profiling to your application
+# Ruby
+
+## How to add Ruby profiling to your application
 
 Add the `pyroscope` gem to your Gemfile:
 

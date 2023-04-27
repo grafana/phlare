@@ -5,7 +5,9 @@ description: "Instrumenting .NET applications for continuous profiling"
 weight: 30
 ---
 
-# How to add .NET profiling to your application
+# .NET
+
+## How to add .NET profiling to your application
 
 1. Download `Pyroscope.Profiler.Native.so` and `Pyroscope.Linux.ApiWrapper.x64.so` from [latest release](https://github.com/pyroscope-io/pyroscope-dotnet/releases/)
 

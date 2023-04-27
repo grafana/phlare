@@ -5,8 +5,9 @@ description: "Instrumenting nodeJS applications for continuous profiling"
 weight: 30
 ---
 
-# How to add NodeJS profiling to your application
+# NodeJS
 
+## How to add NodeJS profiling to your application
 
 To start profiling a NodeJS application, you need to include the npm module in your app:
 ```

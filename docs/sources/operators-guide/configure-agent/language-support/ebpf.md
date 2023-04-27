@@ -5,7 +5,9 @@ description: "Instrumenting eBPF applications for continuous profiling"
 weight: 30
 ---
 
-# How to profiling your application using eBPF
+# eBPF
+
+## How to profiling your application using eBPF
 
 eBPF is an emerging Linux kernel technology that allows for user-supplied programs to run inside of the kernel. This enables a bunch of interesting use cases, particularly efficient CPU profiling of the whole Linux system.
 

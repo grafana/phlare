@@ -5,7 +5,9 @@ description: "Instrumenting Python applications for continuous profiling"
 weight: 30
 ---
 
-# How to add Python profiling to your application
+# Python
+
+## How to add Python profiling to your application
 
 Install `pyroscope-io` pip package:
 

@@ -5,7 +5,9 @@ description: "Instrumenting Golang applications for continuous profiling"
 weight: 30
 ---
 
-# How to add Golang profiling to your application
+# Go (pull mode)
+
+## How to add Golang profiling to your application
 
 Modern observability systems generally fall into two categories: those where services push data, and those where the
 observability system pulls data from services. We find that both approaches are suitable: they both have advantages

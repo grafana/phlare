@@ -5,7 +5,9 @@ description: "Instrumenting Java applications for continuous profiling"
 weight: 30
 ---
 
-# How to add Java profiling to your application
+# Java
+
+## How to add Java profiling to your application
 
 Java integration is distributed as a single jar file: `pyroscope.jar`. It contains native `async-profiler` libraries for:
 

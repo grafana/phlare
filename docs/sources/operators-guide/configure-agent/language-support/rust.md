@@ -5,7 +5,9 @@ description: "Instrumenting Rust applications for continuous profiling"
 weight: 30
 ---
 
-# How to add Rust profiling to your application
+# Rust
+
+## How to add Rust profiling to your application
 
 Add the `pyroscope` and `pyroscope_pprofrs` crates to your Cargo.toml:
 
