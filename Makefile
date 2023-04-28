@@ -64,6 +64,7 @@ go/test: $(BIN)/gotestsum
 
 .PHONY: build
 build: frontend/build go/bin ## Do a production build (requiring the frontend build to be present)
+#build: go/bin ## Do a production build (requiring the frontend build to be present)
 
 .PHONY: build-dev
 build-dev: ## Do a dev build (without requiring the frontend)
@@ -369,3 +370,8 @@ deploy-demo: $(BIN)/kind
 .PHONY: docs/%
 docs/%:
 	$(MAKE) -C docs $*
+
+.PHONY: run
+run:
+	@(./phlare) $(PARAMS)
+

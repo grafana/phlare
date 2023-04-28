@@ -28,12 +28,19 @@ jobs:
           go-version: 1.19.8
       - run: yarn --frozen-lockfile
       - run: make build
+      - run: ls
       - name: Cypress run
         uses: cypress-io/github-action@v5
         with:
           wait-on: http://localhost:4100
-          start: ./phlare
+          start: make run
           config-file: cypress/ci.ts
+      - uses: actions/upload-artifact@v2
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: cypress/screenshots
+
   base-path:
     runs-on: ubuntu-latest
     steps:
@@ -55,6 +62,10 @@ jobs:
         uses: cypress-io/github-action@v5
         with:
           wait-on: http://localhost:8080/foobar/
-          start: ./phlare -base-url=/foobar/
+          start: make run PARAMS=-base-url=/foobar/
           config-file: cypress/ci-base-path.ts
-
+      - uses: actions/upload-artifact@v2
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: cypress/screenshots
