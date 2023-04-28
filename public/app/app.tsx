@@ -15,14 +15,14 @@ import { ComparisonView } from './pages/ComparisonView';
 import { DiffView } from './pages/DiffView';
 import { LoadAppNames } from './components/LoadAppNames';
 import { Sidebar } from './components/Sidebar';
-import { detectBaseurl } from './overrides/util/baseurl';
+import { baseurl } from './overrides/util/baseurl';
 
 const container = document.getElementById('reactRoot') as HTMLElement;
 const root = ReactDOM.createRoot(container);
 
 function App() {
-  const baseurl = detectBaseurl();
-  const history = createBrowserHistory({ basename: baseurl ? baseurl : '' });
+  const base = baseurl();
+  const history = createBrowserHistory({ basename: base ? base : '' });
 
   return (
     <Router history={history}>
