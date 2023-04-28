@@ -38,7 +38,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         if: always()
         with:
-          name: cypress-screenshots
+          name: regular-path-cypress-screenshots
           path: cypress/screenshots
 
   base-path:
@@ -67,5 +67,5 @@ jobs:
       - uses: actions/upload-artifact@v2
         if: always()
         with:
-          name: cypress-screenshots
+          name: base-path-cypress-screenshots
           path: cypress/screenshots
