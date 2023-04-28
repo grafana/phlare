@@ -373,5 +373,4 @@ docs/%:
 
 .PHONY: run
 run:
-	@(./phlare) $(PARAMS)
-
+	./phlare $(PARAMS)

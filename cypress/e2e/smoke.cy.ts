@@ -8,6 +8,26 @@ describe('smoke', () => {
     }).as('profileTypes');
   });
 
+  it('makes requestss', () => {
+    cy.request({
+      url: '/',
+    }).then((resp) => {
+      console.log({ resp });
+      cy.log(resp.body);
+      cy.log(JSON.stringify(resp));
+      console.log(resp.body);
+    });
+
+    cy.request({
+      url: 'http://localhost:4100/ui/',
+    }).then((resp) => {
+      console.log({ resp });
+      cy.log(resp.body);
+      cy.log(JSON.stringify(resp));
+      console.log(resp.body);
+    });
+  });
+
   it('loads single view (/)', () => {
     cy.visit('/');
     cy.wait(`@profileTypes`);
