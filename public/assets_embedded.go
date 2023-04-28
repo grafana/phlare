@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"text/template"
 )
@@ -32,7 +33,10 @@ func Assets() (http.FileSystem, error) {
 // Then returns a handler that serves that templated file
 func NewIndexHandler(basePath string) (http.HandlerFunc, error) {
 	// TODO remove unce ui routes are moved to root
-	basePath = basePath + "/ui/"
+	basePath, err := url.JoinPath(basePath, "/ui/")
+	if err != nil {
+		return nil, err
+	}
 
 	indexPath := filepath.Join("build", "index.html")
 	p, err := assets.ReadFile(indexPath)

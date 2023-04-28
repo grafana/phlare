@@ -140,7 +140,7 @@ func (a *API) RegisterAPI(statusService statusv1.StatusServiceServer) error {
 		return fmt.Errorf("unable to initialize the ui: %w", err)
 	}
 
-	uiIndexHandler, err := public.NewIndexHandler("")
+	uiIndexHandler, err := public.NewIndexHandler(a.cfg.BaseURL)
 	if err != nil {
 		return fmt.Errorf("unable to initialize the ui: %w", err)
 	}

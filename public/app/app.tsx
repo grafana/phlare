@@ -21,8 +21,7 @@ const container = document.getElementById('reactRoot') as HTMLElement;
 const root = ReactDOM.createRoot(container);
 
 function App() {
-  const base = baseurl();
-  const history = createBrowserHistory({ basename: base ? base : '' });
+  const history = createBrowserHistory({ basename: baseurl() });
 
   return (
     <Router history={history}>

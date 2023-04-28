@@ -18,7 +18,6 @@ module.exports = merge(common, {
     }),
     // Duplicated in webpack.dev.js
     new HtmlWebpackPlugin({
-      //      base: { href: '/ui/' },
       filename: path.resolve(__dirname, '../../public/build/index.html'),
       template: path.resolve(__dirname, '../../public/templates/index.html'),
       chunksSortMode: 'none',
