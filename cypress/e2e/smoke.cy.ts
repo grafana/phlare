@@ -8,17 +8,6 @@ describe('smoke', () => {
     }).as('profileTypes');
   });
 
-  it('makes requestss', () => {
-    cy.request({
-      url: '/',
-    }).then((resp) => {
-      console.log({ resp });
-      cy.log(resp.body);
-      cy.log(JSON.stringify(resp));
-      console.log(resp.body);
-    });
-  });
-
   it('loads admin page', () => {
     cy.visit('../');
   });

@@ -64,10 +64,6 @@ go/test: $(BIN)/gotestsum
 
 .PHONY: build
 build: frontend/build go/bin ## Do a production build (requiring the frontend build to be present)
-#build: go/bin ## Do a production build (requiring the frontend build to be present)
-
-.PHONY: build-fast
-build-fast: go/bin ## Do a production build (requiring the frontend build to be present)
 
 .PHONY: build-dev
 build-dev: ## Do a dev build (without requiring the frontend)
@@ -375,10 +371,5 @@ docs/%:
 	$(MAKE) -C docs $*
 
 .PHONY: run
-run:
+run: ## Run the phlare binary (pass parameters with 'make run PARAMS=-myparam')
 	./phlare $(PARAMS)
-
-# Used in .github/workflows/e2e.yaml tests
-.PHONY: run-base-url
-run-base-url:
-	./phlare -base-url=/foobar/
