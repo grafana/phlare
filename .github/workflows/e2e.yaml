@@ -32,7 +32,8 @@ jobs:
         uses: cypress-io/github-action@v5
         with:
           wait-on: http://localhost:4100/ui/
-          start: make run
+          start: |
+            ./phlare
           config-file: cypress/ci.ts
         env:
           ELECTRON_ENABLE_LOGGING: 1
