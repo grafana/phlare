@@ -32,8 +32,7 @@ jobs:
         uses: cypress-io/github-action@v5
         with:
           wait-on: http://localhost:4100/ui/
-          start: |
-            ./phlare
+          start: make run
           config-file: cypress/ci.ts
         env:
           ELECTRON_ENABLE_LOGGING: 1
@@ -65,7 +64,7 @@ jobs:
         with:
           wait-on: http://localhost:8080/foobar/
           start: |
-            make run PARAMS=-base-url=/foobar/
+            make run PARAMS=-api.base-url=/foobar/
           config-file: cypress/ci-base-path.ts
         env:
           ELECTRON_ENABLE_LOGGING: 1

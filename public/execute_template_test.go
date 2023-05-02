@@ -36,7 +36,5 @@ func TestInjectingBaseURL(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, fmt.Sprintf(`<base href="%s" />`, tc.expected), strings.TrimSpace(string(data)))
 		})
-
 	}
-
 }

@@ -250,5 +250,5 @@ func (a *API) RegisterQueryScheduler(s *scheduler.Scheduler) {
 
 // RegisterFlags registers api-related flags.
 func (cfg *Config) RegisterFlags(fs *flag.FlagSet) {
-	fs.StringVar(&cfg.BaseURL, "base-url", "", "base URL for when the server is behind a reverse proxy with a different path")
+	fs.StringVar(&cfg.BaseURL, "api.base-url", "", "base URL for when the server is behind a reverse proxy with a different path")
 }
