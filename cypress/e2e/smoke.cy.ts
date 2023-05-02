@@ -1,9 +1,9 @@
 // / <reference types="cypress" />
 describe('smoke', () => {
   beforeEach(function () {
-    const basePath = Cypress.env('basePath') || '';
+    const apiBasePath = Cypress.env('apiBasePath') || '';
 
-    cy.intercept(`${basePath}/pyroscope/label-values?label=__name__`, {
+    cy.intercept(`${apiBasePath}/pyroscope/label-values?label=__name__`, {
       fixture: 'profileTypes.json',
     }).as('profileTypes');
   });
@@ -17,15 +17,6 @@ describe('smoke', () => {
       cy.log(JSON.stringify(resp));
       console.log(resp.body);
     });
-
-    //    cy.request({
-    //      url: 'http://localhost:4100/ui/',
-    //    }).then((resp) => {
-    //      console.log({ resp });
-    //      cy.log(resp.body);
-    //      cy.log(JSON.stringify(resp));
-    //      console.log(resp.body);
-    //    });
   });
 
   it('loads admin page', () => {
