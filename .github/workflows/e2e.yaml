@@ -57,13 +57,14 @@ jobs:
           go-version: 1.19.8
       - run: yarn --frozen-lockfile
       - run: make build
-      - name: run nginx with /pyroscope
+      - name: run nginx with /foobar/
         run: docker-compose -f scripts/base-url/docker-compose.yaml up -d
       - name: Cypress run
         uses: cypress-io/github-action@v5
         with:
           wait-on: http://localhost:8080/foobar/
-          start: make run-base-url
+          start: |
+            make run PARAMS=-base-url=/foobar/
           config-file: cypress/ci-base-path.ts
         env:
           ELECTRON_ENABLE_LOGGING: 1
