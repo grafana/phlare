@@ -37,6 +37,7 @@ func NewIndexHandler(basePath string) (http.HandlerFunc, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("injecting basePath: ", basePath)
 
 	indexPath := filepath.Join("build", "index.html")
 	p, err := assets.ReadFile(indexPath)

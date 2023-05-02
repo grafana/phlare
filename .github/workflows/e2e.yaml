@@ -34,6 +34,8 @@ jobs:
           wait-on: http://localhost:4100/ui/
           start: make run
           config-file: cypress/ci.ts
+        env:
+          ELECTRON_ENABLE_LOGGING: 1
       - uses: actions/upload-artifact@v2
         if: always()
         with:
@@ -63,6 +65,8 @@ jobs:
           wait-on: http://localhost:8080/foobar/
           start: make run 'PARAMS=-base-url=/foobar/'
           config-file: cypress/ci-base-path.ts
+        env:
+          ELECTRON_ENABLE_LOGGING: 1
       - uses: actions/upload-artifact@v2
         if: always()
         with:
