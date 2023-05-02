@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -32,12 +32,18 @@ func Assets() (http.FileSystem, error) {
 // NewIndexHandler parses and executes the webpack-built index.html
 // Then returns a handler that serves that templated file
 func NewIndexHandler(basePath string) (http.HandlerFunc, error) {
-	// TODO remove unce ui routes are moved to root
-	basePath, err := url.JoinPath(basePath, "/ui/")
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("injecting basePath: ", basePath)
+	// TODO: test this
+	// if '' is passed -> /ui/
+	// if '/something' is passed -> /something/ui/
+	// if '/something/' is passed -> /something/ui/
+	// TODO also handle spaces
+	// TODO remove /ui/ once ui routes are moved to root
+	basePath = strings.Join(
+		[]string{strings.TrimRight(basePath, "/"), "ui/"},
+		"/",
+	)
+
+	fmt.Printf("injecting basePath: '%s'\n", basePath)
 
 	indexPath := filepath.Join("build", "index.html")
 	p, err := assets.ReadFile(indexPath)

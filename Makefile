@@ -66,6 +66,9 @@ go/test: $(BIN)/gotestsum
 build: frontend/build go/bin ## Do a production build (requiring the frontend build to be present)
 #build: go/bin ## Do a production build (requiring the frontend build to be present)
 
+.PHONY: build-fast
+build-fast: go/bin ## Do a production build (requiring the frontend build to be present)
+
 .PHONY: build-dev
 build-dev: ## Do a dev build (without requiring the frontend)
 	$(MAKE) EMBEDASSETS="" go/bin
@@ -374,3 +377,8 @@ docs/%:
 .PHONY: run
 run:
 	./phlare $(PARAMS)
+
+# Used in .github/workflows/e2e.yaml tests
+.PHONY: run-base-url
+run-base-url:
+	./phlare -base-url=/foobar/
