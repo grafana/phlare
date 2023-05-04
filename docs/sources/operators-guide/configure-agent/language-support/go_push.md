@@ -18,7 +18,7 @@ To start profiling a Go application, you need to include our go module in your a
 go get github.com/pyroscope-io/client/pyroscope
 ```
 
-Note: If you'd prefer to use Pull mode you can find those docs here.
+Note: If you'd prefer to use Pull mode you can do so using the Grafana Agent.
 
 Then add the following code to your application:
 
@@ -83,30 +83,6 @@ pprof.Do(context.Background(), pprof.Labels("controller", "slow_controller"), fu
   slowCode()
 })
 ```
-
-* For information on how to use `net/http/pprof` refer to official [net/http/pprof documentation](https://pkg.go.dev/net/http/pprof).
-* For more information on how to set up pyroscope server to pull data from your applications, refer to [pull mode documentation](/docs/golang-pull-mode).
-
-### godeltaprof
-[godeltaprof](https://github.com/pyroscope-io/godeltaprof) is a memory profiler for cumulative profiles(heap, block, mutex).
-It is more efficient because it does the delta/merging before producing pprof data, avoiding extra decompression/parsing/allocations/compression.
-
-To start using godeltaprof in pull mode in a Go application, you need to include godeltaprof module in your app:
-```bash
-go get github.com/pyroscope-io/godeltaprof@latest
-```
-Integration is very simillar to `net/http/pprof`, you need to import a new package and it will expose new endpoints `/debug/pprof/delta_heap`, `/debug/pprof/delta_block`, `/debug/pprof/delta_mutex`
-```go
-_ "github.com/pyroscope-io/godeltaprof/http/pprof"
-```
-In the scrape config you need to enable new delta endpoints with `use-delta-endpoints: true`, for example:
-```yaml
-scrape-configs:
-  - job-name: pyroscope1
-    enabled-profiles: [cpu, mem, block, mutex]
-    use-delta-profiles: true
-```
-For push mode godeltaprof is used automatically since v0.6.0
 
 ## Mutex Profiling
 
