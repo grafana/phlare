@@ -60,13 +60,13 @@ export function Sidebar() {
       <SidebarContent>
         <Menu iconShape="square" popperArrow>
           <MenuItem
-            active={isRouteActive(pathname, ROUTES.CONTINOUS_SINGLE_VIEW)}
+            active={isRouteActive(pathname, ROUTES.CONTINUOUS_SINGLE_VIEW)}
             icon={<Icon icon={faWindowMaximize} />}
           >
             Single View
             <NavLink
               activeClassName="active-route"
-              to={{ pathname: ROUTES.CONTINOUS_SINGLE_VIEW, search }}
+              to={{ pathname: ROUTES.CONTINUOUS_SINGLE_VIEW, search }}
               exact
             />
           </MenuItem>
