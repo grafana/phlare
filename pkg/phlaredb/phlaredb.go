@@ -358,6 +358,9 @@ func (f *PhlareDB) Evict(blockID ulid.ULID) (bool, error) {
 		blockID: blockID,
 		done:    make(chan struct{}),
 	}
+	// It's assumed that the DB close is only called
+	// after all evictions are done, therefore it's safe
+	// to block here.
 	f.evictCh <- e
 	<-e.done
 	return e.evicted, e.err

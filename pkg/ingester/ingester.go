@@ -13,6 +13,7 @@ import (
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/services"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -100,7 +101,7 @@ func New(phlarectx context.Context, cfg Config, dbConfig phlaredb.Config, storag
 		return nil, err
 	}
 
-	rpEnforcer := newRetentionPolicyEnforcer(i, defaultRetentionPolicy())
+	rpEnforcer := newRetentionPolicyEnforcer(phlarecontext.Logger(phlarectx), i, defaultRetentionPolicy(), dbConfig)
 	i.subservices, err = services.NewManager(i.lifecycler, rpEnforcer)
 	if err != nil {
 		return nil, errors.Wrap(err, "services manager")
@@ -190,6 +191,25 @@ func (i *Ingester) forInstance(ctx context.Context, f func(*instance) error) err
 		return connect.NewError(connect.CodeInternal, err)
 	}
 	return f(instance)
+}
+
+func (i *Ingester) evictBlock(tenantID string, b ulid.ULID, fn func() error) error {
+	// We lock instances map for writes to ensure that no new instances are
+	// created during the procedure. Otherwise, during initialization, the
+	// new PhlareDB instance may try to load a block that has already been
+	// deleted, or is being deleted.
+	i.instancesMtx.RLock()
+	defer i.instancesMtx.RUnlock()
+	// The map only contains PhlareDB instances that has been initialized since
+	// the process start, therefore there is no guarantee that we will find the
+	// discovered candidate block there. If it is the case, we have to ensure that
+	// the block won't be accessed, before and during deleting it from the disk.
+	if tenantInstance, ok := i.instances[tenantID]; ok {
+		if _, err := tenantInstance.Evict(b); err != nil {
+			return fmt.Errorf("failed to evict block %s/%s: %w", tenantID, b, err)
+		}
+	}
+	return fn()
 }
 
 func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushRequest]) (*connect.Response[pushv1.PushResponse], error) {
