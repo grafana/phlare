@@ -31,7 +31,7 @@ function App() {
         <div className="pyroscope-app">
           <LoadAppNames>
             <Switch>
-              <Route exact path={ROUTES.CONTINUOUS_SINGLE_VIEW}>
+              <Route exact path={ROUTES.SINGLE_VIEW}>
                 <SingleView />
               </Route>
               <Route path={ROUTES.COMPARISON_VIEW}>
