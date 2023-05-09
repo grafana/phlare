@@ -3,6 +3,7 @@ module github.com/grafana/phlare
 go 1.19
 
 require (
+	github.com/apache/arrow/go/v11 v11.0.0
 	github.com/bufbuild/connect-go v1.4.1
 	github.com/bufbuild/connect-grpchealth-go v1.0.0
 	github.com/cespare/xxhash/v2 v2.2.0
@@ -91,6 +92,7 @@ require (
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.6+incompatible // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
+	github.com/apache/thrift v0.16.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/aws/aws-sdk-go v1.44.227 // indirect
@@ -148,6 +150,7 @@ require (
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0 // indirect
 	github.com/go-resty/resty/v2 v2.7.0 // indirect
 	github.com/go-zookeeper/zk v1.0.3 // indirect
+	github.com/goccy/go-json v0.9.11 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
@@ -157,6 +160,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.1.2 // indirect
+	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
@@ -190,6 +194,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
+	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.2 // indirect
 	github.com/kolo/xmlrpc v0.0.0-20220921171641-a4b6fa1dd06b // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -199,6 +204,8 @@ require (
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
+	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
+	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -239,6 +246,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/vultr/govultr/v2 v2.17.2 // indirect
 	github.com/weaveworks/promrus v1.2.0 // indirect
+	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.6 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.6 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.6 // indirect
