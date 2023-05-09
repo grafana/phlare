@@ -99,14 +99,15 @@ type Distributor struct {
 type Limits interface {
 	IngestionRateBytes(tenantID string) float64
 	IngestionBurstSizeBytes(tenantID string) int
-	MaxLabelNameLength(userID string) int
-	MaxLabelValueLength(userID string) int
-	MaxLabelNamesPerSeries(userID string) int
+	IngestionTenantShardSize(tenantID string) int
+	MaxLabelNameLength(tenantID string) int
+	MaxLabelValueLength(tenantID string) int
+	MaxLabelNamesPerSeries(tenantID string) int
 }
 
 func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactory, limits Limits, reg prometheus.Registerer, logger log.Logger, clientsOptions ...connect.ClientOption) (*Distributor, error) {
 	clients := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-		Namespace: "phlare",
+		Namespace: "pyroscope",
 		Name:      "distributor_ingester_clients",
 		Help:      "The current number of ingester clients.",
 	})
@@ -148,6 +149,7 @@ func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactor
 
 	d.Service = services.NewBasicService(d.starting, d.running, d.stopping)
 	d.rfStats.Set(int64(ingestersRing.ReplicationFactor()))
+	d.metrics.replicationFactor.Set(float64(ingestersRing.ReplicationFactor()))
 	return d, nil
 }
 
@@ -210,6 +212,7 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 			// zip the data back into the buffer
 			bw := bytes.NewBuffer(raw.RawProfile[:0])
 			if _, err := p.WriteTo(bw); err != nil {
+				p.Close()
 				return nil, err
 			}
 			p.Close()
@@ -248,7 +251,10 @@ func (d *Distributor) Push(ctx context.Context, req *connect.Request[pushv1.Push
 	samplesByIngester := map[string][]*profileTracker{}
 	ingesterDescs := map[string]ring.InstanceDesc{}
 	for i, key := range keys {
-		replicationSet, err := d.ingestersRing.Get(key, ring.Write, descs[:0], nil, nil)
+		// Get a subring if tenant has shuffle shard size configured.
+		subRing := d.ingestersRing.ShuffleShard(tenantID, d.limits.IngestionTenantShardSize(tenantID))
+
+		replicationSet, err := subRing.Get(key, ring.Write, descs[:0], nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -429,7 +435,7 @@ func TokenFor(tenantID, labels string) uint32 {
 
 // newRingAndLifecycler creates a new distributor ring and lifecycler with all required lifecycler delegates
 func newRingAndLifecycler(cfg RingConfig, instanceCount *atomic.Uint32, logger log.Logger, reg prometheus.Registerer) (*ring.Ring, *ring.BasicLifecycler, error) {
-	reg = prometheus.WrapRegistererWithPrefix("phlare_", reg)
+	reg = prometheus.WrapRegistererWithPrefix("pyroscope_", reg)
 	kvStore, err := kv.NewClient(cfg.KVStore, ring.GetCodec(), kv.RegistererWithKVName(reg, "distributor-lifecycler"), logger)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to initialize distributors' KV store")

@@ -32,13 +32,6 @@ import (
 	"github.com/grafana/phlare/pkg/util"
 )
 
-// todo: move to non global metrics.
-var clients = promauto.NewGauge(prometheus.GaugeOpts{
-	Namespace: "phlare",
-	Name:      "querier_ingester_clients",
-	Help:      "The current number of ingester clients.",
-})
-
 type Config struct {
 	PoolConfig      clientpool.PoolConfig `yaml:"pool_config,omitempty"`
 	ExtraQueryDelay time.Duration         `yaml:"extra_query_delay,omitempty"`
@@ -63,12 +56,22 @@ type Querier struct {
 	ingesterQuerier *IngesterQuerier
 }
 
-func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactory, logger log.Logger, clientsOptions ...connect.ClientOption) (*Querier, error) {
+const maxNodesDefault = int64(2048)
+
+func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactory, reg prometheus.Registerer, logger log.Logger, clientsOptions ...connect.ClientOption) (*Querier, error) {
+	// disable gzip compression for querier-ingester communication as most of payload are not benefit from it.
+	clientsOptions = append(clientsOptions, connect.WithAcceptCompression("gzip", nil, nil))
+	clientsMetrics := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Namespace: "pyroscope",
+		Name:      "querier_ingester_clients",
+		Help:      "The current number of ingester clients.",
+	})
+
 	q := &Querier{
 		cfg:           cfg,
 		logger:        logger,
 		ingestersRing: ingestersRing,
-		pool:          clientpool.NewPool(cfg.PoolConfig, ingestersRing, factory, clients, logger, clientsOptions...),
+		pool:          clientpool.NewPool(cfg.PoolConfig, ingestersRing, factory, clientsMetrics, logger, clientsOptions...),
 	}
 	var err error
 	q.subservices, err = services.NewManager(q.pool)
@@ -133,7 +136,7 @@ func (q *Querier) ProfileTypes(ctx context.Context, req *connect.Request[querier
 	return connect.NewResponse(result), nil
 }
 
-func (q *Querier) LabelValues(ctx context.Context, req *connect.Request[querierv1.LabelValuesRequest]) (*connect.Response[querierv1.LabelValuesResponse], error) {
+func (q *Querier) LabelValues(ctx context.Context, req *connect.Request[typesv1.LabelValuesRequest]) (*connect.Response[typesv1.LabelValuesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "LabelValues")
 	defer func() {
 		sp.LogFields(
@@ -142,8 +145,9 @@ func (q *Querier) LabelValues(ctx context.Context, req *connect.Request[querierv
 		sp.Finish()
 	}()
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(childCtx context.Context, ic IngesterQueryClient) ([]string, error) {
-		res, err := ic.LabelValues(childCtx, connect.NewRequest(&ingestv1.LabelValuesRequest{
-			Name: req.Msg.Name,
+		res, err := ic.LabelValues(childCtx, connect.NewRequest(&typesv1.LabelValuesRequest{
+			Name:     req.Msg.Name,
+			Matchers: req.Msg.Matchers,
 		}))
 		if err != nil {
 			return nil, err
@@ -154,16 +158,18 @@ func (q *Querier) LabelValues(ctx context.Context, req *connect.Request[querierv
 		return nil, err
 	}
 
-	return connect.NewResponse(&querierv1.LabelValuesResponse{
+	return connect.NewResponse(&typesv1.LabelValuesResponse{
 		Names: uniqueSortedStrings(responses),
 	}), nil
 }
 
-func (q *Querier) LabelNames(ctx context.Context, req *connect.Request[querierv1.LabelNamesRequest]) (*connect.Response[querierv1.LabelNamesResponse], error) {
+func (q *Querier) LabelNames(ctx context.Context, req *connect.Request[typesv1.LabelNamesRequest]) (*connect.Response[typesv1.LabelNamesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "LabelNames")
 	defer sp.Finish()
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(childCtx context.Context, ic IngesterQueryClient) ([]string, error) {
-		res, err := ic.LabelNames(childCtx, connect.NewRequest(&ingestv1.LabelNamesRequest{}))
+		res, err := ic.LabelNames(childCtx, connect.NewRequest(&typesv1.LabelNamesRequest{
+			Matchers: req.Msg.Matchers,
+		}))
 		if err != nil {
 			return nil, err
 		}
@@ -173,7 +179,7 @@ func (q *Querier) LabelNames(ctx context.Context, req *connect.Request[querierv1
 		return nil, err
 	}
 
-	return connect.NewResponse(&querierv1.LabelNamesResponse{
+	return connect.NewResponse(&typesv1.LabelNamesResponse{
 		Names: uniqueSortedStrings(responses),
 	}), nil
 }
@@ -209,6 +215,55 @@ func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.Ser
 	}), nil
 }
 
+func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffRequest]) (*connect.Response[querierv1.DiffResponse], error) {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "Diff")
+	defer func() {
+		sp.LogFields(
+			otlog.String("leftStart", model.Time(req.Msg.Left.Start).Time().String()),
+			otlog.String("leftEnd", model.Time(req.Msg.Left.End).Time().String()),
+			// Assume are the same
+			otlog.String("selector", req.Msg.Left.LabelSelector),
+			otlog.String("profile_id", req.Msg.Left.ProfileTypeID),
+		)
+		sp.Finish()
+	}()
+
+	var leftTree, rightTree *tree
+	g, gCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		res, err := q.selectTree(gCtx, req.Msg.Left)
+		if err != nil {
+			return err
+		}
+
+		leftTree = res
+		return nil
+	})
+
+	g.Go(func() error {
+		res, err := q.selectTree(gCtx, req.Msg.Right)
+		if err != nil {
+			return err
+		}
+		rightTree = res
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	fd, err := NewFlamegraphDiff(leftTree, rightTree, MaxNodes)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	return connect.NewResponse(&querierv1.DiffResponse{
+		Flamegraph: fd,
+	}), nil
+}
+
 func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMergeStacktraces")
 	defer func() {
@@ -221,11 +276,27 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 		sp.Finish()
 	}()
 
-	profileType, err := phlaremodel.ParseProfileTypeSelector(req.Msg.ProfileTypeID)
+	t, err := q.selectTree(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Msg.MaxNodes == nil || *req.Msg.MaxNodes == 0 {
+		mn := maxNodesDefault
+		req.Msg.MaxNodes = &mn
+	}
+
+	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
+		Flamegraph: NewFlameGraph(t, *req.Msg.MaxNodes),
+	}), nil
+}
+
+func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*tree, error) {
+	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	_, err = parser.ParseMetricSelector(req.Msg.LabelSelector)
+	_, err = parser.ParseMetricSelector(req.LabelSelector)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -247,9 +318,9 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 		g.Go(util.RecoverPanic(func() error {
 			return r.response.Send(&ingestv1.MergeProfilesStacktracesRequest{
 				Request: &ingestv1.SelectProfilesRequest{
-					LabelSelector: req.Msg.LabelSelector,
-					Start:         req.Msg.Start,
-					End:           req.Msg.End,
+					LabelSelector: req.LabelSelector,
+					Start:         req.Start,
+					End:           req.End,
 					Type:          profileType,
 				},
 			})
@@ -264,9 +335,7 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: NewFlameGraph(newTree(st)),
-	}), nil
+	return newTree(st), nil
 }
 
 func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {

@@ -3,11 +3,9 @@ package phlare
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
-	"github.com/felixge/fgprof"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/kv/codec"
@@ -29,29 +27,18 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v2"
 
-	"github.com/grafana/phlare/public"
-
-	agentv1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
-	"github.com/grafana/phlare/api/gen/proto/go/agent/v1/agentv1connect"
-	"github.com/grafana/phlare/api/gen/proto/go/ingester/v1/ingesterv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
-	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
-	"github.com/grafana/phlare/api/openapiv2"
 	"github.com/grafana/phlare/pkg/agent"
-	"github.com/grafana/phlare/pkg/api"
 	"github.com/grafana/phlare/pkg/distributor"
 	"github.com/grafana/phlare/pkg/frontend"
-	"github.com/grafana/phlare/pkg/frontend/frontendpb/frontendpbconnect"
 	"github.com/grafana/phlare/pkg/ingester"
-	"github.com/grafana/phlare/pkg/ingester/pyroscope"
 	objstoreclient "github.com/grafana/phlare/pkg/objstore/client"
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/querier"
 	"github.com/grafana/phlare/pkg/querier/worker"
 	"github.com/grafana/phlare/pkg/scheduler"
-	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
 	"github.com/grafana/phlare/pkg/usagestats"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/build"
@@ -63,6 +50,7 @@ import (
 const (
 	All               string = "all"
 	Agent             string = "agent"
+	API               string = "api"
 	Distributor       string = "distributor"
 	Server            string = "server"
 	Ring              string = "ring"
@@ -104,8 +92,9 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querier.NewGRPCRoundTripper(frontendSvc), f.auth)
-	frontendpbconnect.RegisterFrontendForQuerierHandler(f.Server.HTTP, frontendSvc, f.auth)
+	f.API.RegisterQueryFrontend(frontendSvc)
+	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc))
+
 	return frontendSvc, nil
 }
 
@@ -120,7 +109,7 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	// make sure to set default limits before we start loading configuration into memory
 	validation.SetDefaultLimitsForYAMLUnmarshalling(f.Cfg.LimitsConfig)
 
-	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("phlare_", f.reg), log.With(f.logger, "component", "runtime-config"))
+	serv, err := runtimeconfig.New(f.Cfg.RuntimeConfig, prometheus.WrapRegistererWithPrefix("pyroscope_", f.reg), log.With(f.logger, "component", "runtime-config"))
 	if err == nil {
 		// TenantLimits just delegates to RuntimeConfig and doesn't have any state or need to do
 		// anything in the start/stopping phase. Thus we can create it as part of runtime config
@@ -129,13 +118,8 @@ func (f *Phlare) initRuntimeConfig() (services.Service, error) {
 	}
 
 	f.RuntimeConfig = serv
+	f.API.RegisterRuntimeConfig(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig), validation.TenantLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits))
 
-	f.Server.HTTP.Methods("GET").Path("/runtime_config").Handler(runtimeConfigHandler(f.RuntimeConfig, f.Cfg.LimitsConfig))
-	f.Server.HTTP.Methods("GET").Path("/api/v1/tenant_limits").Handler(middleware.AuthenticateUser.Wrap(validation.TenantLimitsHandler(f.Cfg.LimitsConfig, f.TenantLimits)))
-	f.IndexPage.AddLinks(api.RuntimeConfigWeight, "Current runtime config", []api.IndexPageLink{
-		{Desc: "Entire runtime config (including overrides)", Path: "/runtime_config"},
-		{Desc: "Only values that differ from the defaults", Path: "/runtime_config?mode=diff"},
-	})
 	return serv, err
 }
 
@@ -161,10 +145,8 @@ func (f *Phlare) initOverridesExporter() (services.Service, error) {
 		f.reg.MustRegister(overridesExporter)
 	}
 
-	f.Server.HTTP.Methods("GET", "POST").Path("/overrides-exporter/ring").HandlerFunc(overridesExporter.RingHandler)
-	f.IndexPage.AddLinks(api.DefaultWeight, "Overrides-exporter", []api.IndexPageLink{
-		{Desc: "Ring status", Path: "/overrides-exporter/ring"},
-	})
+	f.API.RegisterOverridesExporter(overridesExporter)
+
 	return overridesExporter, nil
 }
 
@@ -175,8 +157,9 @@ func (f *Phlare) initQueryScheduler() (services.Service, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "query-scheduler init")
 	}
-	schedulerpbconnect.RegisterSchedulerForFrontendHandler(f.Server.HTTP, s)
-	schedulerpbconnect.RegisterSchedulerForQuerierHandler(f.Server.HTTP, s)
+
+	f.API.RegisterQueryScheduler(s)
+
 	return s, nil
 }
 
@@ -197,20 +180,17 @@ func (f *Phlare) setupWorkerTimeout() {
 }
 
 func (f *Phlare) initQuerier() (services.Service, error) {
-	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, log.With(f.logger, "component", "querier"), f.auth)
+	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, f.reg, log.With(f.logger, "component", "querier"), f.auth)
 	if err != nil {
 		return nil, err
 	}
 	if !f.isModuleActive(QueryFrontend) {
-		querierv1connect.RegisterQuerierServiceHandler(f.Server.HTTP, querierSvc, f.auth)
+		f.API.RegisterQuerier(querierSvc)
 	}
 	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, querier.NewGRPCHandler(querierSvc), log.With(f.logger, "component", "querier-worker"), f.reg)
 	if err != nil {
 		return nil, err
 	}
-
-	f.Server.HTTP.Handle("/pyroscope/render", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.RenderHandler)))
-	f.Server.HTTP.Handle("/pyroscope/label-values", util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(http.HandlerFunc(querierSvc.LabelValuesHandler)))
 
 	sm, err := services.NewManager(querierSvc, worker)
 	if err != nil {
@@ -266,14 +246,8 @@ func (f *Phlare) initDistributor() (services.Service, error) {
 
 	// initialise direct pusher, this overwrites the default HTTP client
 	f.pusherClient = d
-	pyroscopePath := "/pyroscope/ingest"
-	f.Server.HTTP.Handle(pyroscopePath, util.AuthenticateUser(f.Cfg.MultitenancyEnabled).Wrap(pyroscope.NewPyroscopeIngestHandler(d, f.logger)))
-	pushv1connect.RegisterPusherServiceHandler(f.Server.HTTP, d, f.auth)
-	f.Server.HTTP.Path("/distributor/ring").Methods("GET", "POST").Handler(d)
-	f.IndexPage.AddLinks(api.DefaultWeight, "Distributor", []api.IndexPageLink{
-		{Desc: "Ring status", Path: "/distributor/ring"},
-	})
 
+	f.API.RegisterDistributor(d)
 	return d, nil
 }
 
@@ -284,12 +258,10 @@ func (f *Phlare) initAgent() (services.Service, error) {
 	}
 	f.agent = a
 
-	// register endpoint at grpc gateway
-	if err := agentv1.RegisterAgentServiceHandlerServer(context.Background(), f.grpcGatewayMux, a); err != nil {
+	if err := f.API.RegisterAgent(a); err != nil {
 		return nil, err
 	}
 
-	agentv1connect.RegisterAgentServiceHandler(f.Server.HTTP, a.ConnectHandler())
 	return a, nil
 }
 
@@ -301,7 +273,7 @@ func (f *Phlare) initMemberlistKV() (services.Service, error) {
 	}
 
 	dnsProviderReg := prometheus.WrapRegistererWithPrefix(
-		"phlare_",
+		"pyroscope_",
 		prometheus.WrapRegistererWith(
 			prometheus.Labels{"name": "memberlist"},
 			f.reg,
@@ -319,22 +291,19 @@ func (f *Phlare) initMemberlistKV() (services.Service, error) {
 	f.Cfg.Frontend.QuerySchedulerDiscovery = f.Cfg.QueryScheduler.ServiceDiscovery
 	f.Cfg.Worker.QuerySchedulerDiscovery = f.Cfg.QueryScheduler.ServiceDiscovery
 
-	f.Server.HTTP.Path("/memberlist").Handler(api.MemberlistStatusHandler("", f.MemberlistKV))
-	f.IndexPage.AddLinks(api.MemberlistWeight, "Memberlist", []api.IndexPageLink{
-		{Desc: "Status", Path: "/memberlist"},
-	})
+	f.API.RegisterMemberlistKV("", f.MemberlistKV)
+
 	return f.MemberlistKV, nil
 }
 
 func (f *Phlare) initRing() (_ services.Service, err error) {
-	f.ring, err = ring.New(f.Cfg.Ingester.LifecyclerConfig.RingConfig, "ingester", "ring", log.With(f.logger, "component", "ring"), prometheus.WrapRegistererWithPrefix("phlare_", f.reg))
+	f.ring, err = ring.New(f.Cfg.Ingester.LifecyclerConfig.RingConfig, "ingester", "ring", log.With(f.logger, "component", "ring"), prometheus.WrapRegistererWithPrefix("pyroscope_", f.reg))
 	if err != nil {
 		return nil, err
 	}
-	f.Server.HTTP.Path("/ring").Methods("GET", "POST").Handler(f.ring)
-	f.IndexPage.AddLinks(api.DefaultWeight, "Ingester", []api.IndexPageLink{
-		{Desc: "Ring status", Path: "/ring"},
-	})
+
+	f.API.RegisterRing(f.ring)
+
 	return f.ring, nil
 }
 
@@ -372,20 +341,21 @@ func (f *Phlare) initIngester() (_ services.Service, err error) {
 	if err != nil {
 		return nil, err
 	}
-	ingesterv1connect.RegisterIngesterServiceHandler(f.Server.HTTP, svc, f.auth)
+
+	f.API.RegisterIngester(svc)
 
 	return svc, nil
 }
 
 func (f *Phlare) initServer() (services.Service, error) {
-	f.reg.MustRegister(version.NewCollector("phlare"))
+	f.reg.MustRegister(version.NewCollector("pyroscope"))
 	f.reg.Unregister(collectors.NewGoCollector())
 	// register collector with additional metrics
 	f.reg.MustRegister(collectors.NewGoCollector(
 		collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll),
 	))
 	DisableSignalHandling(&f.Cfg.Server)
-	f.Cfg.Server.Registerer = prometheus.WrapRegistererWithPrefix("phlare_", f.reg)
+	f.Cfg.Server.Registerer = prometheus.WrapRegistererWithPrefix("pyroscope_", f.reg)
 	// Not all default middleware works with http2 so we'll add then manually.
 	// see https://github.com/grafana/phlare/issues/231
 	f.Cfg.Server.DoNotAddDefaultHTTPMiddleware = true
@@ -434,50 +404,6 @@ func (f *Phlare) initServer() (services.Service, error) {
 	// todo configure http2
 	f.Server.HTTPServer.Handler = h2c.NewHandler(f.Server.HTTPServer.Handler, &http2.Server{})
 	f.Server.HTTPServer.Handler = util.RecoveryHTTPMiddleware.Wrap(f.Server.HTTPServer.Handler)
-
-	// expose openapiv2 definition
-	openapiv2Handler, err := openapiv2.Handler()
-	if err != nil {
-		return nil, fmt.Errorf("unable to initialize openapiv2 handler: %w", err)
-	}
-	f.Server.HTTP.Handle("/api/swagger.json", openapiv2Handler)
-
-	// register grpc-gateway api
-	f.Server.HTTP.NewRoute().PathPrefix("/api").Handler(f.grpcGatewayMux)
-	// register fgprof
-	f.Server.HTTP.Path("/debug/fgprof").Handler(fgprof.Handler())
-
-	// register status service providing config and buildinfo at grpc gateway
-	if err := statusv1.RegisterStatusServiceHandlerServer(context.Background(), f.grpcGatewayMux, f.statusService()); err != nil {
-		return nil, err
-	}
-
-	// register static assets
-	f.Server.HTTP.PathPrefix("/static/").Handler(http.FileServer(http.FS(api.StaticFiles)))
-
-	// register ui
-	uiAssets, err := public.Assets()
-	if err != nil {
-		return nil, fmt.Errorf("unable to initialize the ui: %w", err)
-	}
-	f.Server.HTTP.PathPrefix("/ui/").Handler(http.StripPrefix("/ui/", http.FileServer(uiAssets)))
-
-	// register index page
-	f.IndexPage = api.NewIndexPageContent()
-	f.Server.HTTP.Path("/").Handler(api.IndexHandler("", f.IndexPage))
-
-	// Add index page links.
-	f.IndexPage.AddLinks(api.BuildInfoWeight, "Build information", []api.IndexPageLink{
-		{Desc: "Build information", Path: "/api/v1/status/buildinfo"},
-	})
-	f.IndexPage.AddLinks(api.ConfigWeight, "Current config", []api.IndexPageLink{
-		{Desc: "Including the default values", Path: "/api/v1/status/config"},
-		{Desc: "Only values that differ from the defaults", Path: "/api/v1/status/config/diff"},
-		{Desc: "Default values", Path: "/api/v1/status/config/default"},
-	})
-	f.IndexPage.AddLinks(api.OpenAPIDefinitionWeight, "OpenAPI definition", []api.IndexPageLink{
-		{Desc: "Swagger JSON", Path: "/api/swagger.json"},
-	})
 
 	return s, nil
 }

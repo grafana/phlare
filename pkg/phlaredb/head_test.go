@@ -187,30 +187,30 @@ func TestHeadMetrics(t *testing.T) {
 	time.Sleep(time.Second)
 	require.NoError(t, testutil.GatherAndCompare(head.reg,
 		strings.NewReader(`
-# HELP phlare_head_ingested_sample_values_total Number of sample values ingested into the head per profile type.
-# TYPE phlare_head_ingested_sample_values_total counter
-phlare_head_ingested_sample_values_total{profile_name=""} 3
-# HELP phlare_head_profiles_created_total Total number of profiles created in the head
-# TYPE phlare_head_profiles_created_total counter
-phlare_head_profiles_created_total{profile_name=""} 2
-# HELP phlare_head_received_sample_values_total Number of sample values received into the head per profile type.
-# TYPE phlare_head_received_sample_values_total counter
-phlare_head_received_sample_values_total{profile_name=""} 3
+# HELP pyroscope_head_ingested_sample_values_total Number of sample values ingested into the head per profile type.
+# TYPE pyroscope_head_ingested_sample_values_total counter
+pyroscope_head_ingested_sample_values_total{profile_name=""} 3
+# HELP pyroscope_head_profiles_created_total Total number of profiles created in the head
+# TYPE pyroscope_head_profiles_created_total counter
+pyroscope_head_profiles_created_total{profile_name=""} 2
+# HELP pyroscope_head_received_sample_values_total Number of sample values received into the head per profile type.
+# TYPE pyroscope_head_received_sample_values_total counter
+pyroscope_head_received_sample_values_total{profile_name=""} 3
 
-# HELP phlare_head_size_bytes Size of a particular in memory store within the head phlaredb block.
-# TYPE phlare_head_size_bytes gauge
-phlare_head_size_bytes{type="functions"} 240
-phlare_head_size_bytes{type="locations"} 344
-phlare_head_size_bytes{type="mappings"} 192
-phlare_head_size_bytes{type="profiles"} 416
-phlare_head_size_bytes{type="stacktraces"} 104
-phlare_head_size_bytes{type="strings"} 52
+# HELP pyroscope_head_size_bytes Size of a particular in memory store within the head phlaredb block.
+# TYPE pyroscope_head_size_bytes gauge
+pyroscope_head_size_bytes{type="functions"} 240
+pyroscope_head_size_bytes{type="locations"} 344
+pyroscope_head_size_bytes{type="mappings"} 192
+pyroscope_head_size_bytes{type="profiles"} 416
+pyroscope_head_size_bytes{type="stacktraces"} 104
+pyroscope_head_size_bytes{type="strings"} 52
 
 `),
-		"phlare_head_received_sample_values_total",
-		"phlare_head_profiles_created_total",
-		"phlare_head_ingested_sample_values_total",
-		"phlare_head_size_bytes",
+		"pyroscope_head_received_sample_values_total",
+		"pyroscope_head_profiles_created_total",
+		"pyroscope_head_ingested_sample_values_total",
+		"pyroscope_head_size_bytes",
 	))
 }
 
@@ -282,11 +282,11 @@ func TestHeadLabelValues(t *testing.T) {
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), &typesv1.LabelPair{Name: "job", Value: "foo"}, &typesv1.LabelPair{Name: "namespace", Value: "phlare"}))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New(), &typesv1.LabelPair{Name: "job", Value: "bar"}, &typesv1.LabelPair{Name: "namespace", Value: "phlare"}))
 
-	res, err := head.LabelValues(context.Background(), connect.NewRequest(&ingestv1.LabelValuesRequest{Name: "cluster"}))
+	res, err := head.LabelValues(context.Background(), connect.NewRequest(&typesv1.LabelValuesRequest{Name: "cluster"}))
 	require.NoError(t, err)
 	require.Equal(t, []string{}, res.Msg.Names)
 
-	res, err = head.LabelValues(context.Background(), connect.NewRequest(&ingestv1.LabelValuesRequest{Name: "job"}))
+	res, err = head.LabelValues(context.Background(), connect.NewRequest(&typesv1.LabelValuesRequest{Name: "job"}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"bar", "foo"}, res.Msg.Names)
 }
@@ -296,7 +296,7 @@ func TestHeadLabelNames(t *testing.T) {
 	require.NoError(t, head.Ingest(context.Background(), newProfileFoo(), uuid.New(), &typesv1.LabelPair{Name: "job", Value: "foo"}, &typesv1.LabelPair{Name: "namespace", Value: "phlare"}))
 	require.NoError(t, head.Ingest(context.Background(), newProfileBar(), uuid.New(), &typesv1.LabelPair{Name: "job", Value: "bar"}, &typesv1.LabelPair{Name: "namespace", Value: "phlare"}))
 
-	res, err := head.LabelNames(context.Background(), connect.NewRequest(&ingestv1.LabelNamesRequest{}))
+	res, err := head.LabelNames(context.Background(), connect.NewRequest(&typesv1.LabelNamesRequest{}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"__period_type__", "__period_unit__", "__profile_type__", "__type__", "__unit__", "job", "namespace"}, res.Msg.Names)
 }

@@ -7,32 +7,19 @@ import "types/v1/types.proto";
 
 service QuerierService {
   rpc ProfileTypes(ProfileTypesRequest) returns (ProfileTypesResponse) {}
-  rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse) {}
-  rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse) {}
+  rpc LabelValues(types.v1.LabelValuesRequest) returns (types.v1.LabelValuesResponse) {}
+  rpc LabelNames(types.v1.LabelNamesRequest) returns (types.v1.LabelNamesResponse) {}
   rpc Series(SeriesRequest) returns (SeriesResponse) {}
   rpc SelectMergeStacktraces(SelectMergeStacktracesRequest) returns (SelectMergeStacktracesResponse) {}
   rpc SelectMergeProfile(SelectMergeProfileRequest) returns (google.v1.Profile) {}
   rpc SelectSeries(SelectSeriesRequest) returns (SelectSeriesResponse) {}
+  rpc Diff(DiffRequest) returns (DiffResponse) {}
 }
 
 message ProfileTypesRequest {}
 
 message ProfileTypesResponse {
   repeated types.v1.ProfileType profile_types = 1;
-}
-
-message LabelValuesRequest {
-  string name = 1;
-}
-
-message LabelValuesResponse {
-  repeated string names = 1;
-}
-
-message LabelNamesRequest {}
-
-message LabelNamesResponse {
-  repeated string names = 1;
 }
 
 message SeriesRequest {
@@ -48,10 +35,20 @@ message SelectMergeStacktracesRequest {
   string label_selector = 2;
   int64 start = 3; // milliseconds since epoch
   int64 end = 4; // milliseconds since epoch
+  optional int64 max_nodes = 5; // Limit the nodes returned to only show the node with the max_node's biggest total
 }
 
 message SelectMergeStacktracesResponse {
   FlameGraph flamegraph = 1;
+}
+
+message DiffRequest {
+  SelectMergeStacktracesRequest left = 1;
+  SelectMergeStacktracesRequest right = 2;
+}
+
+message DiffResponse {
+  FlameGraphDiff flamegraph = 1;
 }
 
 message FlameGraph {
@@ -59,6 +56,16 @@ message FlameGraph {
   repeated Level levels = 2;
   int64 total = 3;
   int64 max_self = 4;
+}
+
+message FlameGraphDiff {
+  repeated string names = 1;
+  repeated Level levels = 2;
+  int64 total = 3;
+  int64 max_self = 4;
+
+  int64 leftTicks = 5;
+  int64 rightTicks = 6;
 }
 
 message Level {

@@ -4,37 +4,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/bufbuild/connect-go"
 	"github.com/gogo/status"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/pyroscope-io/pyroscope/pkg/util/attime"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
+	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
+	"github.com/grafana/phlare/pkg/querier/timeline"
 )
 
-// LabelValuesHandler only returns the label values for the given label name.
+func NewHTTPHandlers(svc querierv1connect.QuerierServiceHandler) *QueryHandlers {
+	return &QueryHandlers{svc}
+}
+
+type QueryHandlers struct {
+	upstream querierv1connect.QuerierServiceHandler
+}
+
+// LabelValues only returns the label values for the given label name.
 // This is mostly for fulfilling the pyroscope API and won't be used in the future.
-// /label-values?label=__name__
-func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
+// For example, /label-values?label=__name__ will return all the profile types.
+func (q *QueryHandlers) LabelValues(w http.ResponseWriter, req *http.Request) {
 	label := req.URL.Query().Get("label")
 	if label == "" {
 		http.Error(w, "label parameter is required", http.StatusBadRequest)
 		return
 	}
-	var (
-		res []string
-		err error
-	)
+	var res []string
 
 	if label == "__name__" {
-		response, err := q.ProfileTypes(req.Context(), connect.NewRequest(&querierv1.ProfileTypesRequest{}))
+		response, err := q.upstream.ProfileTypes(req.Context(), connect.NewRequest(&querierv1.ProfileTypesRequest{}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -43,17 +52,12 @@ func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
 			res = append(res, t.ID)
 		}
 	} else {
-		response, err := q.LabelValues(req.Context(), connect.NewRequest(&querierv1.LabelValuesRequest{}))
+		response, err := q.upstream.LabelValues(req.Context(), connect.NewRequest(&typesv1.LabelValuesRequest{}))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		res = response.Msg.Names
-	}
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 
 	w.Header().Add("Content-Type", "application/json")
@@ -63,63 +67,162 @@ func (q *Querier) LabelValuesHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (q *Querier) RenderHandler(w http.ResponseWriter, req *http.Request) {
+func (q *QueryHandlers) RenderDiff(w http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	selectParams, profileType, err := parseSelectProfilesRequest(req)
+
+	// Left
+	leftSelectParams, leftProfileType, err := parseSelectProfilesRequest(renderRequestFieldNames{
+		query: "leftQuery",
+		from:  "leftFrom",
+		until: "leftUntil",
+	}, req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	res, err := q.SelectMergeStacktraces(req.Context(), connect.NewRequest(selectParams))
+
+	rightSelectParams, rightProfileType, err := parseSelectProfilesRequest(renderRequestFieldNames{
+		query: "rightQuery",
+		from:  "rightFrom",
+		until: "rightUntil",
+	}, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// TODO: check profile types?
+	if leftProfileType.ID != rightProfileType.ID {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, err := q.upstream.Diff(req.Context(), connect.NewRequest(&querierv1.DiffRequest{
+		Left:  leftSelectParams,
+		Right: rightSelectParams,
+	}))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ExportToFlamebearer(res.Msg.Flamegraph, profileType)); err != nil {
+	if err := json.NewEncoder(w).Encode(ExportDiffToFlamebearer(res.Msg.Flamegraph, leftProfileType)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
+func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	selectParams, profileType, err := parseSelectProfilesRequest(renderRequestFieldNames{}, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var resFlame *connect.Response[querierv1.SelectMergeStacktracesResponse]
+	g, ctx := errgroup.WithContext(req.Context())
+	g.Go(func() error {
+		resFlame, err = q.upstream.SelectMergeStacktraces(ctx, connect.NewRequest(selectParams))
+		return err
+	})
+
+	timelineStep := timeline.CalcPointInterval(selectParams.Start, selectParams.End)
+	var resSeries *connect.Response[querierv1.SelectSeriesResponse]
+	g.Go(func() error {
+		resSeries, err = q.upstream.SelectSeries(req.Context(),
+			connect.NewRequest(&querierv1.SelectSeriesRequest{
+				ProfileTypeID: selectParams.ProfileTypeID,
+				LabelSelector: selectParams.LabelSelector,
+				Start:         selectParams.Start,
+				End:           selectParams.End,
+				Step:          timelineStep,
+			}))
+
+		return err
+	})
+
+	err = g.Wait()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	seriesVal := &typesv1.Series{}
+	if len(resSeries.Msg.Series) == 1 {
+		seriesVal = resSeries.Msg.Series[0]
+	}
+
+	fb := ExportToFlamebearer(resFlame.Msg.Flamegraph, profileType)
+	fb.Timeline = timeline.New(seriesVal, selectParams.Start, selectParams.End, int64(timelineStep))
+
+	w.Header().Add("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(fb); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+type renderRequestFieldNames struct {
+	query string
+	from  string
+	until string
+}
+
 // render/render?format=json&from=now-12h&until=now&query=pyroscope.server.cpu
-func parseSelectProfilesRequest(req *http.Request) (*querierv1.SelectMergeStacktracesRequest, *typesv1.ProfileType, error) {
-	selector, ptype, err := parseQuery(req)
+func parseSelectProfilesRequest(fieldNames renderRequestFieldNames, req *http.Request) (*querierv1.SelectMergeStacktracesRequest, *typesv1.ProfileType, error) {
+	if fieldNames == (renderRequestFieldNames{}) {
+		fieldNames = renderRequestFieldNames{
+			query: "query",
+			from:  "from",
+			until: "until",
+		}
+	}
+	selector, ptype, err := parseQuery(fieldNames.query, req)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// default start and end to now-1h
-	start := model.TimeFromUnixNano(time.Now().Add(-1 * time.Hour).UnixNano())
-	end := model.TimeFromUnixNano(time.Now().UnixNano())
+	v := req.URL.Query()
 
-	if from := req.Form.Get("from"); from != "" {
-		from, err := parseRelativeTime(from)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse from: %w", err)
-		}
-		start = end.Add(-from)
-	}
-	return &querierv1.SelectMergeStacktracesRequest{
+	// parse time using pyroscope's attime parser
+	start := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.from)).UnixNano())
+	end := model.TimeFromUnixNano(attime.Parse(v.Get(fieldNames.until)).UnixNano())
+
+	p := &querierv1.SelectMergeStacktracesRequest{
 		Start:         int64(start),
 		End:           int64(end),
 		LabelSelector: selector,
 		ProfileTypeID: ptype.ID,
-	}, ptype, nil
+	}
+
+	var mn int64
+	if v, err := strconv.Atoi(v.Get("max-nodes")); err == nil && v != 0 {
+		mn = int64(v)
+	}
+	if v, err := strconv.Atoi(v.Get("maxNodes")); err == nil && v != 0 {
+		mn = int64(v)
+	}
+	p.MaxNodes = &mn
+
+	return p, ptype, nil
 }
 
-func parseQuery(req *http.Request) (string, *typesv1.ProfileType, error) {
-	q := req.Form.Get("query")
+func parseQuery(fieldName string, req *http.Request) (string, *typesv1.ProfileType, error) {
+	q := req.Form.Get(fieldName)
 	if q == "" {
-		return "", nil, fmt.Errorf("query is required")
+		return "", nil, fmt.Errorf("'%s' is required", fieldName)
 	}
 
 	parsedSelector, err := parser.ParseMetricSelector(q)
 	if err != nil {
-		return "", nil, status.Error(codes.InvalidArgument, "failed to parse query")
+		return "", nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse '%s'", fieldName))
 	}
 
 	sel := make([]*labels.Matcher, 0, len(parsedSelector))
@@ -132,25 +235,14 @@ func parseQuery(req *http.Request) (string, *typesv1.ProfileType, error) {
 		}
 	}
 	if nameLabel == nil {
-		return "", nil, status.Error(codes.InvalidArgument, "query must contain a profile-type selection")
+		return "", nil, status.Error(codes.InvalidArgument, fmt.Sprintf("'%s' must contain a profile-type selection", fieldName))
 	}
 
 	profileSelector, err := phlaremodel.ParseProfileTypeSelector(nameLabel.Value)
 	if err != nil {
-		return "", nil, status.Error(codes.InvalidArgument, "failed to parse query")
+		return "", nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse '%s'", fieldName))
 	}
 	return convertMatchersToString(sel), profileSelector, nil
-}
-
-func parseRelativeTime(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "now-")
-
-	d, err := model.ParseDuration(s)
-	if err != nil {
-		return 0, err
-	}
-	return time.Duration(d), nil
 }
 
 func convertMatchersToString(matchers []*labels.Matcher) string {

@@ -30,7 +30,6 @@ EMBEDASSETS ?= embedassets
 # Build flags
 VPREFIX := github.com/grafana/phlare/pkg/util/build
 GO_LDFLAGS   := -X $(VPREFIX).Branch=$(GIT_BRANCH) -X $(VPREFIX).Version=$(IMAGE_TAG) -X $(VPREFIX).Revision=$(GIT_REVISION) -X $(VPREFIX).BuildDate=$(GIT_LAST_COMMIT_DATE)
-GO_FLAGS     := -ldflags "-extldflags \"-static\" -s -w $(GO_LDFLAGS)" -tags "netgo $(EMBEDASSETS)"
 
 .PHONY: help
 help: ## Describe useful make targets
@@ -64,7 +63,7 @@ go/test: $(BIN)/gotestsum
 	$(BIN)/gotestsum -- $(GO_TEST_FLAGS) ./...
 
 .PHONY: build
-build: go/bin ## Do a production build (requiring the frontend build to be present)
+build: frontend/build go/bin ## Do a production build (requiring the frontend build to be present)
 
 .PHONY: build-dev
 build-dev: ## Do a dev build (without requiring the frontend)
@@ -106,14 +105,18 @@ release/build: release/prereq ## Build current platform release binaries
 go/deps:
 	$(GO) mod tidy
 
+define go_build
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(GO) build -tags "netgo $(EMBEDASSETS)" -ldflags "-extldflags \"-static\" $(1)" ./cmd/phlare
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(GO) build -ldflags "-extldflags \"-static\" $(1)" ./cmd/profilecli
+endef
+
 .PHONY: go/bin-debug
 go/bin-debug:
-	$(MAKE) go/bin 'GO_FLAGS=-ldflags "-extldflags \"-static\" $(GO_LDFLAGS)" -tags netgo'
+	$(call go_build,$(GO_LDFLAGS))
 
 .PHONY: go/bin
 go/bin:
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(GO) build $(GO_FLAGS) ./cmd/phlare
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(GO) build $(GO_FLAGS) ./cmd/profilecli
+	$(call go_build,-s -w $(GO_LDFLAGS))
 
 .PHONY: go/lint
 go/lint: $(BIN)/golangci-lint
@@ -133,8 +136,7 @@ go/mod:
 .PHONY: fmt
 fmt: $(BIN)/golangci-lint $(BIN)/buf $(BIN)/tk ## Automatically fix some lint errors
 	git ls-files '*.go' | grep -v 'vendor/' | xargs gofmt -s -w
-	# TODO: Reenable once golangci-lint support go 1.18 properly
-	# $(BIN)/golangci-lint run --fix
+	$(BIN)/golangci-lint run --fix
 	cd api/ && $(BIN)/buf format -w .
 	cd pkg && $(BIN)/buf format -w .
 	$(BIN)/tk fmt ./operations/phlare/jsonnet/ tools/monitoring/
@@ -158,11 +160,14 @@ define deploy
 	$(BIN)/kind load docker-image --name $(KIND_CLUSTER) $(IMAGE_PREFIX)phlare:$(IMAGE_TAG)
 	kubectl get pods
 	$(BIN)/helm upgrade --install $(1) ./operations/phlare/helm/phlare $(2) \
-		--set phlare.image.tag=$(IMAGE_TAG) --set phlare.image.repository=$(IMAGE_PREFIX)phlare --set phlare.service.port_name=http-metrics \
+		--set phlare.image.tag=$(IMAGE_TAG) \
+		--set phlare.image.repository=$(IMAGE_PREFIX)phlare \
+		--set phlare.podAnnotations.image-id=$(shell cat .docker-image-id-phlare) \
+		--set phlare.service.port_name=http-metrics \
 		--set phlare.podAnnotations."profiles\.grafana\.com\/memory\.port_name"=http-metrics \
 		--set phlare.podAnnotations."profiles\.grafana\.com\/cpu\.port_name"=http-metrics \
 		--set phlare.podAnnotations."profiles\.grafana\.com\/goroutine\.port_name"=http-metrics \
-		--set phlare.components.querier.resources=null --set phlare.components.distributor.resources=null --set phlare.components.ingester.resources=null
+		--set phlare.extraEnvVars.JAEGER_AGENT_HOST=jaeger.monitoring.svc.cluster.local.
 endef
 
 .PHONY: docker-image/phlare/build-debug
@@ -173,7 +178,7 @@ docker-image/phlare/build-debug: frontend/build go/bin-debug $(BIN)/dlv
 .PHONY: docker-image/phlare/build
 docker-image/phlare/build: GOOS=linux GOARCH=amd64
 docker-image/phlare/build: frontend/build go/bin
-	$(call docker_buildx,--load)
+	$(call docker_buildx,--load --iidfile .docker-image-id-phlare)
 
 .PHONY: docker-image/phlare/push
 docker-image/phlare/push: frontend/build go/bin
@@ -221,7 +226,7 @@ $(BIN)/buf: Makefile
 
 $(BIN)/golangci-lint: Makefile
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
+	GOBIN=$(abspath $(@D)) $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
 
 $(BIN)/protoc-gen-go: Makefile go.mod
 	@mkdir -p $(@D)
@@ -337,11 +342,13 @@ helm/check: $(BIN)/kubeconform $(BIN)/helm
 
 .PHONY: deploy
 deploy: $(BIN)/kind $(BIN)/helm docker-image/phlare/build
-	$(call deploy,phlare-dev,--set=phlare.extraEnvVars.JAEGER_AGENT_HOST=jaeger.monitoring.svc.cluster.local.)
+	$(call deploy,phlare-dev,)
+	# Create a service to provide the same endpoint as micro-services
+	echo '{"kind":"Service","apiVersion":"v1","metadata":{"name":"phlare-micro-services-query-frontend"},"spec":{"ports":[{"name":"phlare","port":4100,"targetPort":4100}],"selector":{"app.kubernetes.io/component":"all","app.kubernetes.io/instance":"phlare-dev"},"type":"ClusterIP"}}' | kubectl apply -f -
 
 .PHONY: deploy-micro-services
 deploy-micro-services: $(BIN)/kind $(BIN)/helm docker-image/phlare/build
-	$(call deploy,phlare-micro-services,--values=operations/phlare/helm/phlare/values-micro-services.yaml --set=phlare.extraEnvVars.JAEGER_AGENT_HOST=jaeger.monitoring.svc.cluster.local.)
+	$(call deploy,phlare-micro-services,--values=operations/phlare/helm/phlare/values-micro-services.yaml --set phlare.components.querier.resources=null --set phlare.components.distributor.resources=null --set phlare.components.ingester.resources=null)
 
 .PHONY: deploy-monitoring
 deploy-monitoring: $(BIN)/tk $(BIN)/kind tools/monitoring/environments/default/spec.json
