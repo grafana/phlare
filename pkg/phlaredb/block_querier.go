@@ -241,15 +241,14 @@ func (b *BlockQuerier) evict(blockID ulid.ULID) (bool, error) {
 		return false, nil
 	}
 	blockQuerier := b.queriers[j]
-	var err error
-	if err = blockQuerier.Close(); err != nil {
+	if err := blockQuerier.Close(); err != nil {
 		return true, err
 	}
 	// Delete the querier from the slice and make it eligible for GC.
 	copy(b.queriers[j:], b.queriers[j+1:])
 	b.queriers[len(b.queriers)-1] = nil
 	b.queriers = b.queriers[:len(b.queriers)-1]
-	return true, err
+	return true, nil
 }
 
 func (b *BlockQuerier) Close() error {
