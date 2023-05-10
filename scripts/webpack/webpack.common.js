@@ -73,6 +73,10 @@ module.exports = {
         __dirname,
         '../../public/app/overrides/services/tags'
       ),
+      '@webapp/services/base': path.resolve(
+        __dirname,
+        '../../public/app/overrides/services/base'
+      ),
 
       // Common
       '@pyroscope/webapp': path.resolve(

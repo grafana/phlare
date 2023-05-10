@@ -15,6 +15,7 @@ import { ComparisonView } from './pages/ComparisonView';
 import { DiffView } from './pages/DiffView';
 import { LoadAppNames } from './components/LoadAppNames';
 import { Sidebar } from './components/Sidebar';
+import { OrgWall } from './components/OrgWall';
 
 const container = document.getElementById('reactRoot') as HTMLElement;
 const root = ReactDOM.createRoot(container);
@@ -29,19 +30,21 @@ function App() {
       <div className="app">
         <Sidebar />
         <div className="pyroscope-app">
-          <LoadAppNames>
-            <Switch>
-              <Route exact path={ROUTES.SINGLE_VIEW}>
-                <SingleView />
-              </Route>
-              <Route path={ROUTES.COMPARISON_VIEW}>
-                <ComparisonView />
-              </Route>
-              <Route path={ROUTES.COMPARISON_DIFF_VIEW}>
-                <DiffView />
-              </Route>
-            </Switch>
-          </LoadAppNames>
+          <OrgWall>
+            <LoadAppNames>
+              <Switch>
+                <Route exact path={ROUTES.SINGLE_VIEW}>
+                  <SingleView />
+                </Route>
+                <Route path={ROUTES.COMPARISON_VIEW}>
+                  <ComparisonView />
+                </Route>
+                <Route path={ROUTES.COMPARISON_DIFF_VIEW}>
+                  <DiffView />
+                </Route>
+              </Switch>
+            </LoadAppNames>
+          </OrgWall>
         </div>
       </div>
     </Router>

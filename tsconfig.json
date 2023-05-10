@@ -19,6 +19,7 @@
       "@webapp/services/apps": ["./public/app/overrides/services/appNames"],
       "@webapp/services/render": ["./public/app/overrides/services/render"],
       "@webapp/services/tags": ["./public/app/overrides/services/tags"],
+      "@webapp/services/base": ["./public/app/overrides/services/base"],
 
       "@webapp/*": ["./node_modules/pyroscope-oss/webapp/javascript/*"]
     },
