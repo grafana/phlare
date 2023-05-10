@@ -25,5 +25,4 @@ export async function request(
     ...config,
     headers,
   });
-  throw new Error('export');
 }

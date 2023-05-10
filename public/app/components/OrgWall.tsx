@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchApps } from '@webapp/services/apps';
 import { useAppDispatch, useAppSelector } from '../redux/hooks';
-import { RequestNotOkError } from '@webapp/services/base';
 import TextField from '@webapp/ui/Form/TextField';
 import {
   Dialog,
@@ -10,9 +8,11 @@ import {
   DialogHeader,
 } from '@webapp/ui/Dialog';
 import Button from '@webapp/ui/Button';
-import { setOrgID } from '../services/orgID';
-
-type States = 'INITIAL' | 'NEEDS_ORG' | 'ALL_GOOD';
+import {
+  checkTenancyIsRequired,
+  selectTenancy,
+  actions,
+} from '../redux/reducers/org';
 
 /*
  * OrgWall checks whether the user is running in a multitenant environment
@@ -21,68 +21,40 @@ type States = 'INITIAL' | 'NEEDS_ORG' | 'ALL_GOOD';
  */
 export function OrgWall({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
-  const [currentState, setCurrentState] = useState<States>('INITIAL');
+  const tenancy = useAppSelector(selectTenancy);
 
   useEffect(() => {
-    async function run() {
-      // We do the request directly via the service
-      // Without dispatching an action
-      // Since actions with errors are globally handled via the Notifications system
-      const res = await fetchApps();
-
-      if (isOrgRequiredError(res)) {
-        // We are sure error is due to lack of orgID
-        // So let's show the modal
-        setCurrentState('NEEDS_ORG');
-        return;
-      }
-
-      // Any other kind of error
-      // Or everything went fine
-      // Let's let the rest of the application handle it
-      setCurrentState('ALL_GOOD');
-    }
-
-    run();
+    void dispatch(checkTenancyIsRequired());
   }, [dispatch]);
 
-  switch (currentState) {
-    case 'INITIAL': {
+  switch (tenancy) {
+    case 'unknown':
+    case 'loading': {
       return <></>;
     }
-    case 'NEEDS_ORG': {
+    case 'needs_org_id': {
       return (
         <SelectOrgDialog
-          onSaved={() => {
-            setCurrentState('ALL_GOOD');
+          onSaved={(orgID) => {
+            void dispatch(actions.setOrgID(orgID));
           }}
         />
       );
     }
-    case 'ALL_GOOD': {
+    case 'multi_tenant':
+    case 'single_tenant': {
       return <>{children}</>;
     }
   }
 }
 
-function isOrgRequiredError(res: Awaited<ReturnType<typeof fetchApps>>) {
-  // TODO: is 'no org id' a stable message?
-  return (
-    res.isErr &&
-    res.error instanceof RequestNotOkError &&
-    res.error.code == 401 &&
-    res.error.description === 'no org id\n'
-  );
-}
-
-function SelectOrgDialog({ onSaved }: { onSaved: () => void }) {
+function SelectOrgDialog({ onSaved }: { onSaved: (orgID: string) => void }) {
   const [isDialogOpen] = useState(true);
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     const orgID = e.target.orgID.value;
-    setOrgID(orgID);
-    onSaved();
+    onSaved(orgID);
   };
 
   return (
