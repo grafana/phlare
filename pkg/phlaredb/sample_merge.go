@@ -55,10 +55,9 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktrace
 		return stacktraceIDs[i] < stacktraceIDs[j]
 	})
 
-	var (
-		locationIDs = newUniqueIDs[struct{}]()
-		stacktraces = repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
-	)
+	locationIDs := newUniqueIDs[struct{}]()
+	stacktraces := repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
+	defer stacktraces.Close()
 
 	for stacktraces.Next() {
 		s := stacktraces.At()
@@ -226,10 +225,9 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 		return stacktraceIDs[i] < stacktraceIDs[j]
 	})
 
-	var (
-		locationIDs = newUniqueIDs[struct{}]()
-		stacktraces = repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
-	)
+	locationIDs := newUniqueIDs[struct{}]()
+	stacktraces := repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
+	defer stacktraces.Close()
 
 	for stacktraces.Next() {
 		s := stacktraces.At()
