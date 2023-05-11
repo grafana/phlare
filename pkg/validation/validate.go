@@ -39,6 +39,8 @@ const (
 	// SeriesLimit is a reason for discarding lines when we can't create a new stream
 	// because the limit of active streams has been reached.
 	SeriesLimit Reason = "series_limit"
+	// InvalidProfile is a reason for discarding profiles which are invalid.
+	InvalidProfile Reason = "invalid_profile"
 
 	SeriesLimitErrorMsg            = "Maximum active series limit exceeded (%d/%d), reduce the number of active streams (reduce labels or reduce label values), or contact your administrator to see if the limit can be increased"
 	MissingLabelsErrorMsg          = "error at least one label pair is required per profile"
@@ -135,4 +137,9 @@ func ReasonOf(err error) Reason {
 		return Unknown
 	}
 	return validationErr.Reason
+}
+
+func IsValidationErr(err error) bool {
+	var validationErr *Error
+	return errors.As(err, &validationErr)
 }

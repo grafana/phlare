@@ -187,34 +187,28 @@ func (i *Ingester) forInstance(ctx context.Context, f func(*instance) error) err
 func (i *Ingester) Push(ctx context.Context, req *connect.Request[pushv1.PushRequest]) (*connect.Response[pushv1.PushResponse], error) {
 	return forInstanceUnary(ctx, i, func(instance *instance) (*connect.Response[pushv1.PushResponse], error) {
 		level.Debug(instance.logger).Log("msg", "message received by ingester push")
+		var errs multiPushError
 		for _, series := range req.Msg.Series {
 			for _, sample := range series.Samples {
-				err := pprof.FromBytes(sample.RawProfile, func(p *profilev1.Profile, size int) error {
+				size := 0
+				err := pprof.FromBytes(sample.RawProfile, func(p *profilev1.Profile, uncompressedSize int) error {
+					size = uncompressedSize
 					id, err := uuid.Parse(sample.ID)
 					if err != nil {
-						return err
+						errs.Add(validation.NewErrorf(validation.InvalidProfile, "invalid ID: %s", err), sample.ID, size)
+						return nil
 					}
 					if err = instance.Head().Ingest(ctx, p, id, series.Labels...); err != nil {
-						reason := validation.ReasonOf(err)
-						if reason != validation.Unknown {
-							validation.DiscardedProfiles.WithLabelValues(string(reason), instance.tenantID).Add(float64(1))
-							validation.DiscardedBytes.WithLabelValues(string(reason), instance.tenantID).Add(float64(size))
-							switch validation.ReasonOf(err) {
-							case validation.OutOfOrder:
-								return connect.NewError(connect.CodeInvalidArgument, err)
-							case validation.SeriesLimit:
-								return connect.NewError(connect.CodeResourceExhausted, err)
-							}
-						}
+						errs.Add(err, sample.ID, size)
 					}
-					return err
+					return nil
 				})
 				if err != nil {
-					return nil, err
+					errs.Add(validation.NewErrorf(validation.InvalidProfile, "invalid format: %s", err), sample.ID, size)
 				}
 			}
 		}
-		return connect.NewResponse(&pushv1.PushResponse{}), nil
+		return connect.NewResponse(&pushv1.PushResponse{}), errs.Err()
 	})
 }
 
