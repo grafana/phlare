@@ -47,7 +47,7 @@ function FlatDropdown({
   );
 }
 
-export default function AccountButton() {
+export function SidebarTenant() {
   const isMultiTenant = useAppSelector(selectIsMultiTenant);
   const orgID = useAppSelector(selectOrgID);
   const dispatch = useAppDispatch();
@@ -58,9 +58,7 @@ export default function AccountButton() {
 
   // TODO: show the modal
   const onChangeOrganizationClick = () => {
-    dispatch(actions.deleteTenancy());
-
-    window.location.reload();
+    dispatch(actions.setWantsToChange());
   };
 
   return (
@@ -77,11 +75,11 @@ export default function AccountButton() {
           </MenuButton>
         }
       >
-        <MenuHeader>Current OrgID</MenuHeader>
+        <MenuHeader>Current Tenant</MenuHeader>
         <DropdownMenuItem className={styles.menuItemDisabled}>
           <div className={styles.menuItemWithButton}>
             <span className={styles.menuItemWithButtonTitle}>
-              Org ID: {orgID}
+              Tenant ID: {orgID}
             </span>
             <Button className={styles.menuItemWithButtonButton}>
               <div onClick={() => onChangeOrganizationClick()}>

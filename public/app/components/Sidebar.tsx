@@ -27,7 +27,7 @@ import { useWindowWidth } from '@react-hook/window-size';
 import { isRouteActive, ROUTES } from '../pages/routes';
 import Logo from '../static/logo.svg';
 import styles from './Sidebar.module.css';
-import SidebarOrg from './SidebarOrg';
+import { SidebarTenant } from './SidebarOrg';
 
 export function Sidebar() {
   const collapsed = useAppSelector(selectSidebarCollapsed);
@@ -89,7 +89,7 @@ export function Sidebar() {
               exact
             />
           </MenuItem>
-          <SidebarOrg />
+          <SidebarTenant />
         </Menu>
       </SidebarContent>
       <SidebarFooter>

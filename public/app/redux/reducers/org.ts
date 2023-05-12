@@ -10,6 +10,7 @@ interface OrgState {
     | 'unknown'
     | 'loading'
     | 'needs_org_id'
+    | 'wants_to_change'
     | 'single_tenant'
     | 'multi_tenant';
   orgID?: string;
@@ -78,6 +79,10 @@ const orgSlice = createSlice({
     setOrgID(state, action: PayloadAction<string>) {
       setOrgID(action.payload);
       state.tenancy = 'multi_tenant';
+      state.orgID = action.payload;
+    },
+    setWantsToChange(state) {
+      state.tenancy = 'wants_to_change';
     },
     setTenancy(state, action: PayloadAction<OrgState['tenancy']>) {
       state.tenancy = action.payload;

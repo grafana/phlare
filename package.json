@@ -44,7 +44,7 @@
   },
   "dependencies": {
     "@fortawesome/react-fontawesome": "~0.1.11",
-    "@mui/base": "^5.0.0-alpha.98",
+    "@mui/base": "5.0.0-alpha.98",
     "@mui/material": "^5.10.11",
     "@react-hook/resize-observer": "^1.2.4",
     "@react-hook/window-size": "^3.0.7",

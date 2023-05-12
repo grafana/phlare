@@ -12,6 +12,7 @@ import {
   checkTenancyIsRequired,
   selectTenancy,
   actions,
+  selectOrgID,
 } from '../redux/reducers/org';
 
 /*
@@ -22,6 +23,7 @@ import {
 export function OrgWall({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
   const tenancy = useAppSelector(selectTenancy);
+  const currentOrg = useAppSelector(selectOrgID);
 
   useEffect(() => {
     void dispatch(checkTenancyIsRequired());
@@ -32,10 +34,26 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
     case 'loading': {
       return <></>;
     }
+    case 'wants_to_change': {
+      return (
+        <>
+          <SelectOrgDialog
+            currentOrg={currentOrg}
+            onSaved={(orgID) => {
+              console.log('setting orgId', orgID);
+              void dispatch(actions.setOrgID(orgID));
+            }}
+          />
+          {children}
+        </>
+      );
+    }
     case 'needs_org_id': {
       return (
         <SelectOrgDialog
+          currentOrg={currentOrg}
           onSaved={(orgID) => {
+            console.log('setting orgId', orgID);
             void dispatch(actions.setOrgID(orgID));
           }}
         />
@@ -48,11 +66,18 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
   }
 }
 
-function SelectOrgDialog({ onSaved }: { onSaved: (orgID: string) => void }) {
+function SelectOrgDialog({
+  currentOrg,
+  onSaved,
+}: {
+  currentOrg?: string;
+  onSaved: (orgID: string) => void;
+}) {
   const [isDialogOpen] = useState(true);
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    console.log('submitting form', e.target);
     const orgID = e.target.orgID.value;
     onSaved(orgID);
   };
@@ -78,6 +103,7 @@ function SelectOrgDialog({ onSaved }: { onSaved: (orgID: string) => void }) {
                 </p>
 
                 <TextField
+                  defaultValue={currentOrg}
                   label="Organization ID"
                   required
                   id="orgID"
