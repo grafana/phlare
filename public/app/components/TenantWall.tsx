@@ -101,8 +101,8 @@ function SelectTenantIDDialog({
                   sidebar).
                 </p>
                 <p>
-                  Notice that if you migrated from the not multi-tenant version
-                  the data can be found under tenant ID "anonymous".
+                  Notice that if you migrated from a non-multitenant version,
+                  data can be found under Tenant ID "anonymous".
                 </p>
 
                 <TextField
