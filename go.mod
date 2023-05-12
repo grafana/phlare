@@ -3,12 +3,12 @@ module github.com/grafana/phlare
 go 1.19
 
 require (
-	github.com/apache/arrow/go/v11 v11.0.0
+	github.com/apache/arrow/go/v12 v12.0.0
 	github.com/bufbuild/connect-go v1.4.1
 	github.com/bufbuild/connect-grpchealth-go v1.0.0
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/drone/envsubst v1.0.3
-	github.com/dustin/go-humanize v1.0.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/felixge/fgprof v0.9.4-0.20221116204635-ececf7638e93
 	github.com/felixge/httpsnoop v1.0.3
 	github.com/go-kit/log v0.2.1
@@ -26,7 +26,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/k0kubun/pp/v3 v3.2.0
 	github.com/klauspost/compress v1.15.13
-	github.com/mattn/go-isatty v0.0.16
+	github.com/mattn/go-isatty v0.0.17
 	github.com/minio/minio-go/v7 v7.0.45
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/oklog/ulid v1.3.1
@@ -52,10 +52,10 @@ require (
 	go.uber.org/atomic v1.10.0
 	go.uber.org/goleak v1.2.0
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
-	golang.org/x/net v0.8.0
-	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.6.0
-	golang.org/x/text v0.8.0
+	golang.org/x/net v0.10.0
+	golang.org/x/sync v0.2.0
+	golang.org/x/sys v0.8.0
+	golang.org/x/text v0.9.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20221227171554-f9683d7f8bef
 	google.golang.org/grpc v1.51.0
@@ -92,6 +92,7 @@ require (
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.6+incompatible // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
+	github.com/apache/arrow/go/v13 v13.0.0-20230511080246-1a038adad85b // indirect
 	github.com/apache/thrift v0.16.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
@@ -160,7 +161,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.1.2 // indirect
-	github.com/google/flatbuffers v2.0.8+incompatible // indirect
+	github.com/google/flatbuffers v23.5.9+incompatible // indirect
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
@@ -259,10 +260,10 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.4.0 // indirect
-	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/oauth2 v0.3.0 // indirect
-	golang.org/x/term v0.6.0 // indirect
-	golang.org/x/tools v0.6.0 // indirect
+	golang.org/x/term v0.8.0 // indirect
+	golang.org/x/tools v0.9.1 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.105.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
