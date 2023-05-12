@@ -12,6 +12,7 @@ import {
 } from '../redux/reducers/org';
 import { useAppSelector, useAppDispatch } from '../redux/hooks';
 import styles from './SidebarOrg.module.css';
+import cx from 'classnames';
 import Button from '@webapp/ui/Button';
 
 export interface DropdownProps {
@@ -56,11 +57,6 @@ export function SidebarTenant() {
     return <></>;
   }
 
-  // TODO: show the modal
-  const onChangeOrganizationClick = () => {
-    dispatch(actions.setWantsToChange());
-  };
-
   return (
     <>
       <FlatDropdown
@@ -71,21 +67,22 @@ export function SidebarTenant() {
         className={styles.dropdown}
         menuButton={
           <MenuButton className={styles.accountDropdown}>
-            <MenuItem icon={<Icon icon={faUser} />}>Tenancy</MenuItem>
+            <MenuItem icon={<Icon icon={faUser} />}>Tenant</MenuItem>
           </MenuButton>
         }
       >
         <MenuHeader>Current Tenant</MenuHeader>
-        <DropdownMenuItem className={styles.menuItemDisabled}>
+        <DropdownMenuItem
+          className={styles.menuItemDisabled}
+          onClick={() => {
+            void dispatch(actions.setWantsToChange());
+          }}
+        >
           <div className={styles.menuItemWithButton}>
-            <span className={styles.menuItemWithButtonTitle}>
+            <span className={cx(styles.menuItemWithButtonTitle, styles.orgID)}>
               Tenant ID: {orgID}
             </span>
-            <Button className={styles.menuItemWithButtonButton}>
-              <div onClick={() => onChangeOrganizationClick()}>
-                <Icon icon={faCog} />
-              </div>
-            </Button>
+            <Icon icon={faCog} />
           </div>
         </DropdownMenuItem>
       </FlatDropdown>

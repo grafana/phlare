@@ -15,10 +15,15 @@ export async function request(
   request: RequestInfo,
   config?: RequestInit
 ): Promise<Result<unknown, RequestError>> {
-  const headers = {
-    ...config?.headers,
-    'X-Scope-OrgID': tenantIDFromStorage(),
-  };
+  let headers = config?.headers;
+
+  // Reuse headers if they were passed
+  if (!config?.headers?.hasOwnProperty('X-Scope-OrgID')) {
+    headers = {
+      ...config?.headers,
+      'X-Scope-OrgID': tenantIDFromStorage(),
+    };
+  }
 
   return ogRequest(request, {
     ...config,

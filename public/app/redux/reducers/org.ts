@@ -40,22 +40,18 @@ export const checkTenancyIsRequired = createAsyncThunk<
   'checkTenancyIsRequired',
   async () => {
     const orgID = tenantIDFromStorage();
-    // There's an orgID previously set
-    if (orgID) {
-      return Promise.resolve({
-        tenancy: 'multi_tenant',
-        orgID,
-      });
-    }
 
     // Try to hit the server and see the response
     const multitenancy = await isMultiTenancyEnabled();
-    if (multitenancy) {
+
+    if (multitenancy && !orgID) {
       return Promise.resolve({ tenancy: 'needs_org_id', orgID });
     }
 
-    // No error, or it's a different kind of error
-    // Let's assume it's a single tenant
+    if (multitenancy && orgID) {
+      return Promise.resolve({ tenancy: 'multi_tenant', orgID });
+    }
+
     return Promise.resolve({ tenancy: 'single_tenant', orgID });
   },
   {
@@ -105,7 +101,8 @@ export const { actions } = orgSlice;
 export const selectTenancy = (state: RootState) => state.org.tenancy;
 
 export const selectIsMultiTenant = (state: RootState) =>
-  state.org.tenancy === 'multi_tenant';
+  state.org.tenancy === 'multi_tenant' ||
+  state.org.tenancy === 'wants_to_change';
 
 export const selectOrgID = (state: RootState) => state.org.orgID;
 

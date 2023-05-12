@@ -1,15 +1,25 @@
-import { fetchApps } from '@webapp/services/apps';
 import { RequestNotOkError } from '@webapp/services/base';
 import store from '@phlare/redux/store';
+import { request } from '@webapp/services/base';
 
 export const LOCAL_STORAGE_PREFIX = 'pyroscope:tenant';
 
 export async function isMultiTenancyEnabled() {
-  const res = await fetchApps();
+  // Do a request not passing any headers
+  const res = await request('/pyroscope/label-values?label=__name__', {
+    headers: {
+      'X-Scope-OrgID': '',
+    },
+  });
+
+  if (res.isOk) {
+    return false;
+  }
+
   return isOrgRequiredError(res);
 }
 
-function isOrgRequiredError(res: Awaited<ReturnType<typeof fetchApps>>) {
+function isOrgRequiredError(res: Awaited<ReturnType<typeof request>>) {
   // TODO: is 'no org id' a stable message?
   return (
     res.isErr &&
