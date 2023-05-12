@@ -3,8 +3,9 @@ import store from '@phlare/redux/store';
 import { request } from '@webapp/services/base';
 
 export async function isMultiTenancyEnabled() {
-  // Do a request not passing any headers
   const res = await request('/pyroscope/label-values?label=__name__', {
+    // Without this it would automatically add the OrgID
+    // Which doesn't tell us whether multitenancy is enabled or not
     headers: {
       'X-Scope-OrgID': '',
     },

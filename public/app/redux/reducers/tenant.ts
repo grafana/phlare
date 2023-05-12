@@ -12,7 +12,7 @@ export const persistConfig: PersistConfig<TenantState> = {
   key: 'pyroscope:tenant',
   version: 0,
   storage,
-  whitelist: ['tenantId'],
+  whitelist: ['tenantID'],
 };
 
 interface TenantState {
