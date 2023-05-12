@@ -4,6 +4,8 @@
     "plugins": [{ "name": "typescript-plugin-css-modules" }],
     // TODO: unify with webpack.common.js
     "paths": {
+      "@phlare/*": ["./public/app/*"],
+
       "@pyroscope/webapp/*": ["./node_modules/pyroscope-oss/webapp/*"],
       "@webapp/redux/*": ["./node_modules/pyroscope-oss/webapp/javascript/redux/*"],
       "@pyroscope/flamegraph/*": ["./node_modules/pyroscope-oss/packages/pyroscope-flamegraph/*"],

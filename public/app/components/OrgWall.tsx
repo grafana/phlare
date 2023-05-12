@@ -29,6 +29,10 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
     void dispatch(checkTenancyIsRequired());
   }, [dispatch]);
 
+  // Don't rerender all the children when this component changes
+  // For example, when user wants to change the tenant ID
+  const memoedChildren = React.useMemo(() => children, []);
+
   switch (tenancy) {
     case 'unknown':
     case 'loading': {
@@ -40,11 +44,10 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
           <SelectOrgDialog
             currentOrg={currentOrg}
             onSaved={(orgID) => {
-              console.log('setting orgId', orgID);
               void dispatch(actions.setOrgID(orgID));
             }}
           />
-          {children}
+          {memoedChildren}
         </>
       );
     }
@@ -53,7 +56,6 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
         <SelectOrgDialog
           currentOrg={currentOrg}
           onSaved={(orgID) => {
-            console.log('setting orgId', orgID);
             void dispatch(actions.setOrgID(orgID));
           }}
         />
@@ -61,7 +63,7 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
     }
     case 'multi_tenant':
     case 'single_tenant': {
-      return <>{children}</>;
+      return <>{memoedChildren}</>;
     }
   }
 }

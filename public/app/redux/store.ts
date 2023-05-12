@@ -19,12 +19,14 @@ import continuousReducer, {
 import uiStore, {
   persistConfig as uiPersistConfig,
 } from '@webapp/redux/reducers/ui';
-import orgReducer from './reducers/org';
+import orgReducer, {
+  persistConfig as tenantPersistConfig,
+} from './reducers/org';
 
 const reducer = combineReducers({
   continuous: continuousReducer,
   ui: persistReducer(uiPersistConfig, uiStore),
-  org: orgReducer,
+  org: persistReducer(tenantPersistConfig, orgReducer),
 });
 
 function isError(action: unknown): action is { error: unknown } {

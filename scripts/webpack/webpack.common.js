@@ -97,6 +97,8 @@ module.exports = {
         '../../node_modules/pyroscope-oss/webapp/javascript'
       ),
 
+      '@phlare': path.resolve(__dirname, '../../public/app'),
+
       // Dependencies
       ...deps,
     },

@@ -3,7 +3,7 @@ import {
   type RequestError,
   request as ogRequest,
 } from '../../../../node_modules/pyroscope-oss/webapp/javascript/services/base';
-import { getOrgID } from '../../services/orgID';
+import { tenantIDFromStorage } from '@phlare/services/tenant';
 
 export * from '../../../../node_modules/pyroscope-oss/webapp/javascript/services/base';
 
@@ -17,8 +17,7 @@ export async function request(
 ): Promise<Result<unknown, RequestError>> {
   const headers = {
     ...config?.headers,
-    // TODO: fetching from localstorage every time may be slow
-    'X-Scope-OrgID': getOrgID() || '',
+    'X-Scope-OrgID': tenantIDFromStorage(),
   };
 
   return ogRequest(request, {

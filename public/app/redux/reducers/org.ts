@@ -1,9 +1,20 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { createAsyncThunk } from '@webapp/redux/async-thunk';
-import { fetchApps } from '@webapp/services/apps';
 import type { RootState } from '../store';
-import { RequestNotOkError } from '@webapp/services/base';
-import { deleteOrgID, getOrgID, setOrgID } from '../../services/orgID';
+import {
+  LOCAL_STORAGE_PREFIX,
+  isMultiTenancyEnabled,
+  tenantIDFromStorage,
+} from '@phlare/services/tenant';
+import storage from 'redux-persist/lib/storage';
+import { PersistConfig } from 'redux-persist/lib/types';
+
+export const persistConfig: PersistConfig<OrgState> = {
+  key: LOCAL_STORAGE_PREFIX,
+  version: 0,
+  storage,
+  whitelist: ['orgID'],
+};
 
 interface OrgState {
   tenancy:
@@ -21,16 +32,6 @@ const initialState: OrgState = {
   orgID: undefined,
 };
 
-function isOrgRequiredError(res: Awaited<ReturnType<typeof fetchApps>>) {
-  // TODO: is 'no org id' a stable message?
-  return (
-    res.isErr &&
-    res.error instanceof RequestNotOkError &&
-    res.error.code == 401 &&
-    res.error.description === 'no org id\n'
-  );
-}
-
 export const checkTenancyIsRequired = createAsyncThunk<
   { tenancy: OrgState['tenancy']; orgID?: string },
   void,
@@ -38,7 +39,7 @@ export const checkTenancyIsRequired = createAsyncThunk<
 >(
   'checkTenancyIsRequired',
   async () => {
-    const orgID = getOrgID() || undefined;
+    const orgID = tenantIDFromStorage();
     // There's an orgID previously set
     if (orgID) {
       return Promise.resolve({
@@ -48,8 +49,8 @@ export const checkTenancyIsRequired = createAsyncThunk<
     }
 
     // Try to hit the server and see the response
-    const res = await fetchApps();
-    if (isOrgRequiredError(res)) {
+    const multitenancy = await isMultiTenancyEnabled();
+    if (multitenancy) {
       return Promise.resolve({ tenancy: 'needs_org_id', orgID });
     }
 
@@ -73,11 +74,10 @@ const orgSlice = createSlice({
   initialState,
   reducers: {
     deleteTenancy(state) {
-      deleteOrgID();
       state.tenancy = 'unknown';
+      state.orgID = undefined;
     },
     setOrgID(state, action: PayloadAction<string>) {
-      setOrgID(action.payload);
       state.tenancy = 'multi_tenant';
       state.orgID = action.payload;
     },
