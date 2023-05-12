@@ -7,13 +7,12 @@ import Icon from '@webapp/ui/Icon';
 import { MenuItem } from '@webapp/ui/Sidebar';
 import {
   selectIsMultiTenant,
-  selectOrgID,
+  selectTenantID,
   actions,
-} from '../redux/reducers/org';
+} from '@phlare/redux/reducers/tenant';
 import { useAppSelector, useAppDispatch } from '../redux/hooks';
-import styles from './SidebarOrg.module.css';
+import styles from './SidebarTenant.module.css';
 import cx from 'classnames';
-import Button from '@webapp/ui/Button';
 
 export interface DropdownProps {
   children: JSX.Element[] | JSX.Element;
@@ -50,7 +49,7 @@ function FlatDropdown({
 
 export function SidebarTenant() {
   const isMultiTenant = useAppSelector(selectIsMultiTenant);
-  const orgID = useAppSelector(selectOrgID);
+  const orgID = useAppSelector(selectTenantID);
   const dispatch = useAppDispatch();
 
   if (!isMultiTenant) {

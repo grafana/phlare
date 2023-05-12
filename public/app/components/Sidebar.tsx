@@ -27,7 +27,7 @@ import { useWindowWidth } from '@react-hook/window-size';
 import { isRouteActive, ROUTES } from '../pages/routes';
 import Logo from '../static/logo.svg';
 import styles from './Sidebar.module.css';
-import { SidebarTenant } from './SidebarOrg';
+import { SidebarTenant } from './SidebarTenant';
 
 export function Sidebar() {
   const collapsed = useAppSelector(selectSidebarCollapsed);

@@ -12,13 +12,13 @@ import {
   checkTenancyIsRequired,
   selectTenancy,
   actions,
-  selectOrgID,
-} from '../redux/reducers/org';
+  selectTenantID,
+} from '@phlare/redux/reducers/tenant';
 
-export function OrgWall({ children }: { children: React.ReactNode }) {
+export function TenantWall({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
   const tenancy = useAppSelector(selectTenancy);
-  const currentOrg = useAppSelector(selectOrgID);
+  const currentTenant = useAppSelector(selectTenantID);
 
   useEffect(() => {
     void dispatch(checkTenancyIsRequired());
@@ -36,22 +36,22 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
     case 'wants_to_change': {
       return (
         <>
-          <SelectOrgDialog
-            currentOrg={currentOrg}
-            onSaved={(orgID) => {
-              void dispatch(actions.setOrgID(orgID));
+          <SelectTenantIDDialog
+            currentTenantID={currentTenant}
+            onSaved={(tenantID) => {
+              void dispatch(actions.setTenantID(tenantID));
             }}
           />
           {memoedChildren}
         </>
       );
     }
-    case 'needs_org_id': {
+    case 'needs_tenant_id': {
       return (
-        <SelectOrgDialog
-          currentOrg={currentOrg}
-          onSaved={(orgID) => {
-            void dispatch(actions.setOrgID(orgID));
+        <SelectTenantIDDialog
+          currentTenantID={currentTenant}
+          onSaved={(tenantID) => {
+            void dispatch(actions.setTenantID(tenantID));
           }}
         />
       );
@@ -63,12 +63,12 @@ export function OrgWall({ children }: { children: React.ReactNode }) {
   }
 }
 
-function SelectOrgDialog({
-  currentOrg,
+function SelectTenantIDDialog({
+  currentTenantID,
   onSaved,
 }: {
-  currentOrg?: string;
-  onSaved: (orgID: string) => void;
+  currentTenantID?: string;
+  onSaved: (tenantID: string) => void;
 }) {
   const [isDialogOpen] = useState(true);
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -86,7 +86,7 @@ function SelectOrgDialog({
       <Dialog open={isDialogOpen} aria-labelledby="dialog-header">
         <>
           <DialogHeader>
-            <h3 id="dialog-header">Enter an Organization ID</h3>
+            <h3 id="dialog-header">Enter a Tenant ID</h3>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -106,7 +106,7 @@ function SelectOrgDialog({
                 </p>
 
                 <TextField
-                  defaultValue={currentOrg}
+                  defaultValue={currentTenantID}
                   label="Tenant ID"
                   required
                   id="tenantID"

@@ -15,7 +15,7 @@ import { ComparisonView } from './pages/ComparisonView';
 import { DiffView } from './pages/DiffView';
 import { LoadAppNames } from './components/LoadAppNames';
 import { Sidebar } from './components/Sidebar';
-import { OrgWall } from './components/OrgWall';
+import { TenantWall } from './components/TenantWall';
 import { baseurl } from './overrides/util/baseurl';
 
 const container = document.getElementById('reactRoot') as HTMLElement;
@@ -29,7 +29,7 @@ function App() {
       <div className="app">
         <Sidebar />
         <div className="pyroscope-app">
-          <OrgWall>
+          <TenantWall>
             <LoadAppNames>
               <Switch>
                 <Route exact path={ROUTES.SINGLE_VIEW}>
@@ -43,7 +43,7 @@ function App() {
                 </Route>
               </Switch>
             </LoadAppNames>
-          </OrgWall>
+          </TenantWall>
         </div>
       </div>
     </Router>

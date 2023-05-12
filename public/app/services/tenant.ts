@@ -2,8 +2,6 @@ import { RequestNotOkError } from '@webapp/services/base';
 import store from '@phlare/redux/store';
 import { request } from '@webapp/services/base';
 
-export const LOCAL_STORAGE_PREFIX = 'pyroscope:tenant';
-
 export async function isMultiTenancyEnabled() {
   // Do a request not passing any headers
   const res = await request('/pyroscope/label-values?label=__name__', {
@@ -12,6 +10,7 @@ export async function isMultiTenancyEnabled() {
     },
   });
 
+  // If everything went okay even without passing an OrgID, we can assume it's a non multitenant instance
   if (res.isOk) {
     return false;
   }
@@ -29,9 +28,6 @@ function isOrgRequiredError(res: Awaited<ReturnType<typeof request>>) {
   );
 }
 
-// The source of truth is actually from redux-persist
-// However we may need to access directly from local storage
-// Eg when doing a request
 export function tenantIDFromStorage(): string {
-  return store.getState().org.orgID || '';
+  return store.getState().tenant.tenantID || '';
 }
