@@ -4,7 +4,7 @@ import type { RootState } from '@webapp/redux/store';
 import {
   isMultiTenancyEnabled,
   tenantIDFromStorage,
-} from '@webapp/services/tenant';
+} from '@phlare/services/tenant';
 import storage from 'redux-persist/lib/storage';
 import { PersistConfig } from 'redux-persist/lib/types';
 

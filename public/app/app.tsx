@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@webapp/jquery-import';
+import '@phlare/jquery-import';
 import { Provider } from 'react-redux';
 import store from '@webapp/redux/store';
 import '@webapp/../sass/profile.scss';
@@ -9,13 +9,13 @@ import Notifications from '@webapp/ui/Notifications';
 import { Router, Switch, Route } from 'react-router-dom';
 import { createBrowserHistory } from 'history';
 
-import { ROUTES } from '@webapp/pages/routes';
-import { SingleView } from '@webapp/pages/SingleView';
-import { ComparisonView } from '@webapp/pages/ComparisonView';
-import { DiffView } from '@webapp/pages/DiffView';
-import { LoadAppNames } from '@webapp/components/LoadAppNames';
-import { Sidebar } from '@webapp/components/Sidebar';
-import { TenantWall } from '@webapp/components/TenantWall';
+import { ROUTES } from '@phlare/pages/routes';
+import { SingleView } from '@phlare/pages/SingleView';
+import { ComparisonView } from '@phlare/pages/ComparisonView';
+import { DiffView } from '@phlare/pages/DiffView';
+import { LoadAppNames } from '@phlare/components/LoadAppNames';
+import { Sidebar } from '@phlare/components/Sidebar';
+import { TenantWall } from '@phlare/components/TenantWall';
 import { baseurl } from '@webapp/util/baseurl';
 
 const container = document.getElementById('reactRoot') as HTMLElement;

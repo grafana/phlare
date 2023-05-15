@@ -3,7 +3,7 @@ import {
   type RequestError,
   request as ogRequest,
 } from '@pyroscope/webapp/javascript/services/base';
-import { tenantIDFromStorage } from '@webapp/services/tenant';
+import { tenantIDFromStorage } from '@phlare/services/tenant';
 
 export * from '@pyroscope/webapp/javascript/services/base';
 

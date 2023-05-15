@@ -22,10 +22,10 @@ import { useLocation, NavLink } from 'react-router-dom';
 import Icon from '@webapp/ui/Icon';
 import clsx from 'clsx';
 import { useWindowWidth } from '@react-hook/window-size';
-import { isRouteActive, ROUTES } from '@webapp/pages/routes';
-import Logo from '@webapp/logo.svg';
+import { isRouteActive, ROUTES } from '@phlare/pages/routes';
+import Logo from '@phlare/static/logo.svg';
 import styles from '@webapp/components/Sidebar.module.css';
-import { SidebarTenant } from '@webapp/components/SidebarTenant';
+import { SidebarTenant } from '@phlare/components/SidebarTenant';
 
 export function Sidebar() {
   const collapsed = useAppSelector(selectSidebarCollapsed);

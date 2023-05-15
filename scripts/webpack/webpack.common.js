@@ -48,30 +48,6 @@ module.exports = {
         __dirname,
         '../../public/app/overrides/components/AppSelector/Label'
       ),
-      '@webapp/components/LoadAppNames': path.resolve(
-        __dirname,
-        '../../public/app/components/LoadAppNames'
-      ),
-      '@webapp/components/Sidebar': path.resolve(
-        __dirname,
-        '../../public/app/components/Sidebar'
-      ),
-      '@webapp/components/Sidebar.module.css': path.resolve(
-        __dirname,
-        '../../public/app/components/Sidebar.module.css'
-      ),
-      '@webapp/components/SidebarTenant': path.resolve(
-        __dirname,
-        '../../public/app/components/SidebarTenant'
-      ),
-      '@webapp/components/SidebarTenant.module.css': path.resolve(
-        __dirname,
-        '../../public/app/components/SidebarTenant.module.css'
-      ),
-      '@webapp/components/TenantWall': path.resolve(
-        __dirname,
-        '../../public/app/components/TenantWall'
-      ),
       '@webapp/ui/Sidebar': path.resolve(
         __dirname,
         '../../public/app/overrides/ui/Sidebar'
@@ -93,10 +69,6 @@ module.exports = {
         __dirname,
         '../../public/app/redux/reducers/tenant'
       ),
-      '@webapp/hooks/useAppNames': path.resolve(
-        __dirname,
-        '../../public/app/hooks/useAppNames'
-      ),
       '@webapp/services/apps': path.resolve(
         __dirname,
         '../../public/app/overrides/services/appNames'
@@ -113,30 +85,6 @@ module.exports = {
         __dirname,
         '../../public/app/overrides/services/base'
       ),
-      '@webapp/services/tenant': path.resolve(
-        __dirname,
-        '../../public/app/services/tenant'
-      ),
-      '@webapp/pages/routes': path.resolve(
-        __dirname,
-        '../../public/app/pages/routes'
-      ),
-      '@webapp/pages/SingleView': path.resolve(
-        __dirname,
-        '../../public/app/pages/SingleView'
-      ),
-      '@webapp/pages/ComparisonView': path.resolve(
-        __dirname,
-        '../../public/app/pages/ComparisonView'
-      ),
-      '@webapp/pages/DiffView': path.resolve(
-        __dirname,
-        '../../public/app/pages/DiffView'
-      ),
-      '@webapp/jquery-import': path.resolve(
-        __dirname,
-        '../../public/app/jquery-import'
-      ),
 
       // Common
       '@pyroscope/webapp': path.resolve(
@@ -150,11 +98,6 @@ module.exports = {
       '@pyroscope/models': path.resolve(
         __dirname,
         '../../node_modules/pyroscope-oss/packages/pyroscope-models'
-      ),
-
-      '@webapp/logo.svg': path.resolve(
-        __dirname,
-        '../../public/app/static/logo.svg'
       ),
 
       '@webapp': path.resolve(
