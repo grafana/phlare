@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -96,7 +97,6 @@ func main() {
 }
 
 func (bq *BucketQuerier) run() error {
-
 	to := time.Now()
 	from := to.Add(-time.Hour * 24 * 7)
 
@@ -146,31 +146,40 @@ func (bq *BucketQuerier) run() error {
 
 	// now only use remaining block prefixes
 	for _, idx := range lo.Values(cachePrefixes) {
-		var idx = idx
+		idx := idx
 		g.Go(func() error {
 			blockPrefix := blockPrefixes[idx]
 			level.Info(logger).Log("msg", "listing", "prefix", blockPrefix)
+			filesErrGroup, ctx := errgroup.WithContext(ctx)
+			var mtx sync.Mutex
 			err = client.Iter(ctx, pathPrefix+blockPrefix, func(name string) error {
 				level.Info(logger).Log("msg", "found block", "id", name)
+				filesErrGroup.Go(func() error {
+					// now read metadata
+					r, err := client.Get(ctx, name+"meta.json")
+					if err != nil {
+						return err
+					}
 
-				// now read metadata
-				r, err := client.Get(ctx, name+"meta.json")
-				if err != nil {
-					return err
-				}
+					m, err := block.Read(r)
+					if err != nil {
+						return err
+					}
+					mtx.Lock()
+					metas[idx] = append(metas[idx], m)
+					mtx.Unlock()
 
-				m, err := block.Read(r)
-				if err != nil {
-					return err
-				}
-				metas[idx] = append(metas[idx], m)
-
-				if err := r.Close(); err != nil {
-					return err
-				}
-
+					if err := r.Close(); err != nil {
+						return err
+					}
+					return nil
+				})
 				return nil
 			}, objstore.WithoutApendingDirDelim)
+			if err != nil {
+				return err
+			}
+			err := filesErrGroup.Wait()
 			if err != nil {
 				return err
 			}
@@ -210,5 +219,4 @@ func (bq *BucketQuerier) run() error {
 	}
 
 	return nil
-
 }
