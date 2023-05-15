@@ -127,7 +127,8 @@ type Head struct {
 	headPath  string // path while block is actively appended to
 	localPath string // path once block has been cut
 
-	flushCh chan struct{} // this channel is closed once the Head should be flushed, should be used externally
+	inserts sync.WaitGroup // ongoing ingestion requests.
+	flushCh chan struct{}  // this channel is closed once the Head should be flushed, should be used externally
 
 	flushForcedTimer *time.Timer // this timer will phlare after the maximum
 
@@ -865,7 +866,9 @@ func (h *Head) Close() error {
 	return merr.Err()
 }
 
-// Flush closes the head and writes data to disk
+// Flush closes the head and writes data to disk.
+// No ingestion requests should be made concurrently
+// with the call, or after it finishes.
 func (h *Head) Flush(ctx context.Context) error {
 	start := time.Now()
 	defer func() {
@@ -880,6 +883,15 @@ func (h *Head) Flush(ctx context.Context) error {
 }
 
 func (h *Head) flush(ctx context.Context) error {
+	// Ensure all the ongoing ingestion requests have finished.
+	// It must be guaranteed that no new inserts will happen
+	// after the call start.
+	h.inserts.Wait()
+
+	// TODO: Make sure the call does not modify the head
+	//  and get rid of the write blocks, so that queries
+	//  are not waiting for the flush to finish.
+
 	if h.profiles.empty() {
 		level.Info(h.logger).Log("msg", "head empty - no block written")
 		return os.RemoveAll(h.headPath)

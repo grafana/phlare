@@ -13,8 +13,10 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/google/uuid"
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/services"
+	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -72,6 +74,11 @@ type PhlareDB struct {
 
 	headLock sync.RWMutex
 	head     *Head
+	// Read only head. On Flush, writes are directed to
+	// the new head, and queries can read the former head
+	// till it gets written to the disk and becomes available
+	// to blockQuerier.
+	roHead *Head
 
 	blockQuerier *BlockQuerier
 	limiter      TenantLimiter
@@ -99,7 +106,7 @@ func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareD
 	// ensure head metrics are registered early so they are reused for the new head
 	phlarectx = contextWithHeadMetrics(phlarectx, newHeadMetrics(reg))
 	f.phlarectx = phlarectx
-	if _, err := f.initHead(); err != nil {
+	if f.head, err = NewHead(f.phlarectx, f.cfg, f.limiter); err != nil {
 		return nil, err
 	}
 	f.wg.Add(1)
@@ -160,6 +167,9 @@ func (f *PhlareDB) loop() {
 }
 
 func (f *PhlareDB) Close() error {
+	// TODO:
+	//   1. Ensure ongoing flush is finished.
+	//   2. Flush the current head block.
 	errs := multierror.New()
 	if f.head != nil {
 		errs.Add(f.head.Close())
@@ -183,13 +193,27 @@ func (f *PhlareDB) Head() *Head {
 func (f *PhlareDB) Queriers() Queriers {
 	block := f.blockQuerier.Queriers()
 	head := f.Head().Queriers()
-
+	// TODO: Query r/o head as well.
 	res := make(Queriers, 0, len(block)+len(head))
 	res = append(res, block...)
 	res = append(res, head...)
 
 	return res
 }
+
+func (f *PhlareDB) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
+	// We need to keep track of the ongoing ingestion requests to ensure that none
+	// of them will compete with Flush. Lock is acquired to avoid Add after Wait that
+	// is called in the very beginning of Flush.
+	f.headLock.RLock()
+	h := f.head
+	h.inserts.Add(1)
+	f.headLock.RUnlock()
+	defer h.inserts.Done()
+	return h.Ingest(ctx, p, id, externalLabels...)
+}
+
+// TODO: Make other query APIs to read r/o head.
 
 func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
 	return f.Queriers().MergeProfilesStacktraces(ctx, stream)
@@ -320,27 +344,24 @@ func filterProfiles[B BidiServerMerge[Res, Req],
 	return selection, nil
 }
 
-func (f *PhlareDB) initHead() (oldHead *Head, err error) {
+func (f *PhlareDB) Flush(ctx context.Context) (err error) {
 	f.headLock.Lock()
-	defer f.headLock.Unlock()
-	oldHead = f.head
+	f.roHead = f.head
 	f.head, err = NewHead(f.phlarectx, f.cfg, f.limiter)
 	if err != nil {
-		return oldHead, err
-	}
-	return oldHead, nil
-}
-
-func (f *PhlareDB) Flush(ctx context.Context) error {
-	oldHead, err := f.initHead()
-	if err != nil {
+		f.headLock.Unlock()
 		return err
 	}
-
-	if oldHead == nil {
-		return nil
+	f.headLock.Unlock()
+	// Read only head is accessible by queries during the flush.
+	if err = f.roHead.Flush(ctx); err != nil {
+		return err
 	}
-	return oldHead.Flush(ctx)
+	f.headLock.Lock()
+	// TODO: Inject the flushed block to blockQuerier.
+	f.roHead = nil
+	f.headLock.Unlock()
+	return err
 }
 
 type blockEviction struct {
