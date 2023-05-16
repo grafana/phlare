@@ -101,9 +101,6 @@ client:
 
     [endpoint_params: <map of string to string> | default = ]
 
-    proxy_url:
-      [url: <url> | default = ]
-
     tls_config:
       [ca_file: <string> | default = ""]
 
@@ -119,14 +116,18 @@ client:
 
       [max_version: <int> | default = ]
 
+    proxy_url:
+      [url: <url> | default = ]
+
+    [no_proxy: <string> | default = ""]
+
+    [proxy_from_environment: <boolean> | default = ]
+
+    [proxy_connect_header: <map of string to []config.Secret> | default = ]
+
   [bearer_token: <string> | default = ""]
 
   [bearer_token_file: <string> | default = ""]
-
-  proxy_url:
-    [url: <url> | default = ]
-
-  [proxy_connect_header: <map of string to []config.Secret> | default = ]
 
   tls_config:
     [ca_file: <string> | default = ""]
@@ -147,13 +148,22 @@ client:
 
   [enable_http2: <boolean> | default = ]
 
+  proxy_url:
+    [url: <url> | default = ]
+
+  [no_proxy: <string> | default = ""]
+
+  [proxy_from_environment: <boolean> | default = ]
+
+  [proxy_connect_header: <map of string to []config.Secret> | default = ]
+
   # Tenant ID to use when pushing profiles to Phlare (default: anonymous).
   # CLI flag: -client.tenant-id
   [tenant_id: <string> | default = "anonymous"]
 
 api:
   # base URL for when the server is behind a reverse proxy with a different path
-  # CLI flag: -base-url
+  # CLI flag: -api.base-url
   [base-url: <string> | default = ""]
 
 # The server block configures the HTTP and gRPC server of the launched
@@ -230,6 +240,12 @@ limits:
   # frontend.
   # CLI flag: -querier.max-query-parallelism
   [max_query_parallelism: <int> | default = 32]
+
+  # The tenant's shard size, used when store-gateway sharding is enabled. Value
+  # of 0 disables shuffle sharding for the tenant, that is all tenant blocks are
+  # sharded across all store-gateway replicas.
+  # CLI flag: -store-gateway.tenant-shard-size
+  [store_gateway_tenant_shard_size: <int> | default = 0]
 
 # The query_scheduler block configures the query-scheduler.
 [query_scheduler: <query_scheduler>]
@@ -548,9 +564,19 @@ grpc_tls_config:
 # CLI flag: -server.log-source-ips-regex
 [log_source_ips_regex: <string> | default = ""]
 
-# Optionally log requests at info level instead of debug level.
+# Optionally log request headers.
+# CLI flag: -server.log-request-headers
+[log_request_headers: <boolean> | default = false]
+
+# Optionally log requests at info level instead of debug level. Applies to
+# request headers as well if server.log-request-headers is enabled.
 # CLI flag: -server.log-request-at-info-level-enabled
 [log_request_at_info_level_enabled: <boolean> | default = false]
+
+# Comma separated list of headers to exclude from loggin. Only used if
+# server.log-request-headers is true.
+# CLI flag: -server.log-request-headers-exclude-list
+[log_request_exclude_headers_list: <string> | default = ""]
 
 # Base path to serve all API routes from (e.g. /v1/)
 # CLI flag: -server.path-prefix
@@ -645,19 +671,18 @@ lifecycler:
         # CLI flag: -etcd.tls-enabled
         [tls_enabled: <boolean> | default = false]
 
-        # Path to the client certificate file, which will be used for
-        # authenticating with the server. Also requires the key path to be
-        # configured.
+        # Path to the client certificate, which will be used for authenticating
+        # with the server. Also requires the key path to be configured.
         # CLI flag: -etcd.tls-cert-path
         [tls_cert_path: <string> | default = ""]
 
-        # Path to the key file for the client certificate. Also requires the
-        # client certificate to be configured.
+        # Path to the key for the client certificate. Also requires the client
+        # certificate to be configured.
         # CLI flag: -etcd.tls-key-path
         [tls_key_path: <string> | default = ""]
 
-        # Path to the CA certificates file to validate server certificate
-        # against. If not set, the host's root CA certificates are used.
+        # Path to the CA certificates to validate server certificate against. If
+        # not set, the host's root CA certificates are used.
         # CLI flag: -etcd.tls-ca-path
         [tls_ca_path: <string> | default = ""]
 
@@ -786,6 +811,11 @@ lifecycler:
   # Name of network interface to read address from.
   # CLI flag: -ingester.lifecycler.interface
   [interface_names: <list of strings> | default = [<private network interfaces>]]
+
+  # Enable IPv6 support. Required to make use of IP addresses from IPv6
+  # interfaces.
+  # CLI flag: -ingester.enable-inet6
+  [enable_inet6: <boolean> | default = false]
 
   # Duration to sleep for before exiting, to ensure metrics are scraped.
   # CLI flag: -ingester.final-sleep
@@ -980,18 +1010,18 @@ backoff_config:
 # CLI flag: -<prefix>.tls-enabled
 [tls_enabled: <boolean> | default = false]
 
-# Path to the client certificate file, which will be used for authenticating
-# with the server. Also requires the key path to be configured.
+# Path to the client certificate, which will be used for authenticating with the
+# server. Also requires the key path to be configured.
 # CLI flag: -<prefix>.tls-cert-path
 [tls_cert_path: <string> | default = ""]
 
-# Path to the key file for the client certificate. Also requires the client
+# Path to the key for the client certificate. Also requires the client
 # certificate to be configured.
 # CLI flag: -<prefix>.tls-key-path
 [tls_key_path: <string> | default = ""]
 
-# Path to the CA certificates file to validate server certificate against. If
-# not set, the host's root CA certificates are used.
+# Path to the CA certificates to validate server certificate against. If not
+# set, the host's root CA certificates are used.
 # CLI flag: -<prefix>.tls-ca-path
 [tls_ca_path: <string> | default = ""]
 
@@ -1178,18 +1208,18 @@ The `memberlist` block configures the Gossip memberlist.
 # CLI flag: -memberlist.tls-enabled
 [tls_enabled: <boolean> | default = false]
 
-# Path to the client certificate file, which will be used for authenticating
-# with the server. Also requires the key path to be configured.
+# Path to the client certificate, which will be used for authenticating with the
+# server. Also requires the key path to be configured.
 # CLI flag: -memberlist.tls-cert-path
 [tls_cert_path: <string> | default = ""]
 
-# Path to the key file for the client certificate. Also requires the client
+# Path to the key for the client certificate. Also requires the client
 # certificate to be configured.
 # CLI flag: -memberlist.tls-key-path
 [tls_key_path: <string> | default = ""]
 
-# Path to the CA certificates file to validate server certificate against. If
-# not set, the host's root CA certificates are used.
+# Path to the CA certificates to validate server certificate against. If not
+# set, the host's root CA certificates are used.
 # CLI flag: -memberlist.tls-ca-path
 [tls_ca_path: <string> | default = ""]
 

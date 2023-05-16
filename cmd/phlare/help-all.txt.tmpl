@@ -66,9 +66,9 @@ Usage of ./phlare:
   -distributor.ring.etcd.password string
     	Etcd password.
   -distributor.ring.etcd.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -distributor.ring.etcd.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -distributor.ring.etcd.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -distributor.ring.etcd.tls-enabled
@@ -76,7 +76,7 @@ Usage of ./phlare:
   -distributor.ring.etcd.tls-insecure-skip-verify
     	Skip validating server certificate.
   -distributor.ring.etcd.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -distributor.ring.etcd.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -distributor.ring.etcd.tls-server-name string
@@ -118,9 +118,9 @@ Usage of ./phlare:
   -etcd.password string
     	Etcd password.
   -etcd.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -etcd.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -etcd.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -etcd.tls-enabled
@@ -128,7 +128,7 @@ Usage of ./phlare:
   -etcd.tls-insecure-skip-verify
     	Skip validating server certificate.
   -etcd.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -etcd.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -etcd.tls-server-name string
@@ -143,6 +143,8 @@ Usage of ./phlare:
     	Print help, also including advanced and experimental parameters.
   -ingester.availability-zone string
     	The availability zone where this instance is running.
+  -ingester.enable-inet6
+    	Enable IPv6 support. Required to make use of IP addresses from IPv6 interfaces.
   -ingester.final-sleep duration
     	Duration to sleep for before exiting, to ensure metrics are scraped.
   -ingester.heartbeat-period duration
@@ -234,9 +236,9 @@ Usage of ./phlare:
   -memberlist.stream-timeout duration
     	The timeout for establishing a connection with a remote node, and for read/write operations. (default 10s)
   -memberlist.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -memberlist.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -memberlist.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -memberlist.tls-enabled
@@ -244,7 +246,7 @@ Usage of ./phlare:
   -memberlist.tls-insecure-skip-verify
     	Skip validating server certificate.
   -memberlist.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -memberlist.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -memberlist.tls-server-name string
@@ -284,9 +286,9 @@ Usage of ./phlare:
   -overrides-exporter.ring.etcd.password string
     	Etcd password.
   -overrides-exporter.ring.etcd.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -overrides-exporter.ring.etcd.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -overrides-exporter.ring.etcd.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -overrides-exporter.ring.etcd.tls-enabled
@@ -294,7 +296,7 @@ Usage of ./phlare:
   -overrides-exporter.ring.etcd.tls-insecure-skip-verify
     	Skip validating server certificate.
   -overrides-exporter.ring.etcd.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -overrides-exporter.ring.etcd.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -overrides-exporter.ring.etcd.tls-server-name string
@@ -358,9 +360,9 @@ Usage of ./phlare:
   -querier.frontend-client.grpc-max-send-msg-size int
     	gRPC client max send message size (bytes). (default 104857600)
   -querier.frontend-client.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -querier.frontend-client.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -querier.frontend-client.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -querier.frontend-client.tls-enabled
@@ -368,7 +370,7 @@ Usage of ./phlare:
   -querier.frontend-client.tls-insecure-skip-verify
     	Skip validating server certificate.
   -querier.frontend-client.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -querier.frontend-client.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -querier.frontend-client.tls-server-name string
@@ -404,9 +406,9 @@ Usage of ./phlare:
   -query-frontend.grpc-client-config.grpc-max-send-msg-size int
     	gRPC client max send message size (bytes). (default 104857600)
   -query-frontend.grpc-client-config.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -query-frontend.grpc-client-config.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -query-frontend.grpc-client-config.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -query-frontend.grpc-client-config.tls-enabled
@@ -414,7 +416,7 @@ Usage of ./phlare:
   -query-frontend.grpc-client-config.tls-insecure-skip-verify
     	Skip validating server certificate.
   -query-frontend.grpc-client-config.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -query-frontend.grpc-client-config.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -query-frontend.grpc-client-config.tls-server-name string
@@ -444,9 +446,9 @@ Usage of ./phlare:
   -query-scheduler.grpc-client-config.grpc-max-send-msg-size int
     	gRPC client max send message size (bytes). (default 104857600)
   -query-scheduler.grpc-client-config.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -query-scheduler.grpc-client-config.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -query-scheduler.grpc-client-config.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -query-scheduler.grpc-client-config.tls-enabled
@@ -454,7 +456,7 @@ Usage of ./phlare:
   -query-scheduler.grpc-client-config.tls-insecure-skip-verify
     	Skip validating server certificate.
   -query-scheduler.grpc-client-config.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -query-scheduler.grpc-client-config.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -query-scheduler.grpc-client-config.tls-server-name string
@@ -488,9 +490,9 @@ Usage of ./phlare:
   -query-scheduler.ring.etcd.password string
     	Etcd password.
   -query-scheduler.ring.etcd.tls-ca-path string
-    	Path to the CA certificates file to validate server certificate against. If not set, the host's root CA certificates are used.
+    	Path to the CA certificates to validate server certificate against. If not set, the host's root CA certificates are used.
   -query-scheduler.ring.etcd.tls-cert-path string
-    	Path to the client certificate file, which will be used for authenticating with the server. Also requires the key path to be configured.
+    	Path to the client certificate, which will be used for authenticating with the server. Also requires the key path to be configured.
   -query-scheduler.ring.etcd.tls-cipher-suites string
     	Override the default cipher suite list (separated by commas).
   -query-scheduler.ring.etcd.tls-enabled
@@ -498,7 +500,7 @@ Usage of ./phlare:
   -query-scheduler.ring.etcd.tls-insecure-skip-verify
     	Skip validating server certificate.
   -query-scheduler.ring.etcd.tls-key-path string
-    	Path to the key file for the client certificate. Also requires the client certificate to be configured.
+    	Path to the key for the client certificate. Also requires the client certificate to be configured.
   -query-scheduler.ring.etcd.tls-min-version string
     	Override the default minimum TLS version. Allowed values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
   -query-scheduler.ring.etcd.tls-server-name string
@@ -602,7 +604,11 @@ Usage of ./phlare:
   -server.http-write-timeout duration
     	Write timeout for HTTP server (default 30s)
   -server.log-request-at-info-level-enabled
-    	Optionally log requests at info level instead of debug level.
+    	Optionally log requests at info level instead of debug level. Applies to request headers as well if server.log-request-headers is enabled.
+  -server.log-request-headers
+    	Optionally log request headers.
+  -server.log-request-headers-exclude-list string
+    	Comma separated list of headers to exclude from loggin. Only used if server.log-request-headers is true.
   -server.log-source-ips-enabled
     	Optionally log the source IPs.
   -server.log-source-ips-header string
@@ -739,6 +745,8 @@ Usage of ./phlare:
     	OpenStack Swift user ID.
   -storage.swift.username string
     	OpenStack Swift username.
+  -store-gateway.tenant-shard-size int
+    	The tenant's shard size, used when store-gateway sharding is enabled. Value of 0 disables shuffle sharding for the tenant, that is all tenant blocks are sharded across all store-gateway replicas.
   -target comma-separated-list-of-strings
     	Comma-separated list of Phlare modules to load. The alias 'all' can be used in the list to load a number of core modules and will enable single-binary mode.  (default all)
   -tracing.enabled

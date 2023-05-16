@@ -214,7 +214,11 @@ Usage of ./phlare:
   -server.http-write-timeout duration
     	Write timeout for HTTP server (default 30s)
   -server.log-request-at-info-level-enabled
-    	Optionally log requests at info level instead of debug level.
+    	Optionally log requests at info level instead of debug level. Applies to request headers as well if server.log-request-headers is enabled.
+  -server.log-request-headers
+    	Optionally log request headers.
+  -server.log-request-headers-exclude-list string
+    	Comma separated list of headers to exclude from loggin. Only used if server.log-request-headers is true.
   -server.log-source-ips-enabled
     	Optionally log the source IPs.
   -server.log-source-ips-header string
@@ -303,6 +307,8 @@ Usage of ./phlare:
     	OpenStack Swift user ID.
   -storage.swift.username string
     	OpenStack Swift username.
+  -store-gateway.tenant-shard-size int
+    	The tenant's shard size, used when store-gateway sharding is enabled. Value of 0 disables shuffle sharding for the tenant, that is all tenant blocks are sharded across all store-gateway replicas.
   -target comma-separated-list-of-strings
     	Comma-separated list of Phlare modules to load. The alias 'all' can be used in the list to load a number of core modules and will enable single-binary mode.  (default all)
   -tracing.enabled

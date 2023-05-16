@@ -61,10 +61,13 @@ func YAML(f string, expandEnvVars bool) Source {
 // dYAML returns a YAML source and allows dependency injection
 func dYAML(y []byte) Source {
 	return func(dst Cloneable) error {
+		if len(y) == 0 {
+			return nil
+		}
 		dec := yaml.NewDecoder(bytes.NewReader(y))
 		dec.KnownFields(true)
 		if err := dec.Decode(dst); err != nil {
-			return errors.Wrap(err, "Error parsing config file")
+			return err
 		}
 		return nil
 	}
