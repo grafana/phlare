@@ -210,7 +210,12 @@ func (s *profileStore) prepareFile(path string) (f *os.File, err error) {
 // during the most of the time: only after the rows are written to disk do we
 // block them for a short time (via rowsLock).
 //
-// TODO: write row groups asynchronously
+// TODO(kolesnikovae): Make the lock more selective. The call takes long time,
+// if disk I/O is slow, which causes ingestion timeouts and impacts distributor
+// push latency, and memory consumption, transitively.
+// See index.cutRowGroup: we could find a way to not flush all the in-memory
+// profiles, including ones added since the start of the call, but only those
+// that were added before certain point (this call). The same for s.slice.
 func (s *profileStore) cutRowGroup() (err error) {
 	// if cutRowGroup fails record it as failed segment
 	defer func() {
@@ -263,10 +268,11 @@ func (s *profileStore) cutRowGroup() (err error) {
 		return err
 	}
 
-	// We need to make the new on-disk rows available to readers simultaneously
-	// with cutting the series from the index. Until this point, profiles can
-	// be read from s.slice/s.index. This lock should not be held for long as
-	// it only performs in-memory operations, although blocking readers.
+	// We need to make the new on-disk row group available to readers
+	// simultaneously with cutting the series from the index. Until that,
+	// profiles can be read from s.slice/s.index. This lock should not be
+	// held for long as it only performs in-memory operations,
+	// although blocking readers.
 	s.rowsLock.Lock()
 	s.rowsFlushed += uint64(n)
 	s.rowGroups = append(s.rowGroups, rowGroup)

@@ -42,7 +42,6 @@ type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persi
 	metrics *headMetrics
 	writer  *parquet.GenericWriter[P]
 
-	buffer      *parquet.Buffer
 	rowsFlushed int
 }
 
@@ -113,15 +112,11 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uin
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	// TODO: Check if we actually reuse it
-	// intialise buffer if not existing
-	if s.buffer == nil {
-		s.buffer = parquet.NewBuffer(
-			s.persister.Schema(),
-			parquet.SortingRowGroupConfig(s.persister.SortingColumns()),
-			parquet.ColumnBufferCapacity(s.cfg.MaxBufferRowCount),
-		)
-	}
+	buffer := parquet.NewBuffer(
+		s.persister.Schema(),
+		parquet.SortingRowGroupConfig(s.persister.SortingColumns()),
+		parquet.ColumnBufferCapacity(s.cfg.MaxBufferRowCount),
+	)
 
 	var (
 		maxRows = s.maxRowsPerRowGroup()
@@ -154,14 +149,14 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uin
 			rows[pos] = s.persister.Deconstruct(rows[pos], uint64(slicePos), s.slice[slicePos])
 		}
 
-		s.buffer.Reset()
-		if _, err := s.buffer.WriteRows(rows); err != nil {
+		buffer.Reset()
+		if _, err = buffer.WriteRows(rows); err != nil {
 			return 0, 0, err
 		}
 
-		sort.Sort(s.buffer)
+		sort.Sort(buffer)
 
-		if _, err := s.writer.WriteRowGroup(s.buffer); err != nil {
+		if _, err = s.writer.WriteRowGroup(buffer); err != nil {
 			return 0, 0, err
 		}
 
