@@ -28,26 +28,31 @@ import (
 type profileStore struct {
 	size      atomic.Uint64
 	totalSize atomic.Uint64
-	// lock serializes writes to the slice. Consider using sync.Mutex.
-	lock  sync.RWMutex
-	slice []*schemav1.Profile
 
+	logger  log.Logger
+	cfg     *ParquetConfig
 	metrics *headMetrics
 
-	index *profilesIndex
-
+	path      string
 	persister schemav1.Persister[*schemav1.Profile]
 	helper    storeHelper[*schemav1.Profile]
+	writer    *parquet.GenericWriter[*schemav1.Profile]
 
-	logger log.Logger
-	cfg    *ParquetConfig
+	// lock serializes appends to the slice. Every new profile is appended
+	// to the slice and to the index (has its own lock). In practice, it's
+	// only purpose is to accommodate the parquet writer: slice is never
+	// accessed for reads.
+	profilesLock sync.Mutex
+	slice        []*schemav1.Profile
 
-	writer *parquet.GenericWriter[*schemav1.Profile]
-
-	path        string
+	// Rows lock synchronises access to the on-disk row groups.
+	// When the in-memory index (profiles) is being flushed on disk,
+	// it should be modified simultaneously with rowGroups.
+	// Store readers only access rowGroups and index.
 	rowsLock    sync.RWMutex
 	rowsFlushed uint64
 	rowGroups   []*rowGroupOnDisk
+	index       *profilesIndex
 }
 
 func newProfileStore(phlarectx context.Context) *profileStore {
@@ -87,9 +92,6 @@ func (s *profileStore) Init(path string, cfg *ParquetConfig, metrics *headMetric
 		return err
 	}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	// create index
 	s.index, err = newProfileIndex(32, s.metrics)
 	if err != nil {
@@ -119,39 +121,33 @@ func (s *profileStore) RowGroups() (rowGroups []parquet.RowGroup) {
 	return rowGroups
 }
 
-func (s *profileStore) profileSort(x []*schemav1.Profile) func(i, j int) bool {
-	return func(i, j int) bool {
-		// first compare the labels, if they don't match return
-		var (
-			pI   = x[i]
-			pJ   = x[j]
-			lbsI = s.index.profilesPerFP[pI.SeriesFingerprint].lbs
-			lbsJ = s.index.profilesPerFP[pJ.SeriesFingerprint].lbs
-		)
-		if cmp := phlaremodel.CompareLabelPairs(lbsI, lbsJ); cmp != 0 {
-			return cmp < 0
-		}
-
-		// then compare timenanos, if they don't match return
-		if pI.TimeNanos < pJ.TimeNanos {
-			return true
-		} else if pI.TimeNanos > pJ.TimeNanos {
-			return false
-		}
-
-		// finally use ID as tie breaker
-		return bytes.Compare(pI.ID[:], pJ.ID[:]) < 0
+func (s *profileStore) profileSort(i, j int) bool {
+	// first compare the labels, if they don't match return
+	var (
+		pI   = s.slice[i]
+		pJ   = s.slice[j]
+		lbsI = s.index.profilesPerFP[pI.SeriesFingerprint].lbs
+		lbsJ = s.index.profilesPerFP[pJ.SeriesFingerprint].lbs
+	)
+	if cmp := phlaremodel.CompareLabelPairs(lbsI, lbsJ); cmp != 0 {
+		return cmp < 0
 	}
+
+	// then compare timenanos, if they don't match return
+	if pI.TimeNanos < pJ.TimeNanos {
+		return true
+	} else if pI.TimeNanos > pJ.TimeNanos {
+		return false
+	}
+
+	// finally use ID as tie breaker
+	return bytes.Compare(pI.ID[:], pJ.ID[:]) < 0
 }
 
+// Flush writes row groups and the index to files on disk.
+// The call is thread-safe for reading but adding new profiles
+// should not be allowed during and after the call.
 func (s *profileStore) Flush(ctx context.Context) (numRows uint64, numRowGroups uint64, err error) {
-	if err := s.Close(); err != nil {
-		return 0, 0, err
-	}
-
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	if err = s.cutRowGroup(); err != nil {
 		return 0, 0, err
 	}
@@ -166,31 +162,34 @@ func (s *profileStore) Flush(ctx context.Context) (numRows uint64, numRowGroups 
 		return 0, 0, err
 	}
 
-	// TODO: Ensure there are no races.
-	for idx, ranges := range rowRangerPerRG {
-		s.rowGroups[idx].seriesIndexes = ranges
-	}
-
 	parquetPath := filepath.Join(
 		s.path,
 		s.persister.Name()+block.ParquetSuffix,
 	)
 
+	s.rowsLock.Lock()
+	for idx, ranges := range rowRangerPerRG {
+		s.rowGroups[idx].seriesIndexes = ranges
+	}
+	s.rowsLock.Unlock()
 	numRows, numRowGroups, err = s.writeRowGroups(parquetPath, s.RowGroups())
 	if err != nil {
 		return 0, 0, err
 	}
+	// Row groups are closed and removed on an explicit DeleteRowGroups call.
+	return numRows, numRowGroups, nil
+}
 
-	// TODO should not be closed now, but only after block querier is added to PhlareDB
-	// cleanup row groups, which need cleaning
+func (s *profileStore) DeleteRowGroups() error {
+	s.rowsLock.Lock()
+	defer s.rowsLock.Unlock()
 	for _, rg := range s.rowGroups {
 		if err := rg.Close(); err != nil {
-			return 0, 0, err
+			return err
 		}
 	}
 	s.rowGroups = s.rowGroups[:0]
-
-	return numRows, numRowGroups, nil
+	return nil
 }
 
 func (s *profileStore) prepareFile(path string) (f *os.File, err error) {
@@ -203,19 +202,13 @@ func (s *profileStore) prepareFile(path string) (f *os.File, err error) {
 	return file, err
 }
 
-func (s *profileStore) empty() bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	return len(s.slice) == 0
-}
-
 // cutRowGroups gets called, when a patrticular row group has been finished
 // and it will flush it to disk. The caller of cutRowGroups should be holding
 // the write lock.
 //
 // Writes are not allowed during cutting the rows, but readers are not blocked
-// during the most of the time: only after when rows have written on disk, we
-// lock them shortly (via rowsLock).
+// during the most of the time: only after the rows are written to disk do we
+// block them for a short time (via rowsLock).
 //
 // TODO: write row groups asynchronously
 func (s *profileStore) cutRowGroup() (err error) {
@@ -243,13 +236,10 @@ func (s *profileStore) cutRowGroup() (err error) {
 	}
 
 	// order profiles properly
-	// TODO: We don't need the copy? It seems reader don't access the slice
-	//  but only use the index that has it's own lock.
-	tmpSlice := make([]*schemav1.Profile, len(s.slice))
-	copy(tmpSlice, s.slice) // Use of a pool is hardly reasonable here due to GC pressure.
-	sort.Slice(tmpSlice, s.profileSort(tmpSlice))
+	// The slice is never accessed at reads, therefore we can sort it in-place.
+	sort.Slice(s.slice, s.profileSort)
 
-	n, err := s.writer.Write(tmpSlice)
+	n, err := s.writer.Write(s.slice)
 	if err != nil {
 		return errors.Wrap(err, "write row group segments to disk")
 	}
@@ -280,7 +270,10 @@ func (s *profileStore) cutRowGroup() (err error) {
 	s.rowsLock.Lock()
 	s.rowsFlushed += uint64(n)
 	s.rowGroups = append(s.rowGroups, rowGroup)
-	err = s.index.cutRowGroup(tmpSlice)
+	// Cutting the index is relatively quick op (no I/O).
+	err = s.index.cutRowGroup(s.slice)
+	// After the lock is released, rows/profiles should be read from the disk.
+	s.rowsLock.Unlock()
 	for i := range s.slice {
 		// don't retain profiles and samples in memory as re-slice.
 		s.slice[i] = nil
@@ -288,8 +281,6 @@ func (s *profileStore) cutRowGroup() (err error) {
 	// reset slice and metrics
 	s.slice = s.slice[:0]
 	s.size.Store(0)
-	// After the lock is released, rows/profiles should be read from the disk.
-	s.rowsLock.Unlock()
 	if err != nil {
 		return err
 	}
@@ -339,8 +330,8 @@ func (s *profileStore) ingest(_ context.Context, profiles []*schemav1.Profile, l
 		}
 	}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.profilesLock.Lock()
+	defer s.profilesLock.Unlock()
 
 	for pos, p := range profiles {
 		// check if row group is full

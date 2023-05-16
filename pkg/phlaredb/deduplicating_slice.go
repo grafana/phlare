@@ -110,9 +110,10 @@ func (s *deduplicatingSlice[M, K, H, P]) maxRowsPerRowGroup() int {
 }
 
 func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uint64, numRowGroups uint64, err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
+	// TODO: Check if we actually reuse it
 	// intialise buffer if not existing
 	if s.buffer == nil {
 		s.buffer = parquet.NewBuffer(

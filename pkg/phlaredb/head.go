@@ -127,10 +127,9 @@ type Head struct {
 	headPath  string // path while block is actively appended to
 	localPath string // path once block has been cut
 
-	inserts sync.WaitGroup // ongoing ingestion requests.
-	flushCh chan struct{}  // this channel is closed once the Head should be flushed, should be used externally
-
-	flushForcedTimer *time.Timer // this timer will phlare after the maximum
+	inFlightProfiles sync.WaitGroup // ongoing ingestion requests.
+	flushCh          chan struct{}  // this channel is closed once the Head should be flushed, should be used externally
+	flushForcedTimer *time.Timer    // this timer will phlare after the maximum
 
 	metaLock sync.RWMutex
 	meta     *block.Meta
@@ -866,9 +865,9 @@ func (h *Head) Close() error {
 	return merr.Err()
 }
 
-// Flush closes the head and writes data to disk.
-// No ingestion requests should be made concurrently
-// with the call, or after it finishes.
+// Flush closes the head and writes data to disk. No ingestion requests should
+// be made concurrently with the call, or after it returns.
+// The call is thread-safe for reads.
 func (h *Head) Flush(ctx context.Context) error {
 	start := time.Now()
 	defer func() {
@@ -883,16 +882,11 @@ func (h *Head) Flush(ctx context.Context) error {
 }
 
 func (h *Head) flush(ctx context.Context) error {
-	// Ensure all the ongoing ingestion requests have finished.
+	// Ensure all the in-flight ingestion requests have finished.
 	// It must be guaranteed that no new inserts will happen
 	// after the call start.
-	h.inserts.Wait()
-
-	// TODO: Make sure the call does not modify the head
-	//  and get rid of the write blocks, so that queries
-	//  are not waiting for the flush to finish.
-
-	if h.profiles.empty() {
+	h.inFlightProfiles.Wait()
+	if len(h.profiles.slice) == 0 {
 		level.Info(h.logger).Log("msg", "head empty - no block written")
 		return os.RemoveAll(h.headPath)
 	}
@@ -953,6 +947,20 @@ func (h *Head) flush(ctx context.Context) error {
 		return err
 	}
 	h.metrics.blockDurationSeconds.Observe(h.meta.MaxTime.Sub(h.meta.MinTime).Seconds())
+	return nil
+}
+
+// Move moves the head directory to local blocks. The call is not thread-safe:
+// no concurrent reads and writes are allowed.
+//
+// After the call, head in-memory representation is not valid and should not
+// be accessed for querying.
+func (h *Head) Move() error {
+	// Remove intermediate row groups before the move as they are still
+	// referencing files on the disk.
+	if err := h.profiles.DeleteRowGroups(); err != nil {
+		return err
+	}
 
 	// move block to the local directory
 	if err := os.MkdirAll(filepath.Dir(h.localPath), defaultFolderMode); err != nil {

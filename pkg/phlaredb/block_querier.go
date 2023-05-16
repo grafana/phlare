@@ -225,6 +225,22 @@ func (b *BlockQuerier) Sync(ctx context.Context) error {
 	return nil
 }
 
+func (b *BlockQuerier) AddBlockQuerierByMeta(m *block.Meta) {
+	b.queriersLock.Lock()
+	defer b.queriersLock.Unlock()
+	i := sort.Search(len(b.queriers), func(i int) bool {
+		return b.queriers[i].meta.MinTime >= m.MinTime
+	})
+	if i < len(b.queriers) && b.queriers[i].meta.ULID == m.ULID {
+		// Block with this meta is already present, skipping.
+		return
+	}
+	q := newSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, m)
+	b.queriers = append(b.queriers, q) // Ensure we have enough capacity.
+	copy(b.queriers[i+1:], b.queriers[i:])
+	b.queriers[i] = q
+}
+
 // evict removes the block with the given ULID from the querier.
 func (b *BlockQuerier) evict(blockID ulid.ULID) (bool, error) {
 	b.queriersLock.Lock()

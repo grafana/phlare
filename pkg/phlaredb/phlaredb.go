@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/services"
-	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -24,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 
+	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/iter"
@@ -78,7 +78,10 @@ type PhlareDB struct {
 	// the new head, and queries can read the former head
 	// till it gets written to the disk and becomes available
 	// to blockQuerier.
-	roHead *Head
+	oldHead *Head
+	// flushLock serializes flushes. Only one flush at a time
+	// is allowed.
+	flushLock sync.Mutex
 
 	blockQuerier *BlockQuerier
 	limiter      TenantLimiter
@@ -167,9 +170,6 @@ func (f *PhlareDB) loop() {
 }
 
 func (f *PhlareDB) Close() error {
-	// TODO:
-	//   1. Ensure ongoing flush is finished.
-	//   2. Flush the current head block.
 	errs := multierror.New()
 	if f.head != nil {
 		errs.Add(f.head.Close())
@@ -190,41 +190,76 @@ func (f *PhlareDB) Head() *Head {
 	return f.head
 }
 
-func (f *PhlareDB) Queriers() Queriers {
-	block := f.blockQuerier.Queriers()
-	head := f.Head().Queriers()
-	// TODO: Query r/o head as well.
-	res := make(Queriers, 0, len(block)+len(head))
-	res = append(res, block...)
+func (f *PhlareDB) queriers() Queriers {
+	queriers := f.blockQuerier.Queriers()
+	head := f.head.Queriers()
+	var oldHead Queriers
+	if f.oldHead != nil {
+		oldHead = f.oldHead.Queriers()
+	}
+	res := make(Queriers, 0, len(queriers)+len(head)+len(oldHead))
+	res = append(res, queriers...)
 	res = append(res, head...)
-
+	res = append(res, oldHead...)
 	return res
 }
 
 func (f *PhlareDB) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
-	// We need to keep track of the ongoing ingestion requests to ensure that none
+	// We need to keep track of the in-flight ingestion requests to ensure that none
 	// of them will compete with Flush. Lock is acquired to avoid Add after Wait that
 	// is called in the very beginning of Flush.
 	f.headLock.RLock()
 	h := f.head
-	h.inserts.Add(1)
+	h.inFlightProfiles.Add(1)
 	f.headLock.RUnlock()
-	defer h.inserts.Done()
+	defer h.inFlightProfiles.Done()
 	return h.Ingest(ctx, p, id, externalLabels...)
 }
 
-// TODO: Make other query APIs to read r/o head.
+// LabelValues returns the possible label values for a given label name.
+func (f *PhlareDB) LabelValues(ctx context.Context, req *connect.Request[typesv1.LabelValuesRequest]) (*connect.Response[typesv1.LabelValuesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.LabelValues(ctx, req)
+}
+
+// LabelNames returns the possible label names.
+func (f *PhlareDB) LabelNames(ctx context.Context, req *connect.Request[typesv1.LabelNamesRequest]) (*connect.Response[typesv1.LabelNamesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.LabelNames(ctx, req)
+}
+
+// ProfileTypes returns the possible profile types.
+func (f *PhlareDB) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.ProfileTypes(ctx, req)
+}
+
+// Series returns labels series for the given set of matchers.
+func (f *PhlareDB) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.Series(ctx, req)
+}
 
 func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
-	return f.Queriers().MergeProfilesStacktraces(ctx, stream)
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.queriers().MergeProfilesStacktraces(ctx, stream)
 }
 
 func (f *PhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
-	return f.Queriers().MergeProfilesLabels(ctx, stream)
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.queriers().MergeProfilesLabels(ctx, stream)
 }
 
 func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
-	return f.Queriers().MergeProfilesPprof(ctx, stream)
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.queriers().MergeProfilesPprof(ctx, stream)
 }
 
 type BidiServerMerge[Res any, Req any] interface {
@@ -345,22 +380,38 @@ func filterProfiles[B BidiServerMerge[Res, Req],
 }
 
 func (f *PhlareDB) Flush(ctx context.Context) (err error) {
+	// Ensure this is the only Flush running.
+	f.flushLock.Lock()
+	defer f.flushLock.Unlock()
+	// Create a new head and evict the old one. Reads and writes
+	// are blocked – after the lock is released, no new ingestion
+	// requests will be arriving to the old head.
 	f.headLock.Lock()
-	f.roHead = f.head
+	f.oldHead = f.head
 	f.head, err = NewHead(f.phlarectx, f.cfg, f.limiter)
 	if err != nil {
 		f.headLock.Unlock()
 		return err
 	}
 	f.headLock.Unlock()
-	// Read only head is accessible by queries during the flush.
-	if err = f.roHead.Flush(ctx); err != nil {
+	// Old head is available to readers during Flush.
+	if err = f.oldHead.Flush(ctx); err != nil {
 		return err
 	}
+	// At this point we ensure that the data has been flushed on disk.
+	// Now we need to make it "visible" to queries, and close the old
+	// head once in-flight queries finish.
+	// TODO(kolesnikovae): Although the head move is supposed to be a quick
+	//  operation, consider making the lock more selective and block only
+	//  queries that target the old head.
 	f.headLock.Lock()
-	// TODO: Inject the flushed block to blockQuerier.
-	f.roHead = nil
-	f.headLock.Unlock()
+	defer f.headLock.Unlock()
+	// Now that there are no in-flight queries we can move the head.
+	err = f.oldHead.Move()
+	// Propagate the new block to blockQuerier.
+	f.blockQuerier.AddBlockQuerierByMeta(f.oldHead.meta)
+	f.oldHead = nil
+	// The old in-memory head is not available to queries from now on.
 	return err
 }
 
