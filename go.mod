@@ -285,5 +285,6 @@ replace (
 	github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20220708130638-bd88e10a3d91
 	// Using a fork of Prometheus with Mimir-specific changes.
 	github.com/prometheus/prometheus => github.com/grafana/mimir-prometheus v0.0.0-20230505111100-e5eb66f42202
+	github.com/thanos-io/objstore => github.com/simonswine/objstore v0.0.0-20230222100738-890519321a99
 	google.golang.org/grpc => google.golang.org/grpc v1.44.0
 )
