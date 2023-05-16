@@ -28,13 +28,13 @@ import (
 
 	"github.com/go-kit/log/level"
 	"github.com/parca-dev/parca/pkg/config"
-	"github.com/parca-dev/parca/pkg/scrape"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 
 	agentv1v1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
+	"github.com/grafana/phlare/pkg/agent/scrape"
 )
 
 const (
