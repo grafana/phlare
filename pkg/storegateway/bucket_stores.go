@@ -102,6 +102,7 @@ type BucketStores struct {
 	tenantsDiscovered prometheus.Gauge
 	tenantsSynced     prometheus.Gauge
 	blocksLoaded      prometheus.GaugeFunc
+	metrics           *Metrics
 }
 
 func NewBucketStores(cfg BucketStoreConfig, shardingStrategy ShardingStrategy, storageBucket phlareobjstore.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*BucketStores, error) {
@@ -118,6 +119,7 @@ func NewBucketStores(cfg BucketStoreConfig, shardingStrategy ShardingStrategy, s
 		shardingStrategy: shardingStrategy,
 		reg:              reg,
 		limits:           limits,
+		metrics:          NewMetrics(reg),
 	}
 	// Register metrics.
 	bs.syncTimes = promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
@@ -152,16 +154,16 @@ func (bs *BucketStores) SyncBlocks(ctx context.Context) error {
 }
 
 func (bs *BucketStores) InitialSync(ctx context.Context) error {
-	level.Info(bs.logger).Log("msg", "synchronizing TSDB blocks for all users")
+	level.Info(bs.logger).Log("msg", "synchronizing Pyroscope blocks for all users")
 
 	if err := bs.syncUsersBlocksWithRetries(ctx, func(ctx context.Context, s *BucketStore) error {
 		return s.InitialSync(ctx)
 	}); err != nil {
-		level.Warn(bs.logger).Log("msg", "failed to synchronize TSDB blocks", "err", err)
+		level.Warn(bs.logger).Log("msg", "failed to synchronize Pyroscope blocks", "err", err)
 		return err
 	}
 
-	level.Info(bs.logger).Log("msg", "successfully synchronized TSDB blocks for all users")
+	level.Info(bs.logger).Log("msg", "successfully synchronized Pyroscope blocks for all users")
 	return nil
 }
 
@@ -303,56 +305,12 @@ func (bs *BucketStores) getOrCreateStore(userID string) (*BucketStore, error) {
 
 	level.Info(userLogger).Log("msg", "creating user bucket store")
 
-	// userBkt := bucket.NewUserBucketClient(userID, bs.bucket, u.limits)
-	// fetcherReg := prometheus.NewRegistry()
-
 	// The sharding strategy filter MUST be before the ones we create here (order matters).
 	filters := []BlockMetaFilter{
 		NewShardingMetadataFilterAdapter(userID, bs.shardingStrategy),
 		// block.NewConsistencyDelayMetaFilter(userLogger, u.cfg.BucketStore.DeprecatedConsistencyDelay, fetcherReg),
 		newMinTimeMetaFilter(bs.cfg.IgnoreBlocksWithin),
-		// Use our own custom implementation.
-		// NewIgnoreDeletionMarkFilter(userLogger, userBkt, u.cfg.BucketStore.IgnoreDeletionMarksDelay, u.cfg.BucketStore.MetaSyncConcurrency),
-		// The duplicate filter has been intentionally omitted because it could cause troubles with
-		// the consistency check done on the querier. The duplicate filter removes redundant blocks
-		// but if the store-gateway removes redundant blocks before the querier discovers them, the
-		// consistency check on the querier will fail.
 	}
-
-	// // Instantiate a different blocks metadata fetcher based on whether bucket index is enabled or not.
-	// var fetcher block.MetadataFetcher
-	// if u.cfg.BucketStore.BucketIndex.Enabled {
-	// 	fetcher = NewBucketIndexMetadataFetcher(
-	// 		userID,
-	// 		u.bucket,
-	// 		u.limits,
-	// 		u.logger,
-	// 		fetcherReg,
-	// 		filters,
-	// 	)
-	// } else {
-	// 	var err error
-	// 	fetcher, err = block.NewMetaFetcher(
-	// 		userLogger,
-	// 		u.cfg.BucketStore.MetaSyncConcurrency,
-	// 		userBkt,
-	// 		u.syncDirForUser(userID), // The fetcher stores cached metas in the "meta-syncer/" sub directory
-	// 		fetcherReg,
-	// 		filters,
-	// 	)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
-	// // bucketStoreOpts := []BucketStoreOption{
-	// // 	WithLogger(userLogger),
-	// // 	WithIndexCache(u.indexCache),
-	// // 	WithChunksCache(u.chunksCache),
-	// // 	WithQueryGate(u.queryGate),
-	// // 	WithChunkPool(u.chunksPool),
-	// // 	WithFineGrainedChunksCaching(u.cfg.BucketStore.ChunksCache.FineGrainedChunksCachingEnabled),
-	// // }
 
 	s, err := NewBucketStore(
 		bs.storageBucket,
@@ -361,24 +319,7 @@ func (bs *BucketStores) getOrCreateStore(userID string) (*BucketStore, error) {
 		bs.syncDirForUser(userID),
 		filters,
 		userLogger,
-		// u.cfg.BucketStore.StreamingBatchSize,
-		// u.cfg.BucketStore.ChunkRangesPerSeries,
-		// selectPostingsStrategy(u.logger, u.cfg.BucketStore.SeriesSelectionStrategyName),
-		// NewChunksLimiterFactory(func() uint64 {
-		// 	return uint64(u.limits.MaxChunksPerQuery(userID))
-		// }),
-		// NewSeriesLimiterFactory(func() uint64 {
-		// 	return uint64(u.limits.MaxFetchedSeriesPerQuery(userID))
-		// }),
-		// u.partitioners,
-		// u.cfg.BucketStore.BlockSyncConcurrency,
-		// u.cfg.BucketStore.PostingOffsetsInMemSampling,
-		// u.cfg.BucketStore.IndexHeader,
-		// u.cfg.BucketStore.IndexHeaderLazyLoadingEnabled,
-		// u.cfg.BucketStore.IndexHeaderLazyLoadingIdleTimeout,
-		// u.seriesHashCache,
-		// u.bucketStoreMetrics,
-		// bucketStoreOpts...,
+		bs.metrics,
 	)
 	if err != nil {
 		return nil, err

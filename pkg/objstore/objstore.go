@@ -55,7 +55,7 @@ func (b *bucketReaderWithPrefix) prefix(path string) string {
 func (b *bucketReaderWithPrefix) Iter(ctx context.Context, dir string, f func(string) error, options ...objstore.IterOption) error {
 	return b.r.Iter(ctx, b.prefix(dir), func(s string) error {
 		return f(strings.TrimPrefix(s, b.p))
-	})
+	}, options...)
 }
 
 // Get returns a reader for the given object name.

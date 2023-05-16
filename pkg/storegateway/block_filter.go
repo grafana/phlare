@@ -35,7 +35,7 @@ type ShardingStrategy interface {
 }
 
 type BlockMetaFilter interface {
-	Filter(ctx context.Context, metas map[ulid.ULID]*block.Meta, synced tsdb_block.GaugeVec, modified tsdb_block.GaugeVec) error
+	Filter(ctx context.Context, metas map[ulid.ULID]*block.Meta, synced tsdb_block.GaugeVec) error
 }
 
 type shardingMetadataFilterAdapter struct {
@@ -186,7 +186,7 @@ func NewShardingMetadataFilterAdapter(userID string, strategy ShardingStrategy) 
 
 // Filter implements block.MetadataFilter.
 // This function is NOT safe for use by multiple goroutines concurrently.
-func (a *shardingMetadataFilterAdapter) Filter(ctx context.Context, metas map[ulid.ULID]*block.Meta, synced tsdb_block.GaugeVec, modified tsdb_block.GaugeVec) error {
+func (a *shardingMetadataFilterAdapter) Filter(ctx context.Context, metas map[ulid.ULID]*block.Meta, synced tsdb_block.GaugeVec) error {
 	if err := a.strategy.FilterBlocks(ctx, a.userID, metas, a.lastBlocks, synced); err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func newMinTimeMetaFilter(limit time.Duration) *minTimeMetaFilter {
 	return &minTimeMetaFilter{limit: limit}
 }
 
-func (f *minTimeMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*block.Meta, synced tsdb_block.GaugeVec, modified tsdb_block.GaugeVec) error {
+func (f *minTimeMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*block.Meta, synced tsdb_block.GaugeVec) error {
 	if f.limit <= 0 {
 		return nil
 	}
