@@ -587,6 +587,8 @@ github.com/cncf/udpa/go v0.0.0-20210930031921-04548b0d99d4 h1:hzAQntlaYRkVSFEfj9
 github.com/cncf/udpa/go v0.0.0-20220112060539-c52dc94e7fbe h1:QQ3GSy+MqSHxm/d8nCtnAiZdYFd45cYZPs8vOOIYKfk=
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1 h1:zH8ljVhhq7yC0MIeUL/IviMtY8hx2mK8cN9wEYb8ggw=
 github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd h1:qMd81Ts1T2OTKmB4acZcyKaMtRnY5Y44NuXGX2GFJ1w=
+github.com/colega/go-yaml-yaml v0.0.0-20220720105220-255a8d16d094 h1:FpZSn61BWXbtyH68+uSv416veEswX1M2HRyQfdHnOyQ=
+github.com/colega/go-yaml-yaml v0.0.0-20220720105220-255a8d16d094/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be h1:J5BL2kskAlV9ckgEsNQXscjIaLiOYiZ75d4e94E6dcQ=
 github.com/coreos/etcd v3.3.10+incompatible h1:jFneRYjIvLMLhDLCzuTuU4rSJUjRplcJQ7pD7MnhC04=
 github.com/coreos/go-etcd v2.0.0+incompatible h1:bXhRBIXoTm9BYHS3gE0TtQuyNZyeEMux2sDi4oo5YOo=
@@ -694,8 +696,6 @@ github.com/googleapis/go-type-adapters v1.0.0 h1:9XdMn+d/G57qq1s8dNc5IesGCXHf6V2
 github.com/googleapis/google-cloud-go-testing v0.0.0-20200911160855-bcd43fbb19e8 h1:tlyzajkF3030q6M8SvmJSemC9DTHL/xaMa18b65+JM4=
 github.com/gosimple/slug v1.1.1 h1:fRu/digW+NMwBIP+RmviTK97Ho/bEj/C9swrCspN3D4=
 github.com/grafana-tools/sdk v0.0.0-20211220201350-966b3088eec9 h1:LQAhgcUPnzdjU/OjCJaLlPQI7NmQCRlfjMPSA1VegvA=
-github.com/grafana/dskit v0.0.0-20230516084101-f0f2a115ec6a h1:KuSA/4wG1rYhTgGyEZnlp6Wt4zsCzE3gnhg1eVYinFA=
-github.com/grafana/dskit v0.0.0-20230516084101-f0f2a115ec6a/go.mod h1:M03k2fzuQ2n9TVE1xfVKTESibxsXdw0wYfWT3+9Owp4=
 github.com/grafana/e2e v0.1.1-0.20230221201045-21ebba73580b h1:dzle+89/D0hOxscjZlkb6ovYA52t9hl6h/S+hI8ek1Q=
 github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 h1:pdN6V1QBWetyv/0+wjACpqVH+eVULgEjkurDLq3goeM=
 github.com/grpc-ecosystem/go-grpc-middleware/providers/kit/v2 v2.0.0-rc.3 h1:sO+mAUyzaOiZX4aMsQWAqA2eb95XmIBL8AS28rk4LtE=

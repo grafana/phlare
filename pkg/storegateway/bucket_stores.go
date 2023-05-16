@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/grafana/mimir/pkg/storegateway"
 	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
+	"github.com/grafana/phlare/pkg/phlaredb/bucket"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -70,10 +71,14 @@ func (cfg *BucketStoreConfig) Validate(logger log.Logger) error {
 	return nil
 }
 
-type BucketStores struct{}
+type BucketStores struct {
+	storageBucket phlareobjstore.Bucket
+}
 
 func NewBucketStores(shardingStrategy storegateway.ShardingStrategy, storageBucket phlareobjstore.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*BucketStores, error) {
-	m := &BucketStores{}
+	m := &BucketStores{
+		storageBucket: storageBucket,
+	}
 	return m, nil
 }
 
@@ -86,5 +91,5 @@ func (bs *BucketStores) InitialSync(ctx context.Context) error {
 }
 
 func (bs *BucketStores) scanUsers(ctx context.Context) ([]string, error) {
-	return nil, nil
+	return bucket.ListUsers(ctx, bs.storageBucket)
 }

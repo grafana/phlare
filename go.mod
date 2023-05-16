@@ -61,7 +61,6 @@ require (
 	google.golang.org/grpc v1.55.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
-	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	sigs.k8s.io/yaml v1.3.0
 )
@@ -268,6 +267,7 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorm.io/gorm v1.22.4 // indirect
 	k8s.io/api v0.26.2 // indirect
 	k8s.io/apimachinery v0.26.2 // indirect
@@ -289,4 +289,8 @@ replace (
 	// Using a fork of Prometheus with Mimir-specific changes.
 	github.com/prometheus/prometheus => github.com/grafana/mimir-prometheus v0.0.0-20230505111100-e5eb66f42202
 	github.com/thanos-io/objstore => github.com/simonswine/objstore v0.0.0-20230222100738-890519321a99
+	// gopkg.in/yaml.v3
+	// + https://github.com/go-yaml/yaml/pull/691
+	// + https://github.com/go-yaml/yaml/pull/876
+	gopkg.in/yaml.v3 => github.com/colega/go-yaml-yaml v0.0.0-20220720105220-255a8d16d094
 )

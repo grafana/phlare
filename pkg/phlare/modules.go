@@ -25,7 +25,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/protobuf/encoding/protojson"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
