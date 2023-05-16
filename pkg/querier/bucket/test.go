@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"sync"
 	"time"
@@ -12,22 +11,15 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/cache"
-	"github.com/grafana/phlare/pkg/phlaredb/block"
 	"github.com/oklog/ulid"
 	"github.com/samber/lo"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/gcs"
 	"golang.org/x/sync/errgroup"
 	yaml "gopkg.in/yaml.v3"
+
+	"github.com/grafana/phlare/pkg/phlaredb/block"
 )
-
-var ulidEntropy = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-func generateULID() ulid.ULID {
-	return ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy)
-}
-
-const orderOfSplit = 10 // how many bytes of the ulid id are used
 
 // orderOfSplit is the number of bytes of the ulid id used for the split. The duration of the split is:
 // 0: 1114y
@@ -39,7 +31,7 @@ const orderOfSplit = 10 // how many bytes of the ulid id are used
 func blockPrefixesFromTo(from, to time.Time, orderOfSplit uint8) (prefixes []string, err error) {
 	var id ulid.ULID
 
-	if orderOfSplit < 0 || orderOfSplit > 9 {
+	if orderOfSplit > 9 {
 		return nil, fmt.Errorf("order of split must be between 0 and 9")
 	}
 
