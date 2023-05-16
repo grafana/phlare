@@ -46,6 +46,7 @@ import (
 	"github.com/grafana/phlare/pkg/querier/worker"
 	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerdiscovery"
+	"github.com/grafana/phlare/pkg/storegateway"
 	"github.com/grafana/phlare/pkg/tenant"
 	"github.com/grafana/phlare/pkg/tracing"
 	"github.com/grafana/phlare/pkg/usagestats"
@@ -66,6 +67,7 @@ type Config struct {
 	LimitsConfig      validation.Limits      `yaml:"limits"`
 	QueryScheduler    scheduler.Config       `yaml:"query_scheduler"`
 	Ingester          ingester.Config        `yaml:"ingester,omitempty"`
+	StoreGateway      storegateway.Config    `yaml:"store_gateway,omitempty"`
 	MemberlistKV      memberlist.KVConfig    `yaml:"memberlist"`
 	PhlareDB          phlaredb.Config        `yaml:"phlaredb,omitempty"`
 	Tracing           tracing.Config         `yaml:"tracing"`
@@ -114,6 +116,7 @@ func (c *Config) RegisterFlagsWithContext(ctx context.Context, f *flag.FlagSet) 
 	c.AgentConfig.RegisterFlags(f)
 	c.MemberlistKV.RegisterFlags(f)
 	c.Querier.RegisterFlags(f)
+	c.StoreGateway.RegisterFlags(f, util.Logger)
 	c.PhlareDB.RegisterFlags(f)
 	c.Tracing.RegisterFlags(f)
 	c.Storage.RegisterFlagsWithContext(ctx, f)
@@ -178,6 +181,7 @@ func (c *Config) ApplyDynamicConfig() cfg.Source {
 	c.Frontend.QuerySchedulerDiscovery.SchedulerRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
 	c.Worker.QuerySchedulerDiscovery.SchedulerRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
 	c.QueryScheduler.ServiceDiscovery.SchedulerRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
+	c.StoreGateway.ShardingRing.KVStore.Store = c.Ingester.LifecyclerConfig.RingConfig.KVStore.Store
 	c.Worker.MaxConcurrentRequests = 4 // todo we might want this as a config flags.
 
 	return func(dst cfg.Cloneable) error {
@@ -295,6 +299,7 @@ func (f *Phlare) setupModuleManager() error {
 	mm.RegisterModule(API, f.initAPI, modules.UserInvisibleModule)
 	mm.RegisterModule(Distributor, f.initDistributor)
 	mm.RegisterModule(Querier, f.initQuerier)
+	mm.RegisterModule(StoreGateway, f.initStoreGateway)
 	mm.RegisterModule(Agent, f.initAgent)
 	mm.RegisterModule(UsageReport, f.initUsageReport)
 	mm.RegisterModule(QueryFrontend, f.initQueryFrontend)
@@ -313,6 +318,7 @@ func (f *Phlare) setupModuleManager() error {
 		QueryFrontend:  {OverridesExporter, API, MemberlistKV, UsageReport},
 		QueryScheduler: {Overrides, API, MemberlistKV, UsageReport},
 		Ingester:       {Overrides, API, MemberlistKV, Storage, UsageReport},
+		StoreGateway:   {API, Storage, Overrides, MemberlistKV},
 
 		UsageReport:       {Storage, MemberlistKV},
 		Overrides:         {RuntimeConfig},

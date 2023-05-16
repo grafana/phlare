@@ -40,6 +40,7 @@ import (
 	"github.com/grafana/phlare/pkg/querier"
 	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
+	"github.com/grafana/phlare/pkg/storegateway"
 	"github.com/grafana/phlare/pkg/util/gziphandler"
 	"github.com/grafana/phlare/pkg/validation/exporter"
 )
@@ -238,6 +239,19 @@ func (a *API) RegisterAgent(ag *agent.Agent) error {
 // RegisterIngester registers the endpoints associated with the ingester.
 func (a *API) RegisterIngester(svc *ingester.Ingester) {
 	ingesterv1connect.RegisterIngesterServiceHandler(a.server.HTTP, svc, a.grpcAuthMiddleware)
+}
+
+func (a *API) RegisterStoreGateway(svc *storegateway.StoreGateway) {
+	// todo
+	// storegatewaypb.RegisterStoreGatewayServer(a.server.GRPC, s)
+
+	a.indexPage.AddLinks(defaultWeight, "Store-gateway", []IndexPageLink{
+		{Desc: "Ring status", Path: "/store-gateway/ring"},
+		{Desc: "Tenants & Blocks", Path: "/store-gateway/tenants"},
+	})
+	a.RegisterRoute("/store-gateway/ring", http.HandlerFunc(svc.RingHandler), false, true, "GET", "POST")
+	a.RegisterRoute("/store-gateway/tenants", http.HandlerFunc(svc.TenantsHandler), false, true, "GET")
+	// a.RegisterRoute("/store-gateway/tenant/{tenant}/blocks", http.HandlerFunc(s.BlocksHandler), false, true, "GET")
 }
 
 // RegisterQueryFrontend registers the endpoints associated with the query frontend.

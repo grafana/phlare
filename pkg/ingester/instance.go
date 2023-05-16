@@ -45,6 +45,7 @@ func newInstance(phlarectx context.Context, cfg phlaredb.Config, tenantID string
 		cancel:   cancel,
 		tenantID: tenantID,
 	}
+	// Todo we should not ship when using filesystem storage.
 	if storageBucket != nil {
 		inst.shipper = shipper.New(
 			inst.logger,
