@@ -109,7 +109,7 @@ func newStoreGateway(gatewayCfg Config, storageBucket phlareobjstore.Bucket, rin
 	g.bucketSync.WithLabelValues(syncReasonRingChange)
 
 	// Init sharding strategy.
-	var shardingStrategy storegateway.ShardingStrategy
+	var shardingStrategy ShardingStrategy
 
 	lifecyclerCfg, err := gatewayCfg.ShardingRing.ToLifecyclerConfig(logger)
 	if err != nil {
@@ -134,9 +134,9 @@ func newStoreGateway(gatewayCfg Config, storageBucket phlareobjstore.Bucket, rin
 		return nil, errors.Wrap(err, "create ring client")
 	}
 
-	shardingStrategy = storegateway.NewShuffleShardingStrategy(g.ring, lifecyclerCfg.ID, lifecyclerCfg.Addr, limits, logger)
+	shardingStrategy = NewShuffleShardingStrategy(g.ring, lifecyclerCfg.ID, lifecyclerCfg.Addr, limits, logger)
 
-	g.stores, err = NewBucketStores(shardingStrategy, storageBucket, limits, logger, prometheus.WrapRegistererWith(prometheus.Labels{"component": "store-gateway"}, reg))
+	g.stores, err = NewBucketStores(gatewayCfg.BucketStoreConfig, shardingStrategy, storageBucket, limits, logger, prometheus.WrapRegistererWith(prometheus.Labels{"component": "store-gateway"}, reg))
 	if err != nil {
 		return nil, errors.Wrap(err, "create bucket stores")
 	}
