@@ -18,6 +18,9 @@ func ListUsers(ctx context.Context, bucketClient phlareobjstore.Bucket) (users [
 	// iterating the bucket, so we do load all users in memory and later process them.
 	err = bucketClient.Iter(ctx, "", func(entry string) error {
 		userID := strings.TrimSuffix(entry, "/")
+		if strings.HasSuffix(entry, ".json") {
+			return nil
+		}
 		if isUserIDReserved(userID) {
 			return nil
 		}
