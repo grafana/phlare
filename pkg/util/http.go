@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/gorilla/mux"
 	"github.com/grafana/dskit/multierror"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
@@ -366,6 +369,33 @@ func AuthenticateUser(on bool) middleware.Interface {
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+}
+
+// LogRequest logs the request parameters.
+// It logs all kinds of requests.
+func LogRequest(logger log.Logger) middleware.Interface {
+	return middleware.Func(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Log request parameters.
+			if err := r.ParseForm(); err != nil {
+				level.Error(logger).Log(
+					"msg", "failed to request parameters",
+					"err", err,
+				)
+			} else {
+				form := r.Form
+				if len(form) > 0 {
+					level.Info(logger).Log(
+						"msg", "request parameters",
+						"method", r.Method,
+						"route", r.URL.Path,
+						"parameters", fmt.Sprint(form),
+					)
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	})
 }

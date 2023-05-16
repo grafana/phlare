@@ -40,6 +40,7 @@ import (
 	"github.com/grafana/phlare/pkg/querier"
 	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
+	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/gziphandler"
 	"github.com/grafana/phlare/pkg/validation/exporter"
 )
@@ -96,6 +97,7 @@ func (a *API) RegisterRoutesWithPrefix(prefix string, handler http.Handler, auth
 
 //nolint:unparam
 func (a *API) newRoute(path string, handler http.Handler, isPrefix, auth, gzip bool, methods ...string) (route *mux.Route) {
+	handler = util.LogRequest(a.logger).Wrap(handler)
 	if auth {
 		handler = a.httpAuthMiddleware.Wrap(handler)
 	}
