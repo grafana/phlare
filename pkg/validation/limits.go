@@ -40,6 +40,9 @@ type Limits struct {
 	MaxQueryLookback    model.Duration `yaml:"max_query_lookback" json:"max_query_lookback"`
 	MaxQueryLength      model.Duration `yaml:"max_query_length" json:"max_query_length"`
 	MaxQueryParallelism int            `yaml:"max_query_parallelism" json:"max_query_parallelism"`
+
+	// Store-gateway.
+	StoreGatewayTenantShardSize int `yaml:"store_gateway_tenant_shard_size" json:"store_gateway_tenant_shard_size"`
 }
 
 // LimitError are errors that do not comply with the limits specified.

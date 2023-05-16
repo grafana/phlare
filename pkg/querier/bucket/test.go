@@ -75,7 +75,7 @@ func NewBucketQuerier() *BucketQuerier {
 	bq.gcsConfig.Bucket = "ops-us-east-0-profiles-ops-001-data"
 
 	bq.bucketCacheCfg.Backend = "memcached"
-	bq.bucketCacheCfg.Memcached.Addresses = "localhost:11211"
+	bq.bucketCacheCfg.Memcached.Addresses = []string{"localhost:11211"}
 	bq.bucketCacheCfg.Memcached.MaxAsyncConcurrency = 16
 
 	c, err := cache.CreateClient("bucket-cache", bq.bucketCacheCfg, logger, nil)
@@ -190,7 +190,7 @@ func (bq *BucketQuerier) run() error {
 			}
 
 			// store in cache
-			bq.bucketCache.Store(ctx, map[string][]byte{
+			bq.bucketCache.StoreAsync(map[string][]byte{
 				"blocklist/" + tenantID + "/" + blockPrefix: metasBytes,
 			}, time.Hour)
 
