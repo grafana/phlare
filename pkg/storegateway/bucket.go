@@ -165,6 +165,7 @@ func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error)
 			level.Info(bs.logger).Log("msg", "loaded new block", "elapsed", time.Since(start), "id", meta.ULID)
 		}
 	}()
+	// todo if the block exist on disk use it.
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
@@ -241,38 +242,51 @@ func (s *BucketStore) RemoveBlocksAndClose() error {
 
 func (s *BucketStore) fetchBlocksMeta(ctx context.Context) (map[ulid.ULID]*block.Meta, error) {
 	var (
-		to    = time.Now()
-		from  = to.Add(-time.Hour * 24 * 31)
-		metas []*block.Meta
-		mtx   sync.Mutex
+		to   = time.Now()
+		from = to.Add(-time.Hour * 24 * 31)
 	)
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(100)
+	g.SetLimit(128)
 
-	err := s.listAllBlock(ctx, from, to, func(name string) error {
-		g.Go(func() error {
-			r, err := s.bucket.Get(ctx, name+block.MetaFilename)
-			if err != nil {
-				return err
-			}
-
-			m, err := block.Read(r)
-			if err != nil {
-				return err
-			}
-			mtx.Lock()
-			metas = append(metas, m)
-			mtx.Unlock()
-
-			if err := r.Close(); err != nil {
-				return err
-			}
-			return nil
-		})
-		return nil
-	})
+	allIDs, err := s.listAllBlockByPrefixes(ctx, from, to)
 	if err != nil {
 		return nil, err
+	}
+	totalMeta := 0
+	for _, ids := range allIDs {
+		totalMeta += len(ids)
+	}
+	metas := make([]*block.Meta, totalMeta)
+	idx := 0
+	start := time.Now()
+	level.Debug(s.logger).Log("msg", "fetching blocks meta", "total", totalMeta)
+	defer func() {
+		level.Debug(s.logger).Log("msg", "fetched blocks meta", "total", totalMeta, "elapsed", time.Since(start))
+	}()
+	// fetch all meta.json
+	for _, ids := range allIDs {
+		for _, id := range ids {
+			id := id
+			currentIdx := idx
+			idx++
+			g.Go(func() error {
+				r, err := s.bucket.Get(ctx, id+block.MetaFilename)
+				if err != nil {
+					return err
+				}
+
+				m, err := block.Read(r)
+				if err != nil {
+					return err
+				}
+				metas[currentIdx] = m
+
+				if err := r.Close(); err != nil { // todo we might want to fail lightly here
+					return err
+				}
+				return nil
+			})
+		}
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
@@ -293,27 +307,39 @@ func (s *BucketStore) fetchBlocksMeta(ctx context.Context) (map[ulid.ULID]*block
 	return metaMap, nil
 }
 
-func (s *BucketStore) listAllBlock(ctx context.Context, from, to time.Time, cb func(name string) error) error {
+func (s *BucketStore) listAllBlockByPrefixes(ctx context.Context, from, to time.Time) ([][]string, error) {
 	// todo: We should cache prefixes listing per tenants.
 	blockPrefixes, err := blockPrefixesFromTo(from, to, 4)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	ids := make([][]string, len(blockPrefixes))
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(10)
-	for _, prefix := range blockPrefixes {
+	g.SetLimit(64)
+
+	for i, prefix := range blockPrefixes {
 		prefix := prefix
+		i := i
 		g.Go(func() error {
-			level.Debug(s.logger).Log("msg", "listing blocks", "prefix", prefix)
-			return s.bucket.Iter(ctx, prefix, func(name string) error {
-				if err := cb(name); err != nil {
-					return err
+			level.Debug(s.logger).Log("msg", "listing blocks", "prefix", prefix, "i", i)
+			prefixIds := []string{}
+			err := s.bucket.Iter(ctx, prefix, func(name string) error {
+				if _, ok := block.IsBlockDir(name); ok {
+					prefixIds = append(prefixIds, name)
 				}
 				return nil
 			}, objstore.WithoutApendingDirDelim)
+			if err != nil {
+				return err
+			}
+			ids[i] = prefixIds
+			return nil
 		})
 	}
-	return nil
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 // orderOfSplit is the number of bytes of the ulid id used for the split. The duration of the split is:
