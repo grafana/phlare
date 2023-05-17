@@ -33,7 +33,7 @@ type BucketStore struct {
 	logger log.Logger
 
 	blocksMx sync.RWMutex
-	blocks   map[ulid.ULID]*bucketBlock
+	blocks   map[ulid.ULID]*lazyBlock
 	blockSet *bucketBlockSet
 
 	filters []BlockMetaFilter
@@ -48,7 +48,7 @@ func NewBucketStore(bucket phlareobjstore.Bucket, tenantID string, syncDir strin
 		logger:   logger,
 		filters:  filters,
 		blockSet: newBucketBlockSet(),
-		blocks:   map[ulid.ULID]*bucketBlock{},
+		blocks:   map[ulid.ULID]*lazyBlock{},
 		metrics:  Metrics,
 	}
 
@@ -90,7 +90,7 @@ func (b *BucketStore) InitialSync(ctx context.Context) error {
 	return nil
 }
 
-func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
+func (s *BucketStore) getBlock(id ulid.ULID) *lazyBlock {
 	s.blocksMx.RLock()
 	defer s.blocksMx.RUnlock()
 	return s.blocks[id]
@@ -152,7 +152,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error) {
 	level.Debug(bs.logger).Log("msg", "loading new block", "id", meta.ULID)
 
-	dir := bs.locaPath(meta.ULID.String())
+	dir := bs.localPath(meta.ULID.String())
 	start := time.Now()
 	defer func() {
 		if err != nil {
@@ -165,21 +165,16 @@ func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error)
 			level.Info(bs.logger).Log("msg", "loaded new block", "elapsed", time.Since(start), "id", meta.ULID)
 		}
 	}()
-	// todo if the block exist on disk use it.
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return errors.Wrap(err, "create dir")
-	}
-	// add meta.json
-	if _, err := meta.WriteToFile(bs.logger, dir); err != nil {
-		return errors.Wrap(err, "write meta.json")
-	}
 
 	bs.metrics.blockLoads.Inc()
 
 	bs.blocksMx.Lock()
 	defer bs.blocksMx.Unlock()
 	// todo create the block dir and download the index, but only download stacktraces for some blocks (14d)
-	b := NewBucketBlock(meta)
+	b, err := OpenFromDisk(bs.syncDir, meta, bs.bucket, bs.logger)
+	if err != nil {
+		return errors.Wrap(err, "load block from disk")
+	}
 	if err = bs.blockSet.add(b); err != nil {
 		return errors.Wrap(err, "add block to set")
 	}
@@ -218,13 +213,13 @@ func (s *BucketStore) removeBlock(id ulid.ULID) (returnErr error) {
 	if err := b.Close(); err != nil {
 		return errors.Wrap(err, "close block")
 	}
-	if err := os.RemoveAll(s.locaPath(id.String())); err != nil {
+	if err := os.RemoveAll(s.localPath(id.String())); err != nil {
 		return errors.Wrap(err, "delete block")
 	}
 	return nil
 }
 
-func (s *BucketStore) locaPath(id string) string {
+func (s *BucketStore) localPath(id string) string {
 	return filepath.Join(s.syncDir, id)
 }
 
@@ -377,7 +372,7 @@ func blockPrefixesFromTo(from, to time.Time, orderOfSplit uint8) (prefixes []str
 // bucketBlockSet holds all blocks.
 type bucketBlockSet struct {
 	mtx    sync.RWMutex
-	blocks []*bucketBlock // Blocks sorted by mint, then maxt.
+	blocks []*lazyBlock // Blocks sorted by mint, then maxt.
 }
 
 // newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
@@ -387,7 +382,7 @@ func newBucketBlockSet() *bucketBlockSet {
 	return &bucketBlockSet{}
 }
 
-func (s *bucketBlockSet) add(b *bucketBlock) error {
+func (s *bucketBlockSet) add(b *lazyBlock) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -395,10 +390,10 @@ func (s *bucketBlockSet) add(b *bucketBlock) error {
 
 	// Always sort blocks by min time, then max time.
 	sort.Slice(s.blocks, func(j, k int) bool {
-		if s.blocks[j].Meta.MinTime == s.blocks[k].Meta.MinTime {
-			return s.blocks[j].Meta.MaxTime < s.blocks[k].Meta.MaxTime
+		if s.blocks[j].meta.MinTime == s.blocks[k].meta.MinTime {
+			return s.blocks[j].meta.MaxTime < s.blocks[k].meta.MaxTime
 		}
-		return s.blocks[j].Meta.MinTime < s.blocks[k].Meta.MinTime
+		return s.blocks[j].meta.MinTime < s.blocks[k].meta.MinTime
 	})
 	return nil
 }
@@ -408,7 +403,7 @@ func (s *bucketBlockSet) remove(id ulid.ULID) {
 	defer s.mtx.Unlock()
 
 	for i, b := range s.blocks {
-		if b.Meta.ULID != id {
+		if b.meta.ULID != id {
 			continue
 		}
 		s.blocks = append(s.blocks[:i], s.blocks[i+1:]...)
@@ -420,7 +415,7 @@ func (s *bucketBlockSet) remove(id ulid.ULID) {
 // It supports overlapping blocks.
 //
 // NOTE: s.blocks are expected to be sorted in minTime order.
-func (s *bucketBlockSet) getFor(mint, maxt int64) (bs []*bucketBlock) {
+func (s *bucketBlockSet) getFor(mint, maxt int64) (bs []*lazyBlock) {
 	if mint > maxt {
 		return nil
 	}
@@ -430,11 +425,11 @@ func (s *bucketBlockSet) getFor(mint, maxt int64) (bs []*bucketBlock) {
 
 	// Fill the given interval with the blocks within the request mint and maxt.
 	for _, b := range s.blocks {
-		if int64(b.Meta.MaxTime) <= mint {
+		if int64(b.meta.MaxTime) <= mint {
 			continue
 		}
 		// NOTE: Block intervals are half-open: [b.MinTime, b.MaxTime).
-		if int64(b.Meta.MinTime) > maxt {
+		if int64(b.meta.MinTime) > maxt {
 			break
 		}
 
