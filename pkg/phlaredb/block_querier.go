@@ -75,7 +75,7 @@ func (b *BlockQuerier) reconstructMetaFromBlock(ctx context.Context, ulid ulid.U
 	fakeMeta := block.NewMeta()
 	fakeMeta.ULID = ulid
 
-	q := newSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, fakeMeta)
+	q := NewSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, fakeMeta)
 	defer q.Close()
 
 	meta, err := q.reconstructMeta(ctx)
@@ -207,7 +207,7 @@ func (b *BlockQuerier) Sync(ctx context.Context) error {
 			continue
 		}
 
-		b.queriers[pos] = newSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, m)
+		b.queriers[pos] = NewSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, m)
 	}
 	// ensure queriers are in ascending order.
 	sort.Slice(b.queriers, func(i, j int) bool {
@@ -316,7 +316,7 @@ type singleBlockQuerier struct {
 	profiles    parquetReader[*schemav1.Profile, *schemav1.ProfilePersister]
 }
 
-func newSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobjstore.BucketReader, meta *block.Meta) *singleBlockQuerier {
+func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobjstore.BucketReader, meta *block.Meta) *singleBlockQuerier {
 	q := &singleBlockQuerier{
 		logger:  phlarecontext.Logger(phlarectx),
 		metrics: contextBlockMetrics(phlarectx),
@@ -792,7 +792,7 @@ func (p BlockProfile) Fingerprint() model.Fingerprint {
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block")
 	defer sp.Finish()
-	if err := b.open(ctx); err != nil {
+	if err := b.Open(ctx); err != nil {
 		return nil, err
 	}
 	matchers, err := parser.ParseMetricSelector(params.LabelSelector)
@@ -893,7 +893,7 @@ func (m uniqueIDs[T]) iterator() iter.Iterator[int64] {
 }
 
 func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []minMax, error) {
-	if err := q.open(ctx); err != nil {
+	if err := q.Open(ctx); err != nil {
 		return minMax{}, nil, err
 	}
 
@@ -959,7 +959,7 @@ func newByteSliceFromBucketReader(ctx context.Context, bucketReader phlareobjsto
 	return index.RealByteSlice(data), nil
 }
 
-func (q *singleBlockQuerier) open(ctx context.Context) error {
+func (q *singleBlockQuerier) Open(ctx context.Context) error {
 	q.openLock.Lock()
 	defer q.openLock.Unlock()
 

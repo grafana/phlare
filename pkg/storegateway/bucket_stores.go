@@ -13,6 +13,8 @@ import (
 	"github.com/grafana/dskit/backoff"
 	"github.com/grafana/dskit/multierror"
 	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
+	"github.com/grafana/phlare/pkg/phlaredb"
+	"github.com/grafana/phlare/pkg/phlaredb/block"
 	"github.com/grafana/phlare/pkg/phlaredb/bucket"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/pkg/errors"
@@ -95,6 +97,8 @@ type BucketStores struct {
 	// Keeps a bucket store for each tenant.
 	storesMu sync.RWMutex
 	stores   map[string]*BucketStore
+	// Blocks cache.
+	blocksCache *blocksCache
 
 	// Metrics.
 	syncTimes         prometheus.Histogram
@@ -106,10 +110,28 @@ type BucketStores struct {
 }
 
 func NewBucketStores(cfg BucketStoreConfig, shardingStrategy ShardingStrategy, storageBucket phlareobjstore.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*BucketStores, error) {
+	c, err := NewBlocksCache(func(ctx context.Context, metas []*block.Meta, tenantID string) ([]Block, error) {
+		// todo we should cache metadata in memcached.
+		// but it means we need to have a different way of opening a block. Not just with meta.
+		// todo open in parallel
+		result := make([]Block, len(metas))
+		for i := range metas {
+			result[i] = phlaredb.NewSingleBlockQuerierFromMeta(ctx, phlareobjstore.BucketWithPrefix(storageBucket, "/"+tenantID+"/phlaredb"), metas[i])
+			// Actually Open the block.
+			if err := result[i].Open(ctx); err != nil {
+				return nil, errors.Wrap(err, "open block")
+			}
+		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "create blocks cache")
+	}
 	bs := &BucketStores{
 		storageBucket: storageBucket,
 		logger:        logger,
 		cfg:           cfg,
+		blocksCache:   c,
 		syncBackoffConfig: backoff.Config{
 			MinBackoff: 1 * time.Second,
 			MaxBackoff: 10 * time.Second,
@@ -314,8 +336,8 @@ func (bs *BucketStores) getOrCreateStore(userID string) (*BucketStore, error) {
 
 	s, err := NewBucketStore(
 		bs.storageBucket,
+		bs.blocksCache,
 		userID,
-		// fetcher,
 		bs.syncDirForUser(userID),
 		filters,
 		userLogger,

@@ -15,6 +15,7 @@ import (
 	"github.com/grafana/mimir/pkg/storegateway"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/samber/lo"
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
@@ -32,24 +33,26 @@ type BucketStore struct {
 
 	logger log.Logger
 
-	blocksMx sync.RWMutex
-	blocks   map[ulid.ULID]*lazyBlock
-	blockSet *bucketBlockSet
+	blocksMx    sync.RWMutex
+	blocks      map[ulid.ULID]*lazyBlock
+	blockSet    *bucketBlockSet
+	blocksCache *blocksCache
 
 	filters []BlockMetaFilter
 	metrics *Metrics
 }
 
-func NewBucketStore(bucket phlareobjstore.Bucket, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
+func NewBucketStore(bucket phlareobjstore.Bucket, blocksCache *blocksCache, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
 	s := &BucketStore{
-		bucket:   phlareobjstore.BucketWithPrefix(bucket, tenantID+"/phlaredb"),
-		tenantID: tenantID,
-		syncDir:  syncDir,
-		logger:   logger,
-		filters:  filters,
-		blockSet: newBucketBlockSet(),
-		blocks:   map[ulid.ULID]*lazyBlock{},
-		metrics:  Metrics,
+		bucket:      phlareobjstore.BucketWithPrefix(bucket, tenantID+"/phlaredb"),
+		tenantID:    tenantID,
+		syncDir:     syncDir,
+		logger:      logger,
+		filters:     filters,
+		blockSet:    newBucketBlockSet(),
+		blocksCache: blocksCache,
+		blocks:      map[ulid.ULID]*lazyBlock{},
+		metrics:     Metrics,
 	}
 
 	if err := os.MkdirAll(syncDir, 0o750); err != nil {
@@ -86,7 +89,18 @@ func (b *BucketStore) InitialSync(ctx context.Context) error {
 			level.Warn(b.logger).Log("msg", "failed to remove block which is not needed", "err", err)
 		}
 	}
-
+	// todo remove testing.
+	blocks, err := b.openBlocksForReading(ctx, int64(model.Now().Add(-3*time.Hour)), int64(model.Now()))
+	if err != nil {
+		level.Warn(b.logger).Log("msg", "failed to open blocks", "err", err)
+		return nil
+	}
+	level.Info(b.logger).Log("msg", "opened blocks", "blocks", len(blocks))
+	blocks, err = b.openBlocksForReading(ctx, int64(model.Now().Add(-3*time.Hour)), int64(model.Now()))
+	if err != nil {
+		level.Warn(b.logger).Log("msg", "failed to open blocks", "err", err)
+		return nil
+	}
 	return nil
 }
 
@@ -149,6 +163,15 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	return nil
 }
 
+func (s *BucketStore) openBlocksForReading(ctx context.Context, minT, maxT int64) ([]Block, error) {
+	blks := s.blockSet.getFor(minT, maxT)
+	metas := make([]*block.Meta, 0, len(blks))
+	for _, b := range blks {
+		metas = append(metas, b.meta)
+	}
+	return s.blocksCache.Get(ctx, metas, s.tenantID)
+}
+
 func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error) {
 	level.Debug(bs.logger).Log("msg", "loading new block", "id", meta.ULID)
 
@@ -171,7 +194,7 @@ func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error)
 	bs.blocksMx.Lock()
 	defer bs.blocksMx.Unlock()
 	// todo create the block dir and download the index, but only download stacktraces for some blocks (14d)
-	b, err := OpenFromDisk(bs.syncDir, meta, bs.bucket, bs.logger)
+	b, err := OpenFromDisk(bs.syncDir, meta, bs.logger)
 	if err != nil {
 		return errors.Wrap(err, "load block from disk")
 	}
