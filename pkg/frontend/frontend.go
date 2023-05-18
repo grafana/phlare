@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/flagext"
@@ -181,6 +182,8 @@ func (f *Frontend) stopping(_ error) error {
 
 // RoundTripGRPC round trips a proto (instead of an HTTP request).
 func (f *Frontend) RoundTripGRPC(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error) {
+	fmt.Println("spew.Dump(req)")
+	spew.Dump(req)
 	if s := f.State(); s != services.Running {
 		return nil, fmt.Errorf("frontend not running: %v", s)
 	}
@@ -268,6 +271,8 @@ enqueueAgain:
 }
 
 func (f *Frontend) QueryResult(ctx context.Context, r *connect.Request[frontendpb.QueryResultRequest]) (*connect.Response[frontendpb.QueryResultResponse], error) {
+	fmt.Println("spew.Dump(r)")
+	spew.Dump(r)
 	qrReq := r.Msg
 	tenantIDs, err := tenant.TenantIDs(ctx)
 	if err != nil {

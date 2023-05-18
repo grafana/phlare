@@ -48,31 +48,50 @@ import (
 
 // The various modules that make up Phlare.
 const (
-	All               string = "all"
-	Agent             string = "agent"
-	API               string = "api"
-	Distributor       string = "distributor"
-	Server            string = "server"
-	Ring              string = "ring"
-	Ingester          string = "ingester"
-	MemberlistKV      string = "memberlist-kv"
-	Querier           string = "querier"
-	GRPCGateway       string = "grpc-gateway"
-	Storage           string = "storage"
-	UsageReport       string = "usage-stats"
-	QueryFrontend     string = "query-frontend"
-	QueryScheduler    string = "query-scheduler"
-	RuntimeConfig     string = "runtime-config"
-	Overrides         string = "overrides"
-	OverridesExporter string = "overrides-exporter"
+	All                      string = "all"
+	Agent                    string = "agent"
+	API                      string = "api"
+	Distributor              string = "distributor"
+	Server                   string = "server"
+	Ring                     string = "ring"
+	Ingester                 string = "ingester"
+	MemberlistKV             string = "memberlist-kv"
+	Querier                  string = "querier"
+	GRPCGateway              string = "grpc-gateway"
+	Storage                  string = "storage"
+	UsageReport              string = "usage-stats"
+	QueryFrontendTripperware string = "query-frontend-tripperware"
+	QueryFrontend            string = "query-frontend"
+	QueryScheduler           string = "query-scheduler"
+	RuntimeConfig            string = "runtime-config"
+	Overrides                string = "overrides"
+	OverridesExporter        string = "overrides-exporter"
 
-	// QueryFrontendTripperware string = "query-frontend-tripperware"
 	// Compactor                string = "compactor"
 	// IndexGateway             string = "index-gateway"
 	// IndexGatewayRing         string = "index-gateway-ring"
 )
 
 var objectStoreTypeStats = usagestats.NewString("store_object_type")
+
+func (f *Phlare) initQueryFrontendTripperware() (_ services.Service, err error) {
+	// tripperware, stopper, err := queryrange.NewTripperware(
+	// 	f.Cfg.QueryRange,
+	// 	f.Cfg.Querier.Engine,
+	// 	util_log.Logger,
+	// 	f.Overrides,
+	// 	f.Cfg.SchemaConfig,
+	// 	f.cacheGenerationLoader, f.Cfg.CompactorConfig.RetentionEnabled,
+	// 	prometheus.DefaultRegisterer,
+	// )
+	// if err != nil {
+	// 	return
+	// }
+	// f.stopper = stopper
+	// f.QueryFrontEndTripperware = tripperware
+
+	return services.NewIdleService(nil, nil), nil
+}
 
 func (f *Phlare) initQueryFrontend() (services.Service, error) {
 	if f.Cfg.Frontend.Addr == "" {
@@ -88,11 +107,26 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 		f.Cfg.Frontend.Port = f.Cfg.Server.HTTPListenPort
 	}
 
+	// TODO: add a tripperware here
 	frontendSvc, err := frontend.NewFrontend(f.Cfg.Frontend, log.With(f.logger, "component", "frontend"), f.reg)
 	if err != nil {
 		return nil, err
 	}
 	f.API.RegisterQueryFrontend(frontendSvc)
+
+	//
+	// QuerierServiceHandler is an implementation of the querier.v1.QuerierService service.
+	// type QuerierServiceHandler interface {
+	// 	ProfileTypes(context.Context, *connect_go.Request[v1.ProfileTypesRequest]) (*connect_go.Response[v1.ProfileTypesResponse], error)
+	// 	LabelValues(context.Context, *connect_go.Request[v11.LabelValuesRequest]) (*connect_go.Response[v11.LabelValuesResponse], error)
+	// 	LabelNames(context.Context, *connect_go.Request[v11.LabelNamesRequest]) (*connect_go.Response[v11.LabelNamesResponse], error)
+	// 	Series(context.Context, *connect_go.Request[v1.SeriesRequest]) (*connect_go.Response[v1.SeriesResponse], error)
+	// 	SelectMergeStacktraces(context.Context, *connect_go.Request[v1.SelectMergeStacktracesRequest]) (*connect_go.Response[v1.SelectMergeStacktracesResponse], error)
+	// 	SelectMergeProfile(context.Context, *connect_go.Request[v1.SelectMergeProfileRequest]) (*connect_go.Response[v12.Profile], error)
+	// 	SelectSeries(context.Context, *connect_go.Request[v1.SelectSeriesRequest]) (*connect_go.Response[v1.SelectSeriesResponse], error)
+	// 	Diff(context.Context, *connect_go.Request[v1.DiffRequest]) (*connect_go.Response[v1.DiffResponse], error)
+	// }
+
 	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc))
 
 	return frontendSvc, nil

@@ -40,6 +40,9 @@ type Limits struct {
 	MaxQueryLookback    model.Duration `yaml:"max_query_lookback" json:"max_query_lookback"`
 	MaxQueryLength      model.Duration `yaml:"max_query_length" json:"max_query_length"`
 	MaxQueryParallelism int            `yaml:"max_query_parallelism" json:"max_query_parallelism"`
+
+	// Query frontend enforced limits. The default is actually parameterized by the queryrange config.
+	QuerySplitDuration model.Duration `yaml:"split_queries_by_interval" json:"split_queries_by_interval"`
 }
 
 // LimitError are errors that do not comply with the limits specified.

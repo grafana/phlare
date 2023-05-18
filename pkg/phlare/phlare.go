@@ -30,6 +30,7 @@ import (
 	wwtracing "github.com/weaveworks/common/tracing"
 
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
+	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/api"
 	"github.com/grafana/phlare/pkg/cfg"
@@ -224,6 +225,8 @@ type Phlare struct {
 	RuntimeConfig *runtimeconfig.Manager
 	Overrides     *validation.Overrides
 
+	QueryFrontEndTripperware querierv1connect.QuerierServiceHandler
+
 	TenantLimits validation.TenantLimits
 
 	storageBucket objstore.Bucket
@@ -296,6 +299,7 @@ func (f *Phlare) setupModuleManager() error {
 	mm.RegisterModule(Querier, f.initQuerier)
 	mm.RegisterModule(Agent, f.initAgent)
 	mm.RegisterModule(UsageReport, f.initUsageReport)
+	mm.RegisterModule(QueryFrontendTripperware, f.initQueryFrontendTripperware, modules.UserInvisibleModule)
 	mm.RegisterModule(QueryFrontend, f.initQueryFrontend)
 	mm.RegisterModule(QueryScheduler, f.initQueryScheduler)
 	mm.RegisterModule(All, nil)
@@ -304,14 +308,15 @@ func (f *Phlare) setupModuleManager() error {
 	deps := map[string][]string{
 		All: {Agent, Ingester, Distributor, QueryScheduler, QueryFrontend, Querier},
 
-		Server:         {GRPCGateway},
-		API:            {Server},
-		Agent:          {API},
-		Distributor:    {Overrides, Ring, API, UsageReport},
-		Querier:        {API, MemberlistKV, Ring, UsageReport},
-		QueryFrontend:  {OverridesExporter, API, MemberlistKV, UsageReport},
-		QueryScheduler: {Overrides, API, MemberlistKV, UsageReport},
-		Ingester:       {Overrides, API, MemberlistKV, Storage, UsageReport},
+		Server:                   {GRPCGateway},
+		API:                      {Server},
+		Agent:                    {API},
+		Distributor:              {Overrides, Ring, API, UsageReport},
+		Querier:                  {API, MemberlistKV, Ring, UsageReport},
+		QueryFrontendTripperware: {Server, Overrides},
+		QueryFrontend:            {QueryFrontendTripperware, OverridesExporter, API, MemberlistKV, UsageReport},
+		QueryScheduler:           {Overrides, API, MemberlistKV, UsageReport},
+		Ingester:                 {Overrides, API, MemberlistKV, Storage, UsageReport},
 
 		UsageReport:       {Storage, MemberlistKV},
 		Overrides:         {RuntimeConfig},
