@@ -162,10 +162,17 @@ func (f *PhlareDB) loop() {
 			f.runBlockQuerierSync(ctx)
 		case <-blockScanTicker.C:
 			f.runBlockQuerierSync(ctx)
-		case b := <-f.evictCh:
-			b.evicted, b.err = f.blockQuerier.evict(b.blockID)
-			close(b.done)
+		case e := <-f.evictCh:
+			f.evictBlock(e)
 		}
+	}
+}
+
+func (f *PhlareDB) evictBlock(e *blockEviction) {
+	defer close(e.done)
+	e.evicted, e.err = f.blockQuerier.evict(e.blockID)
+	if e.evicted && e.err == nil {
+		e.err = e.fn()
 	}
 }
 
@@ -419,16 +426,18 @@ type blockEviction struct {
 	blockID ulid.ULID
 	err     error
 	evicted bool
+	fn      func() error
 	done    chan struct{}
 }
 
 // Evict removes the given local block from the PhlareDB.
 // Note that the block files are not deleted from the disk.
 // No evictions should be done after and during the Close call.
-func (f *PhlareDB) Evict(blockID ulid.ULID) (bool, error) {
+func (f *PhlareDB) Evict(blockID ulid.ULID, fn func() error) (bool, error) {
 	e := &blockEviction{
 		blockID: blockID,
 		done:    make(chan struct{}),
+		fn:      fn,
 	}
 	// It's assumed that the DB close is only called
 	// after all evictions are done, therefore it's safe
