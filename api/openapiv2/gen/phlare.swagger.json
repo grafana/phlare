@@ -734,6 +734,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "tree": {
+          "type": "string",
+          "format": "byte",
+          "description": "Merge result in the pyroscope tree format."
         }
       }
     },

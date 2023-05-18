@@ -858,6 +858,11 @@ func (m *MergeProfilesStacktracesRequest) MarshalToSizedBufferVT(dAtA []byte) (i
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.MaxNodes != nil {
+		i = encodeVarint(dAtA, i, uint64(*m.MaxNodes))
+		i--
+		dAtA[i] = 0x18
+	}
 	if len(m.Profiles) > 0 {
 		for iNdEx := len(m.Profiles) - 1; iNdEx >= 0; iNdEx-- {
 			i--
@@ -913,6 +918,13 @@ func (m *MergeProfilesStacktracesResult) MarshalToSizedBufferVT(dAtA []byte) (in
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Tree) > 0 {
+		i -= len(m.Tree)
+		copy(dAtA[i:], m.Tree)
+		i = encodeVarint(dAtA, i, uint64(len(m.Tree)))
+		i--
+		dAtA[i] = 0x1a
 	}
 	if len(m.FunctionNames) > 0 {
 		for iNdEx := len(m.FunctionNames) - 1; iNdEx >= 0; iNdEx-- {
@@ -1661,6 +1673,9 @@ func (m *MergeProfilesStacktracesRequest) SizeVT() (n int) {
 	if len(m.Profiles) > 0 {
 		n += 1 + sov(uint64(len(m.Profiles))) + len(m.Profiles)*1
 	}
+	if m.MaxNodes != nil {
+		n += 1 + sov(uint64(*m.MaxNodes))
+	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
 	}
@@ -1684,6 +1699,10 @@ func (m *MergeProfilesStacktracesResult) SizeVT() (n int) {
 			l = len(s)
 			n += 1 + l + sov(uint64(l))
 		}
+	}
+	l = len(m.Tree)
+	if l > 0 {
+		n += 1 + l + sov(uint64(l))
 	}
 	if m.unknownFields != nil {
 		n += len(m.unknownFields)
@@ -2648,6 +2667,26 @@ func (m *MergeProfilesStacktracesRequest) UnmarshalVT(dAtA []byte) error {
 			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field Profiles", wireType)
 			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxNodes", wireType)
+			}
+			var v int64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.MaxNodes = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skip(dAtA[iNdEx:])
@@ -2764,6 +2803,40 @@ func (m *MergeProfilesStacktracesResult) UnmarshalVT(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.FunctionNames = append(m.FunctionNames, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tree", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLength
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Tree = append(m.Tree[:0], dAtA[iNdEx:postIndex]...)
+			if m.Tree == nil {
+				m.Tree = []byte{}
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
