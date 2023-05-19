@@ -12,6 +12,7 @@ import { createBrowserHistory } from 'history';
 import { ROUTES } from './pages/routes';
 import { SingleView } from './pages/SingleView';
 import { ComparisonView } from './pages/ComparisonView';
+import { ExploreView } from './pages/ExploreView';
 import { DiffView } from './pages/DiffView';
 import { LoadAppNames } from './components/LoadAppNames';
 import { Sidebar } from './components/Sidebar';
@@ -31,6 +32,9 @@ function App() {
         <div className="pyroscope-app">
           <LoadAppNames>
             <Switch>
+              <Route exact path={ROUTES.EXPLORE_VIEW}>
+                <ExploreView />
+              </Route>
               <Route exact path={ROUTES.CONTINOUS_SINGLE_VIEW}>
                 <SingleView />
               </Route>

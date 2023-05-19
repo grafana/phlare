@@ -3,6 +3,7 @@ import {
   Profile,
   Groups,
   FlamebearerProfileSchema,
+  GroupsSchema,
 } from '@pyroscope/models/src';
 import { z } from 'zod';
 import type { ZodError } from 'zod';
@@ -112,17 +113,64 @@ export async function renderDiff(
   );
 }
 
+interface renderExploreProps extends Omit<renderSingleProps, 'maxNodes'> {
+  groupBy: string;
+  grouByTagValue: string;
+}
+
 export interface RenderExploreOutput {
   profile: Profile;
   groups: Groups;
 }
 export async function renderExplore(
-  props: unknown,
+  props: renderExploreProps,
   controller?: {
     signal?: AbortSignal;
   }
-) {
-  return Result.err<RenderExploreOutput, { message: string }>({
-    message: 'TODO: implement ',
+): Promise<Result<RenderExploreOutput, RequestError | ZodError>> {
+  const url = buildRenderURL(props);
+  const response = await request(`/pyroscope/${url}&format=json`, {
+    signal: controller?.signal,
   });
+  if (response.isErr) {
+    return Result.err<RenderExploreOutput, RequestError>(response.error);
+  }
+  const parsed = FlamebearerProfileSchema.merge(
+    z.object({ timeline: TimelineSchema })
+  )
+    .merge(
+      z.object({
+        telemetry: z.object({}).passthrough().optional(),
+        annotations: defaultAnnotationsSchema,
+      })
+    )
+    .merge(
+      z.object({
+        groups: z.preprocess((groups) => {
+          const groupNames = Object.keys(groups as Groups);
+          return groupNames.length
+            ? groupNames
+                .filter((g) => !!g.trim())
+                .reduce(
+                  (acc, current) => ({
+                    ...acc,
+                    [current]: (groups as Groups)[current],
+                  }),
+                  {}
+                )
+            : groups;
+        }, GroupsSchema),
+      })
+    )
+    .safeParse(response.value);
+  if (parsed.success) {
+    const profile = parsed.data;
+    const { groups, annotations } = parsed.data;
+    return Result.ok({
+      profile,
+      groups,
+      annotations,
+    });
+  }
+  return Result.err(parsed.error);
 }
