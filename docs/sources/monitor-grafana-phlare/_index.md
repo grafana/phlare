@@ -6,7 +6,7 @@ description: View example Grafana Phlare dashboards.
 keywords:
 menuTitle: Monitor Phlare
 title: Monitor Grafana Phlare
-weight: 51
+weight: 70
 ---
 
 # Monitor Grafana Phlare

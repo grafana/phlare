@@ -2,7 +2,7 @@
 title: "Sending profiles from your application"
 menuTitle: "Configure the Client"
 description: ""
-weight: 31
+weight: 30
 ---
 
 # Sending profiles from your application

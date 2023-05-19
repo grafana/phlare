@@ -4,7 +4,7 @@ aliases:
 description: Learn how to get started with Grafana Phlare.
 menuTitle: Get started
 title: Get started with Grafana Phlare
-weight: 10
+weight: 20
 ---
 
 # Get started with Grafana Phlare

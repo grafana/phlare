@@ -2,7 +2,7 @@
 title: "Reference: Learning resources"
 menuTitle: "Reference: Learning resources"
 description: "Blog posts, podcasts, and videos about Grafana Phlare"
-weight: 130
+weight: 90
 keywords:
   - Grafana Phlare blog posts, podcasts, and videos
 ---

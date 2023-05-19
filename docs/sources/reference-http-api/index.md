@@ -2,7 +2,7 @@
 title: "Reference: Grafana Phlare HTTP API"
 menuTitle: "Reference: HTTP API"
 description: "Use the HTTP API to write and query profiles data and operate a Grafana Phlare cluster."
-weight: 120
+weight: 80
 keywords:
   - Phlare API
   - Phlare endpoints

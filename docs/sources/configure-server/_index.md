@@ -6,7 +6,7 @@ keywords:
   - Phlare server configuration
 menuTitle: Configure the server
 title: Configure Grafana Phlare Server
-weight: 30
+weight: 40
 ---
 
 # Configure Grafana Phlare
