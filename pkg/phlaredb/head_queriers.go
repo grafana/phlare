@@ -110,6 +110,7 @@ func (q *headOnDiskQuerier) MergeByStacktraces(ctx context.Context, rows iter.It
 		return nil, err
 	}
 
+	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
 }
 
@@ -234,6 +235,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 	}
 	q.head.stacktraces.lock.RUnlock()
 
+	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
 }
 
