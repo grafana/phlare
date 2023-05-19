@@ -31,7 +31,7 @@ Alternatively, you can use the Phlare SDKs to push profiles from your applicatio
 
 By using the Phlare SDKs, you have the flexibility to customize the profiling process according to your application's specific requirements. You can selectively profile specific sections of code or send profiles at different intervals, depending on your needs.
 
-## Choosing the Right Mode
+## Choosing the Grafana agent or Phlare SDK to send profiles
 
 The decision of which mode to use depends on your specific use case and requirements. Here are some factors to consider when making the choice:
 
