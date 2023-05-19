@@ -1,4 +1,4 @@
-package querier
+package model
 
 import (
 	"testing"
@@ -7,12 +7,12 @@ import (
 )
 
 func Test_Diff_Tree(t *testing.T) {
-	tr := newTree([]stacktraces{
+	tr := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 1},
 		{locations: []string{"c", "a"}, value: 2},
 	})
 
-	tr2 := newTree([]stacktraces{
+	tr2 := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 4},
 		{locations: []string{"c", "a"}, value: 8},
 	})
@@ -30,13 +30,13 @@ func Test_Diff_Tree(t *testing.T) {
 }
 
 func Test_Diff_Tree_With_Different_Structure(t *testing.T) {
-	tr := newTree([]stacktraces{
+	tr := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 1},
 		{locations: []string{"c", "a"}, value: 2},
 		{locations: []string{"e", "a"}, value: 3},
 	})
 
-	tr2 := newTree([]stacktraces{
+	tr2 := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 4},
 		{locations: []string{"d", "a"}, value: 8},
 		{locations: []string{"e", "a"}, value: 12},
@@ -60,12 +60,12 @@ func Test_Diff_Tree_With_Different_Structure(t *testing.T) {
 }
 
 func Test_Diff_Tree_With_MaxNodes(t *testing.T) {
-	tr := newTree([]stacktraces{
+	tr := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 1},
 		{locations: []string{"c", "a"}, value: 2},
 	})
 
-	tr2 := newTree([]stacktraces{
+	tr2 := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 4},
 		{locations: []string{"c", "a"}, value: 8},
 	})
@@ -78,12 +78,12 @@ func Test_Diff_Tree_With_MaxNodes(t *testing.T) {
 }
 
 func Test_Diff_Tree_With_NegativeNodes(t *testing.T) {
-	tr := newTree([]stacktraces{
+	tr := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 1},
 		{locations: []string{"c", "a"}, value: -2},
 	})
 
-	tr2 := newTree([]stacktraces{
+	tr2 := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 4},
 		{locations: []string{"c", "a"}, value: -8},
 	})
@@ -93,11 +93,11 @@ func Test_Diff_Tree_With_NegativeNodes(t *testing.T) {
 }
 
 func Test_Diff_No_Common_Root(t *testing.T) {
-	tr := newTree([]stacktraces{
+	tr := NewTree([]stacktraces{
 		{locations: []string{"b", "a"}, value: 1},
 	})
 
-	tr2 := newTree([]stacktraces{
+	tr2 := NewTree([]stacktraces{
 		{locations: []string{"c", "a", "b", "k"}, value: 8},
 	})
 

@@ -1,4 +1,4 @@
-package querier
+package model
 
 import (
 	"fmt"
@@ -36,7 +36,7 @@ func Test_ExportToFlamebearer(t *testing.T) {
 	}
 	actual := ExportToFlamebearer(
 		NewFlameGraph(
-			newTree([]stacktraces{
+			NewTree([]stacktraces{
 				{
 					locations: []string{"e", "b", "a"},
 					value:     1,
@@ -72,7 +72,7 @@ func BenchmarkFlamegraph(b *testing.B) {
 			value:     1,
 		}
 	}
-	tr := newTree(stacks)
+	tr := NewTree(stacks)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

@@ -1,20 +1,21 @@
-package querier
+package model
 
 import (
+	"container/heap"
 	"fmt"
 
 	"github.com/xlab/treeprint"
 )
 
-type tree struct {
+type Tree struct {
 	root []*node
 }
 
-func emptyTree() *tree {
-	return &tree{}
+func emptyTree() *Tree {
+	return &Tree{}
 }
 
-func newTree(stacks []stacktraces) *tree {
+func NewTree(stacks []stacktraces) *Tree {
 	t := emptyTree()
 	for _, stack := range stacks {
 		if stack.value == 0 {
@@ -24,12 +25,17 @@ func newTree(stacks []stacktraces) *tree {
 			t = stackToTree(stack)
 			continue
 		}
-		mergeTree(t, stackToTree(stack))
+		MergeTree(t, stackToTree(stack))
 	}
 	return t
 }
 
-func (t *tree) Add(name string, self, total int64) *node {
+type stacktraces struct {
+	locations []string
+	value     int64
+}
+
+func (t *Tree) Add(name string, self, total int64) *node {
 	new := &node{
 		name:  name,
 		self:  self,
@@ -39,7 +45,7 @@ func (t *tree) Add(name string, self, total int64) *node {
 	return new
 }
 
-func stackToTree(stack stacktraces) *tree {
+func stackToTree(stack stacktraces) *Tree {
 	t := emptyTree()
 	if len(stack.locations) == 0 {
 		return t
@@ -82,7 +88,7 @@ func stackToTree(stack stacktraces) *tree {
 	return t
 }
 
-func (t tree) String() string {
+func (t Tree) String() string {
 	type branch struct {
 		nodes []*node
 		treeprint.Tree
@@ -106,7 +112,7 @@ func (t tree) String() string {
 	return tree.String()
 }
 
-func mergeTree(dst, src *tree) {
+func MergeTree(dst, src *Tree) {
 	// walk src and insert src's nodes into dst
 	for _, rootNode := range src.root {
 		parent, found, toMerge := findNodeOrParent(dst.root, rootNode)
@@ -130,6 +136,14 @@ func mergeTree(dst, src *tree) {
 	}
 }
 
+func UnmarshalTree([]byte) (*Tree, error) {
+	panic("implement me")
+}
+
+func (t *Tree) Marshal(maxNodes int64) []byte {
+	panic("implement me")
+}
+
 type node struct {
 	parent      *node
 	children    []*node
@@ -150,11 +164,6 @@ func (n *node) Add(name string, self, total int64) *node {
 	}
 	n.children = append(n.children, new)
 	return new
-}
-
-func (n *node) Clone() *node {
-	new := *n
-	return &new
 }
 
 // Walks into root nodes to find a node, return the latest common parent visited.
@@ -181,10 +190,66 @@ func findNodeOrParent(root []*node, new *node) (parent, found, toMerge *node) {
 	return lastParent, nil, current
 }
 
-func UnmarshalTree([]byte) (*tree, error) {
-	panic("implement me")
+// minValue returns the minimum "total" value a node in a tree has to have to show up in
+// the resulting flamegraph
+func (t *Tree) minValue(maxNodes int64) int64 {
+	if maxNodes == -1 { // -1 means show all nodes
+		return 0
+	}
+	nodes := t.root
+
+	mh := &minHeap{}
+	heap.Init(mh)
+
+	for len(nodes) > 0 {
+		node := nodes[0]
+		nodes = nodes[1:]
+		number := node.total
+
+		if mh.Len() < int(maxNodes) {
+			heap.Push(mh, number)
+		} else {
+			if number > (*mh)[0] {
+				heap.Pop(mh)
+				heap.Push(mh, number)
+				nodes = append(node.children, nodes...)
+			}
+		}
+	}
+
+	if mh.Len() < int(maxNodes) {
+		return 0
+	}
+
+	return (*mh)[0]
 }
 
-func (t *tree) Marshal(maxNodes int64) ([]byte, error) {
-	panic("implement me")
+// minHeap is a custom min-heap data structure that stores integers.
+type minHeap []int64
+
+// Len returns the number of elements in the min-heap.
+func (h minHeap) Len() int { return len(h) }
+
+// Less returns true if the element at index i is less than the element at index j.
+// This method is used by the container/heap package to maintain the min-heap property.
+func (h minHeap) Less(i, j int) bool { return h[i] < h[j] }
+
+// Swap exchanges the elements at index i and index j.
+// This method is used by the container/heap package to reorganize the min-heap during its operations.
+func (h minHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+
+// Push adds an element (x) to the min-heap.
+// This method is used by the container/heap package to grow the min-heap.
+func (h *minHeap) Push(x interface{}) {
+	*h = append(*h, x.(int64))
+}
+
+// Pop removes and returns the smallest element (minimum) from the min-heap.
+// This method is used by the container/heap package to shrink the min-heap.
+func (h *minHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
 }

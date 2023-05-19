@@ -63,8 +63,8 @@ message MergeProfilesStacktracesResult {
 
 enum StacktracesMergeFormat {
   MERGE_FORMAT_UNSPECIFIED = 0;
-  MERGE_STACKTRACES = 1;
-  MERGE_TREE = 2;
+  MERGE_FORMAT_STACKTRACES = 1;
+  MERGE_FORMAT_TREE = 2;
 }
 
 message MergeProfilesStacktracesResponse {

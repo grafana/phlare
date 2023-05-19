@@ -228,7 +228,7 @@ func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffR
 		sp.Finish()
 	}()
 
-	var leftTree, rightTree *tree
+	var leftTree, rightTree *phlaremodel.Tree
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -254,7 +254,7 @@ func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffR
 		return nil, err
 	}
 
-	fd, err := NewFlamegraphDiff(leftTree, rightTree, MaxNodes)
+	fd, err := phlaremodel.NewFlamegraphDiff(leftTree, rightTree, phlaremodel.MaxNodes)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -287,11 +287,11 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 	}
 
 	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: NewFlameGraph(t, *req.Msg.MaxNodes),
+		Flamegraph: phlaremodel.NewFlameGraph(t, *req.Msg.MaxNodes),
 	}), nil
 }
 
-func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*tree, error) {
+func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*phlaremodel.Tree, error) {
 	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)

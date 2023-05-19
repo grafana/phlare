@@ -156,3 +156,23 @@ func sortStacktraces(r *ingestv1.MergeProfilesStacktracesResult) {
 		return true
 	})
 }
+
+type StacktraceMerger struct {
+	// Should be thread-safe
+}
+
+func NewStackTraceMerger() *StacktraceMerger {
+	return new(StacktraceMerger)
+}
+
+func (StacktraceMerger) MergeTreeBytes(b []byte) {
+	panic("implement me")
+}
+
+func (StacktraceMerger) MergeStackTraces(stacks []*ingestv1.StacktraceSample, names []string) {
+	panic("implement me")
+}
+
+func (StacktraceMerger) Tree() *Tree {
+	panic("implement me")
+}

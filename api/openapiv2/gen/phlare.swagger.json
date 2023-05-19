@@ -979,8 +979,8 @@
       "type": "string",
       "enum": [
         "MERGE_FORMAT_UNSPECIFIED",
-        "MERGE_STACKTRACES",
-        "MERGE_TREE"
+        "MERGE_FORMAT_STACKTRACES",
+        "MERGE_FORMAT_TREE"
       ],
       "default": "MERGE_FORMAT_UNSPECIFIED"
     },

@@ -1,4 +1,4 @@
-package querier
+package model
 
 import (
 	"testing"
@@ -10,12 +10,12 @@ func Test_Tree(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		stacks   []stacktraces
-		expected func() *tree
+		expected func() *Tree
 	}{
 		{
 			"empty",
 			[]stacktraces{},
-			func() *tree { return &tree{} },
+			func() *Tree { return &Tree{} },
 		},
 		{
 			"double node single stack",
@@ -29,7 +29,7 @@ func Test_Tree(t *testing.T) {
 					value:     1,
 				},
 			},
-			func() *tree {
+			func() *Tree {
 				tr := emptyTree()
 				tr.Add("bar", 0, 2).Add("buz", 2, 2)
 				return tr
@@ -47,7 +47,7 @@ func Test_Tree(t *testing.T) {
 					value:     2,
 				},
 			},
-			func() *tree {
+			func() *Tree {
 				tr := emptyTree()
 				buz := tr.Add("bar", 0, 3).Add("buz", 0, 3)
 				buz.Add("blip", 1, 1)
@@ -83,7 +83,7 @@ func Test_Tree(t *testing.T) {
 					value:     4,
 				},
 			},
-			func() *tree {
+			func() *Tree {
 				tr := emptyTree()
 
 				bar := tr.Add("bar", 0, 9)
@@ -100,7 +100,7 @@ func Test_Tree(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			expected := tc.expected()
-			tr := newTree(tc.stacks)
+			tr := NewTree(tc.stacks)
 			require.Equal(t, tr, expected, "tree should be equal got:%s\n expected:%s\n", tr.String(), expected)
 		})
 	}
