@@ -53,11 +53,18 @@ message MergeProfilesStacktracesRequest {
 }
 
 message MergeProfilesStacktracesResult {
+  StacktracesMergeFormat format = 3;
   // The list of stracktraces with their respective value
   repeated StacktraceSample stacktraces = 1;
   repeated string function_names = 2;
-  // Merge result in the pyroscope tree format.
-  bytes tree = 3;
+  // Merge result marshaled to pyroscope tree bytes.
+  bytes tree_bytes = 4;
+}
+
+enum StacktracesMergeFormat {
+  MERGE_FORMAT_UNSPECIFIED = 0;
+  MERGE_STACKTRACES = 1;
+  MERGE_TREE = 2;
 }
 
 message MergeProfilesStacktracesResponse {

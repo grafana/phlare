@@ -180,3 +180,11 @@ func findNodeOrParent(root []*node, new *node) (parent, found, toMerge *node) {
 
 	return lastParent, nil, current
 }
+
+func UnmarshalTree([]byte) (*tree, error) {
+	panic("implement me")
+}
+
+func (t *tree) Marshal(maxNodes int64) ([]byte, error) {
+	panic("implement me")
+}

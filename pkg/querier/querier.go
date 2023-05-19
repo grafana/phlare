@@ -323,19 +323,17 @@ func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStac
 					End:           req.End,
 					Type:          profileType,
 				},
+				MaxNodes: req.MaxNodes,
+				// TODO(kolesnikovae): Max stacks.
 			})
 		}))
 	}
-	if err := g.Wait(); err != nil {
+	if err = g.Wait(); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	// merge all profiles
-	st, err := selectMergeStacktraces(gCtx, responses)
-	if err != nil {
-		return nil, err
-	}
-	return newTree(st), nil
+	return selectMergeTree(gCtx, responses)
 }
 
 func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {

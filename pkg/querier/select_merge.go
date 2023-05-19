@@ -2,6 +2,7 @@ package querier
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 
@@ -282,9 +283,10 @@ type stacktraces struct {
 	value     int64
 }
 
-// selectMergeStacktraces selects the  profile from each ingester by deduping them and request merges of stacktraces of them.
-func selectMergeStacktraces(ctx context.Context, responses []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]) ([]stacktraces, error) {
-	span, ctx := opentracing.StartSpanFromContext(ctx, "selectMergeStacktraces")
+// selectMergeTree selects the  profile from each ingester by deduping them and
+// returns merge of stacktrace samples represented as a tree.
+func selectMergeTree(ctx context.Context, responses []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]) (*tree, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, "selectMergeTree")
 	defer span.Finish()
 
 	mergeResults := make([]MergeResult[*ingestv1.MergeProfilesStacktracesResult], len(responses))
@@ -311,9 +313,8 @@ func selectMergeStacktraces(ctx context.Context, responses []responseFromIngeste
 
 	// Collects the results in parallel.
 	span.LogFields(otlog.String("msg", "collecting merge results"))
-	results := make([]*ingestv1.MergeProfilesStacktracesResult, 0, len(iters))
-	s := lo.Synchronize()
 	g, _ := errgroup.WithContext(ctx)
+	m := newStackTraceMerger()
 	for _, iter := range mergeResults {
 		iter := iter
 		g.Go(util.RecoverPanic(func() error {
@@ -321,18 +322,43 @@ func selectMergeStacktraces(ctx context.Context, responses []responseFromIngeste
 			if err != nil {
 				return err
 			}
-			s.Do(func() {
-				results = append(results, result)
-			})
-			return nil
+			switch result.Format {
+			default:
+				return fmt.Errorf("unknown merge result format")
+			case ingestv1.StacktracesMergeFormat_MERGE_STACKTRACES:
+				m.mergeStackTraces(result.Stacktraces, result.FunctionNames)
+			case ingestv1.StacktracesMergeFormat_MERGE_TREE:
+				m.mergeTreeBytes(result.TreeBytes)
+			}
+			return err
 		}))
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	span.LogFields(otlog.String("msg", "merging results"))
-	return mergeProfilesStacktracesResult(results), nil
+	span.LogFields(otlog.String("msg", "building tree"))
+	return m.tree(), nil
+}
+
+type stackTraceMerger struct {
+	// Should be thread-safe
+}
+
+func newStackTraceMerger() *stackTraceMerger {
+	return new(stackTraceMerger)
+}
+
+func (stackTraceMerger) mergeTreeBytes(b []byte) {
+	panic("implement me")
+}
+
+func (stackTraceMerger) mergeStackTraces(stacks []*ingestv1.StacktraceSample, names []string) {
+	panic("implement me")
+}
+
+func (stackTraceMerger) tree() *tree {
+	panic("implement me")
 }
 
 // selectMergePprofProfile selects the  profile from each ingester by deduping them and request merges of stacktraces in the pprof format.

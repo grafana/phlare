@@ -722,6 +722,9 @@
     "v1MergeProfilesStacktracesResult": {
       "type": "object",
       "properties": {
+        "format": {
+          "$ref": "#/definitions/v1StacktracesMergeFormat"
+        },
         "stacktraces": {
           "type": "array",
           "items": {
@@ -735,10 +738,10 @@
             "type": "string"
           }
         },
-        "tree": {
+        "treeBytes": {
           "type": "string",
           "format": "byte",
-          "description": "Merge result in the pyroscope tree format."
+          "description": "Merge result marshaled to pyroscope tree bytes."
         }
       }
     },
@@ -971,6 +974,15 @@
           "format": "int64"
         }
       }
+    },
+    "v1StacktracesMergeFormat": {
+      "type": "string",
+      "enum": [
+        "MERGE_FORMAT_UNSPECIFIED",
+        "MERGE_STACKTRACES",
+        "MERGE_TREE"
+      ],
+      "default": "MERGE_FORMAT_UNSPECIFIED"
     },
     "v1State": {
       "type": "string",

@@ -221,10 +221,12 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 			if s.Value == 0 {
 				continue
 			}
-			if _, exists := stacktraceSamples[int64(s.StacktraceID)]; !exists {
-				stacktraceSamples[int64(s.StacktraceID)] = &ingestv1.StacktraceSample{}
+			sample, exists := stacktraceSamples[int64(s.StacktraceID)]
+			if !exists {
+				sample = &ingestv1.StacktraceSample{}
+				stacktraceSamples[int64(s.StacktraceID)] = sample
 			}
-			stacktraceSamples[int64(s.StacktraceID)].Value += s.Value
+			sample.Value += s.Value
 		}
 	}
 	if err := rows.Err(); err != nil {

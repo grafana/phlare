@@ -607,6 +607,7 @@ func (f *fakeBidiClientStacktraces) Receive() (*ingestv1.MergeProfilesStacktrace
 	if profiles == nil {
 		return &ingestv1.MergeProfilesStacktracesResponse{
 			Result: &ingestv1.MergeProfilesStacktracesResult{
+				Format: ingestv1.StacktracesMergeFormat_MERGE_STACKTRACES,
 				Stacktraces: []*ingestv1.StacktraceSample{
 					{FunctionIds: []int32{0, 1, 2}, Value: 1},
 				},

@@ -66,7 +66,7 @@ func TestSelectMergeStacktraces(t *testing.T) {
 			},
 		},
 	})
-	res, err := selectMergeStacktraces(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
+	res, err := selectMergeTree(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
 		{
 			response: resp1,
 		},
@@ -92,7 +92,7 @@ func TestSelectMergeStacktraces(t *testing.T) {
 		{Ts: 5, Labels: &typesv1.Labels{Labels: foobarlabels}},
 		{Ts: 6, Labels: &typesv1.Labels{Labels: foobarlabels}},
 	})
-	res, err = selectMergeStacktraces(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
+	res, err = selectMergeTree(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
 		{
 			response: newFakeBidiClientStacktraces([]*ingestv1.ProfileSets{
 				{
@@ -254,7 +254,7 @@ func BenchmarkSelectMergeStacktraces(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_, err := selectMergeStacktraces(context.Background(), responses)
+		_, err := selectMergeTree(context.Background(), responses)
 		if err != nil {
 			b.Fatal(err)
 		}

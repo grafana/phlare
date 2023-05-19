@@ -919,12 +919,17 @@ func (m *MergeProfilesStacktracesResult) MarshalToSizedBufferVT(dAtA []byte) (in
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
-	if len(m.Tree) > 0 {
-		i -= len(m.Tree)
-		copy(dAtA[i:], m.Tree)
-		i = encodeVarint(dAtA, i, uint64(len(m.Tree)))
+	if len(m.TreeBytes) > 0 {
+		i -= len(m.TreeBytes)
+		copy(dAtA[i:], m.TreeBytes)
+		i = encodeVarint(dAtA, i, uint64(len(m.TreeBytes)))
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x22
+	}
+	if m.Format != 0 {
+		i = encodeVarint(dAtA, i, uint64(m.Format))
+		i--
+		dAtA[i] = 0x18
 	}
 	if len(m.FunctionNames) > 0 {
 		for iNdEx := len(m.FunctionNames) - 1; iNdEx >= 0; iNdEx-- {
@@ -1700,7 +1705,10 @@ func (m *MergeProfilesStacktracesResult) SizeVT() (n int) {
 			n += 1 + l + sov(uint64(l))
 		}
 	}
-	l = len(m.Tree)
+	if m.Format != 0 {
+		n += 1 + sov(uint64(m.Format))
+	}
+	l = len(m.TreeBytes)
 	if l > 0 {
 		n += 1 + l + sov(uint64(l))
 	}
@@ -2805,8 +2813,27 @@ func (m *MergeProfilesStacktracesResult) UnmarshalVT(dAtA []byte) error {
 			m.FunctionNames = append(m.FunctionNames, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Format", wireType)
+			}
+			m.Format = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Format |= StacktracesMergeFormat(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tree", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field TreeBytes", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -2833,9 +2860,9 @@ func (m *MergeProfilesStacktracesResult) UnmarshalVT(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Tree = append(m.Tree[:0], dAtA[iNdEx:postIndex]...)
-			if m.Tree == nil {
-				m.Tree = []byte{}
+			m.TreeBytes = append(m.TreeBytes[:0], dAtA[iNdEx:postIndex]...)
+			if m.TreeBytes == nil {
+				m.TreeBytes = []byte{}
 			}
 			iNdEx = postIndex
 		default:
