@@ -64,7 +64,7 @@ export function Sidebar() {
             active={isRouteActive(pathname, ROUTES.EXPLORE_VIEW)}
             icon={<Icon icon={faSearch} />}
           >
-            Explore View
+            Tag Explorer
             <NavLink
               activeClassName="active-route"
               to={{ pathname: ROUTES.EXPLORE_VIEW, search }}
