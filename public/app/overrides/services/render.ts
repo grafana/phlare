@@ -113,7 +113,7 @@ export async function renderDiff(
   );
 }
 
-interface renderExploreProps extends Omit<renderSingleProps, 'maxNodes'> {
+interface RenderExploreProps extends Omit<RenderSingleProps, 'maxNodes'> {
   groupBy: string;
   grouByTagValue: string;
 }
@@ -123,13 +123,13 @@ export interface RenderExploreOutput {
   groups: Groups;
 }
 export async function renderExplore(
-  props: renderExploreProps,
+  props: RenderExploreProps,
   controller?: {
     signal?: AbortSignal;
   }
 ): Promise<Result<RenderExploreOutput, RequestError | ZodError>> {
   const url = buildRenderURL(props);
-  const response = await request(`/pyroscope/${url}&format=json`, {
+  const response = await requestWithOrgID(`/pyroscope/${url}&format=json`, {
     signal: controller?.signal,
   });
   if (response.isErr) {
