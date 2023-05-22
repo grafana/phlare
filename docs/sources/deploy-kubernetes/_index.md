@@ -2,7 +2,7 @@
 description: Learn how to get started with Grafana Phlare using the Helm chart.
 menuTitle: Deploy on Kubernetes
 title: Deploy Grafana Phlare using the Helm chart
-weight: 60
+weight: 50
 ---
 
 # Deploy Grafana Phlare using the Helm chart
