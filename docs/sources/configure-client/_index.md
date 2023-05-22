@@ -9,7 +9,7 @@ weight: 30
 
 Phlare is a continuous profiling database that allows you to analyze the performance of your applications. When sending profiles to Phlare, you have two options: using the Grafana agent in pull mode or utilizing the Phlare SDKs in push mode. This document will provide an overview of these two methods and guide you on when to choose each option.
 
-![phlare_agent_server_diag](https://github.com/grafana/phlare/assets/23323466/9b7e2255-d54f-4e51-b81b-d98baab904e6)
+![Phlare agent server diagram](agent-server-diagram.png)
 
 ## Grafana Agent (Pull Mode)
 
