@@ -225,6 +225,46 @@ func (b *BlockQuerier) Sync(ctx context.Context) error {
 	return nil
 }
 
+func (b *BlockQuerier) AddBlockQuerierByMeta(m *block.Meta) {
+	q := newSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, m)
+	b.queriersLock.Lock()
+	defer b.queriersLock.Unlock()
+	i := sort.Search(len(b.queriers), func(i int) bool {
+		return b.queriers[i].meta.MinTime >= m.MinTime
+	})
+	if i < len(b.queriers) && b.queriers[i].meta.ULID == m.ULID {
+		// Block with this meta is already present, skipping.
+		return
+	}
+	b.queriers = append(b.queriers, q) // Ensure we have enough capacity.
+	copy(b.queriers[i+1:], b.queriers[i:])
+	b.queriers[i] = q
+}
+
+// evict removes the block with the given ULID from the querier.
+func (b *BlockQuerier) evict(blockID ulid.ULID) (bool, error) {
+	b.queriersLock.Lock()
+	// N.B: queriers are sorted by meta.MinTime.
+	j := -1
+	for i, q := range b.queriers {
+		if q.meta.ULID.Compare(blockID) == 0 {
+			j = i
+			break
+		}
+	}
+	if j < 0 {
+		b.queriersLock.Unlock()
+		return false, nil
+	}
+	blockQuerier := b.queriers[j]
+	// Delete the querier from the slice and make it eligible for GC.
+	copy(b.queriers[j:], b.queriers[j+1:])
+	b.queriers[len(b.queriers)-1] = nil
+	b.queriers = b.queriers[:len(b.queriers)-1]
+	b.queriersLock.Unlock()
+	return true, blockQuerier.Close()
+}
+
 func (b *BlockQuerier) Close() error {
 	b.queriersLock.Lock()
 	defer b.queriersLock.Unlock()
@@ -530,6 +570,7 @@ func (q Queriers) MergeProfilesStacktraces(ctx context.Context, stream *connect.
 
 	// Signals the end of the profile streaming by sending an empty response.
 	// This allows the client to not block other streaming ingesters.
+	sp.LogFields(otlog.String("msg", "signaling the end of the profile streaming"))
 	if err := stream.Send(&ingestv1.MergeProfilesStacktracesResponse{}); err != nil {
 		return err
 	}
@@ -539,6 +580,7 @@ func (q Queriers) MergeProfilesStacktraces(ctx context.Context, stream *connect.
 	}
 
 	// sends the final result to the client.
+	sp.LogFields(otlog.String("msg", "sending the final result to the client"))
 	err = stream.Send(&ingestv1.MergeProfilesStacktracesResponse{
 		Result: phlaremodel.MergeBatchMergeStacktraces(result...),
 	})

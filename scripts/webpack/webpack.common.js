@@ -52,6 +52,10 @@ module.exports = {
         __dirname,
         '../../public/app/overrides/ui/Sidebar'
       ),
+      '@webapp/util/baseurl': path.resolve(
+        __dirname,
+        '../../public/app/overrides/util/baseurl'
+      ),
 
       '@webapp/redux/store': path.resolve(
         __dirname,
@@ -60,6 +64,10 @@ module.exports = {
       '@webapp/redux/hooks': path.resolve(
         __dirname,
         '../../public/app/redux/hooks'
+      ),
+      '@webapp/redux/reducers/tenant': path.resolve(
+        __dirname,
+        '../../public/app/redux/reducers/tenant'
       ),
       '@webapp/services/apps': path.resolve(
         __dirname,
@@ -72,6 +80,10 @@ module.exports = {
       '@webapp/services/tags': path.resolve(
         __dirname,
         '../../public/app/overrides/services/tags'
+      ),
+      '@webapp/services/base': path.resolve(
+        __dirname,
+        '../../public/app/overrides/services/base'
       ),
 
       // Common
@@ -93,6 +105,7 @@ module.exports = {
         '../../node_modules/pyroscope-oss/webapp/javascript'
       ),
 
+      '@phlare': path.resolve(__dirname, '../../public/app'),
       // Dependencies
       ...deps,
     },

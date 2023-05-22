@@ -5,16 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/google/uuid"
 	"github.com/grafana/dskit/multierror"
 	"github.com/grafana/dskit/services"
 	"github.com/oklog/ulid"
@@ -24,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 
+	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/iter"
@@ -32,12 +32,6 @@ import (
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
-	diskutil "github.com/grafana/phlare/pkg/util/disk"
-)
-
-const (
-	minFreeDisk                = 10 * 1024 * 1024 * 1024 // 10Gi
-	minDiskAvailablePercentage = 0.05
 )
 
 type Config struct {
@@ -63,17 +57,6 @@ func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 	f.Uint64Var(&cfg.RowGroupTargetSize, "phlaredb.row-group-target-size", 10*128*1024*1024, "How big should a single row group be uncompressed") // This should roughly be 128MiB compressed
 }
 
-type fileSystem interface {
-	fs.ReadDirFS
-	RemoveAll(string) error
-}
-
-type realFileSystem struct{}
-
-func (*realFileSystem) Open(name string) (fs.File, error)          { return os.Open(name) }
-func (*realFileSystem) ReadDir(name string) ([]fs.DirEntry, error) { return os.ReadDir(name) }
-func (*realFileSystem) RemoveAll(path string) error                { return os.RemoveAll(path) }
-
 type TenantLimiter interface {
 	AllowProfile(fp model.Fingerprint, lbs phlaremodel.Labels, tsNano int64) error
 	Stop()
@@ -91,12 +74,18 @@ type PhlareDB struct {
 
 	headLock sync.RWMutex
 	head     *Head
-
-	volumeChecker diskutil.VolumeChecker
-	fs            fileSystem
+	// Read only head. On Flush, writes are directed to
+	// the new head, and queries can read the former head
+	// till it gets written to the disk and becomes available
+	// to blockQuerier.
+	oldHead *Head
+	// flushLock serializes flushes. Only one flush at a time
+	// is allowed.
+	flushLock sync.Mutex
 
 	blockQuerier *BlockQuerier
 	limiter      TenantLimiter
+	evictCh      chan *blockEviction
 }
 
 func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareDB, error) {
@@ -106,14 +95,10 @@ func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareD
 	}
 
 	f := &PhlareDB{
-		cfg:    cfg,
-		logger: phlarecontext.Logger(phlarectx),
-		stopCh: make(chan struct{}),
-		volumeChecker: diskutil.NewVolumeChecker(
-			minFreeDisk,
-			minDiskAvailablePercentage,
-		),
-		fs:      &realFileSystem{},
+		cfg:     cfg,
+		logger:  phlarecontext.Logger(phlarectx),
+		stopCh:  make(chan struct{}),
+		evictCh: make(chan *blockEviction),
 		limiter: limiter,
 	}
 	if err := os.MkdirAll(f.LocalDataPath(), 0o777); err != nil {
@@ -124,7 +109,7 @@ func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareD
 	// ensure head metrics are registered early so they are reused for the new head
 	phlarectx = contextWithHeadMetrics(phlarectx, newHeadMetrics(reg))
 	f.phlarectx = phlarectx
-	if _, err := f.initHead(); err != nil {
+	if f.head, err = NewHead(f.phlarectx, f.cfg, f.limiter); err != nil {
 		return nil, err
 	}
 	f.wg.Add(1)
@@ -150,103 +135,7 @@ func (f *PhlareDB) BlockMetas(ctx context.Context) ([]*block.Meta, error) {
 	return f.blockQuerier.BlockMetas(ctx)
 }
 
-func (f *PhlareDB) listLocalULID() ([]ulid.ULID, error) {
-	path := f.LocalDataPath()
-	files, err := f.fs.ReadDir(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var ids []ulid.ULID
-	for _, file := range files {
-		if !file.IsDir() {
-			continue
-		}
-
-		id, ok := block.IsBlockDir(filepath.Join(path, file.Name()))
-		if !ok {
-			continue
-		}
-		ids = append(ids, id)
-	}
-
-	// sort the blocks by their id, which will be the time they've been created.
-	sort.Slice(ids, func(i, j int) bool {
-		return ids[i].Compare(ids[j]) < 0
-	})
-
-	return ids, nil
-}
-
-func (f *PhlareDB) cleanupBlocksWhenHighDiskUtilization(ctx context.Context) error {
-	var (
-		path      = f.LocalDataPath()
-		lastStats *diskutil.VolumeStats
-		lastULID  ulid.ULID
-	)
-
-	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-
-		current, err := f.volumeChecker.HasHighDiskUtilization(path)
-		if err != nil {
-			return err
-		}
-
-		// not in high disk utilization, nothing to do.
-		if !current.HighDiskUtilization {
-			break
-		}
-
-		// when disk utilization is not lower since the last loop, we end the
-		// cleanup there to avoid deleting all block when disk usage reporting
-		// is delayed.
-		if lastStats != nil && lastStats.BytesAvailable >= current.BytesAvailable {
-			level.Warn(f.logger).Log("msg", "disk utilization is not lowered by deletion of block, pausing until next cycle", "path", path)
-			break
-		}
-
-		// get list of all ulids
-		ulids, err := f.listLocalULID()
-		if err != nil {
-			return err
-		}
-
-		// nothing to delete, when there are no ulids
-		if len(ulids) == 0 {
-			break
-		}
-
-		if lastULID.Compare(ulids[0]) == 0 {
-			return fmt.Errorf("making no progress in deletion: trying to delete block '%s' again", lastULID.String())
-		}
-
-		deletePath := filepath.Join(path, ulids[0].String())
-
-		// ensure that we never delete the root directory or anything above
-		if deletePath == path {
-			return errors.New("delete path is the same as the root path, this should never happen")
-		}
-
-		// delete oldest block
-		if err := f.fs.RemoveAll(deletePath); err != nil {
-			return fmt.Errorf("failed to delete oldest block %s: %w", deletePath, err)
-		}
-		level.Warn(f.logger).Log("msg", "disk utilization is high, deleted oldest block", "path", deletePath)
-		lastStats = current
-		lastULID = ulids[0]
-	}
-
-	return nil
-}
-
 func (f *PhlareDB) runBlockQuerierSync(ctx context.Context) {
-	if err := f.cleanupBlocksWhenHighDiskUtilization(ctx); err != nil {
-		level.Error(f.logger).Log("msg", "cleanup block check failed", "err", err)
-	}
-
 	if err := f.blockQuerier.Sync(ctx); err != nil {
 		level.Error(f.logger).Log("msg", "sync of blocks failed", "err", err)
 	}
@@ -273,7 +162,17 @@ func (f *PhlareDB) loop() {
 			f.runBlockQuerierSync(ctx)
 		case <-blockScanTicker.C:
 			f.runBlockQuerierSync(ctx)
+		case e := <-f.evictCh:
+			f.evictBlock(e)
 		}
+	}
+}
+
+func (f *PhlareDB) evictBlock(e *blockEviction) {
+	defer close(e.done)
+	e.evicted, e.err = f.blockQuerier.evict(e.blockID)
+	if e.evicted && e.err == nil {
+		e.err = e.fn()
 	}
 }
 
@@ -284,6 +183,7 @@ func (f *PhlareDB) Close() error {
 	}
 	close(f.stopCh)
 	f.wg.Wait()
+	close(f.evictCh)
 	if err := f.blockQuerier.Close(); err != nil {
 		errs.Add(err)
 	}
@@ -297,27 +197,76 @@ func (f *PhlareDB) Head() *Head {
 	return f.head
 }
 
-func (f *PhlareDB) Queriers() Queriers {
-	block := f.blockQuerier.Queriers()
-	head := f.Head().Queriers()
-
-	res := make(Queriers, 0, len(block)+len(head))
-	res = append(res, block...)
+func (f *PhlareDB) queriers() Queriers {
+	queriers := f.blockQuerier.Queriers()
+	head := f.head.Queriers()
+	var oldHead Queriers
+	if f.oldHead != nil {
+		oldHead = f.oldHead.Queriers()
+	}
+	res := make(Queriers, 0, len(queriers)+len(head)+len(oldHead))
+	res = append(res, queriers...)
 	res = append(res, head...)
-
+	res = append(res, oldHead...)
 	return res
 }
 
+func (f *PhlareDB) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
+	// We need to keep track of the in-flight ingestion requests to ensure that none
+	// of them will compete with Flush. Lock is acquired to avoid Add after Wait that
+	// is called in the very beginning of Flush.
+	f.headLock.RLock()
+	h := f.head
+	h.inFlightProfiles.Add(1)
+	f.headLock.RUnlock()
+	defer h.inFlightProfiles.Done()
+	return h.Ingest(ctx, p, id, externalLabels...)
+}
+
+// LabelValues returns the possible label values for a given label name.
+func (f *PhlareDB) LabelValues(ctx context.Context, req *connect.Request[typesv1.LabelValuesRequest]) (*connect.Response[typesv1.LabelValuesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.LabelValues(ctx, req)
+}
+
+// LabelNames returns the possible label names.
+func (f *PhlareDB) LabelNames(ctx context.Context, req *connect.Request[typesv1.LabelNamesRequest]) (*connect.Response[typesv1.LabelNamesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.LabelNames(ctx, req)
+}
+
+// ProfileTypes returns the possible profile types.
+func (f *PhlareDB) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.ProfileTypesRequest]) (*connect.Response[ingestv1.ProfileTypesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.ProfileTypes(ctx, req)
+}
+
+// Series returns labels series for the given set of matchers.
+func (f *PhlareDB) Series(ctx context.Context, req *connect.Request[ingestv1.SeriesRequest]) (*connect.Response[ingestv1.SeriesResponse], error) {
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.head.Series(ctx, req)
+}
+
 func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
-	return f.Queriers().MergeProfilesStacktraces(ctx, stream)
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.queriers().MergeProfilesStacktraces(ctx, stream)
 }
 
 func (f *PhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
-	return f.Queriers().MergeProfilesLabels(ctx, stream)
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.queriers().MergeProfilesLabels(ctx, stream)
 }
 
 func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
-	return f.Queriers().MergeProfilesPprof(ctx, stream)
+	f.headLock.RLock()
+	defer f.headLock.RUnlock()
+	return f.queriers().MergeProfilesPprof(ctx, stream)
 }
 
 type BidiServerMerge[Res any, Req any] interface {
@@ -437,25 +386,63 @@ func filterProfiles[B BidiServerMerge[Res, Req],
 	return selection, nil
 }
 
-func (f *PhlareDB) initHead() (oldHead *Head, err error) {
+func (f *PhlareDB) Flush(ctx context.Context) (err error) {
+	// Ensure this is the only Flush running.
+	f.flushLock.Lock()
+	defer f.flushLock.Unlock()
+	// Create a new head and evict the old one. Reads and writes
+	// are blocked – after the lock is released, no new ingestion
+	// requests will be arriving to the old head.
 	f.headLock.Lock()
-	defer f.headLock.Unlock()
-	oldHead = f.head
+	f.oldHead = f.head
 	f.head, err = NewHead(f.phlarectx, f.cfg, f.limiter)
 	if err != nil {
-		return oldHead, err
-	}
-	return oldHead, nil
-}
-
-func (f *PhlareDB) Flush(ctx context.Context) error {
-	oldHead, err := f.initHead()
-	if err != nil {
+		f.headLock.Unlock()
 		return err
 	}
-
-	if oldHead == nil {
-		return nil
+	f.headLock.Unlock()
+	// Old head is available to readers during Flush.
+	if err = f.oldHead.Flush(ctx); err != nil {
+		return err
 	}
-	return oldHead.Flush(ctx)
+	// At this point we ensure that the data has been flushed on disk.
+	// Now we need to make it "visible" to queries, and close the old
+	// head once in-flight queries finish.
+	// TODO(kolesnikovae): Although the head move is supposed to be a quick
+	//  operation, consider making the lock more selective and block only
+	//  queries that target the old head.
+	f.headLock.Lock()
+	defer f.headLock.Unlock()
+	// Now that there are no in-flight queries we can move the head.
+	err = f.oldHead.Move()
+	// Propagate the new block to blockQuerier.
+	f.blockQuerier.AddBlockQuerierByMeta(f.oldHead.meta)
+	f.oldHead = nil
+	// The old in-memory head is not available to queries from now on.
+	return err
+}
+
+type blockEviction struct {
+	blockID ulid.ULID
+	err     error
+	evicted bool
+	fn      func() error
+	done    chan struct{}
+}
+
+// Evict removes the given local block from the PhlareDB.
+// Note that the block files are not deleted from the disk.
+// No evictions should be done after and during the Close call.
+func (f *PhlareDB) Evict(blockID ulid.ULID, fn func() error) (bool, error) {
+	e := &blockEviction{
+		blockID: blockID,
+		done:    make(chan struct{}),
+		fn:      fn,
+	}
+	// It's assumed that the DB close is only called
+	// after all evictions are done, therefore it's safe
+	// to block here.
+	f.evictCh <- e
+	<-e.done
+	return e.evicted, e.err
 }

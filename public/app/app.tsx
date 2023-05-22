@@ -1,51 +1,53 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './jquery-import';
+import '@phlare/jquery-import';
 import { Provider } from 'react-redux';
-import store, { persistor } from './redux/store';
+import store from '@webapp/redux/store';
 import '@webapp/../sass/profile.scss';
 import '@szhsin/react-menu/dist/index.css';
 import Notifications from '@webapp/ui/Notifications';
 import { Router, Switch, Route } from 'react-router-dom';
 import { createBrowserHistory } from 'history';
 
-import { ROUTES } from './pages/routes';
-import { SingleView } from './pages/SingleView';
-import { ComparisonView } from './pages/ComparisonView';
-import { ExploreView } from './pages/ExploreView';
-import { DiffView } from './pages/DiffView';
-import { LoadAppNames } from './components/LoadAppNames';
-import { Sidebar } from './components/Sidebar';
+import { ROUTES } from '@phlare/pages/routes';
+import { SingleView } from '@phlare/pages/SingleView';
+import { ComparisonView } from '@phlare/pages/ComparisonView';
+import { ExploreView } from '@phlare/pages/ExploreView';
+import { DiffView } from '@phlare/pages/DiffView';
+import { LoadAppNames } from '@phlare/components/LoadAppNames';
+import { Sidebar } from '@phlare/components/Sidebar';
+import { TenantWall } from '@phlare/components/TenantWall';
+import { baseurl } from '@webapp/util/baseurl';
 
 const container = document.getElementById('reactRoot') as HTMLElement;
 const root = ReactDOM.createRoot(container);
 
 function App() {
-  // Defined statically in webpack when building
-  const basepath = process.env.BASEPATH ? process.env.BASEPATH : '';
-  const history = createBrowserHistory({ basename: basepath });
+  const history = createBrowserHistory({ basename: baseurl() });
 
   return (
     <Router history={history}>
       <div className="app">
         <Sidebar />
         <div className="pyroscope-app">
-          <LoadAppNames>
-            <Switch>
-              <Route exact path={ROUTES.EXPLORE_VIEW}>
-                <ExploreView />
-              </Route>
-              <Route exact path={ROUTES.CONTINOUS_SINGLE_VIEW}>
-                <SingleView />
-              </Route>
-              <Route path={ROUTES.COMPARISON_VIEW}>
-                <ComparisonView />
-              </Route>
-              <Route path={ROUTES.COMPARISON_DIFF_VIEW}>
-                <DiffView />
-              </Route>
-            </Switch>
-          </LoadAppNames>
+          <TenantWall>
+            <LoadAppNames>
+              <Switch>
+                <Route exact path={ROUTES.EXPLORE_VIEW}>
+                  <ExploreView />
+                </Route>
+                <Route exact path={ROUTES.SINGLE_VIEW}>
+                  <SingleView />
+                </Route>
+                <Route path={ROUTES.COMPARISON_VIEW}>
+                  <ComparisonView />
+                </Route>
+                <Route path={ROUTES.COMPARISON_DIFF_VIEW}>
+                  <DiffView />
+                </Route>
+              </Switch>
+            </LoadAppNames>
+          </TenantWall>
         </div>
       </div>
     </Router>

@@ -11,7 +11,7 @@ import { buildRenderURL } from '@webapp/util/updateRequests';
 import { Timeline, TimelineSchema } from '@webapp/models/timeline';
 import { Annotation, AnnotationSchema } from '@webapp/models/annotation';
 import type { RequestError } from '@webapp/services/base';
-import { parseResponse, request } from '@webapp/services/base';
+import { parseResponse, requestWithOrgID } from '@webapp/services/base';
 
 export interface RenderOutput {
   profile: Profile;
@@ -28,7 +28,7 @@ const defaultAnnotationsSchema = z.preprocess((a) => {
   return a;
 }, z.array(AnnotationSchema));
 
-interface renderSingleProps {
+interface RenderSingleProps {
   from: string;
   until: string;
   query: string;
@@ -36,14 +36,14 @@ interface renderSingleProps {
   maxNodes: string | number;
 }
 export async function renderSingle(
-  props: renderSingleProps,
+  props: RenderSingleProps,
   controller?: {
     signal?: AbortSignal;
   }
 ): Promise<Result<RenderOutput, RequestError | ZodError>> {
   const url = buildRenderURL(props);
   // TODO
-  const response = await request(`/pyroscope/${url}&format=json`, {
+  const response = await requestWithOrgID(`/pyroscope/${url}&format=json`, {
     signal: controller?.signal,
   });
 
@@ -77,7 +77,7 @@ export async function renderSingle(
 
 export type RenderDiffResponse = z.infer<typeof FlamebearerProfileSchema>;
 
-interface renderDiffProps {
+interface RenderDiffProps {
   leftFrom: string;
   leftUntil: string;
   leftQuery: string;
@@ -89,7 +89,7 @@ interface renderDiffProps {
 }
 
 export async function renderDiff(
-  props: renderDiffProps,
+  props: RenderDiffProps,
   controller?: {
     signal?: AbortSignal;
   }
@@ -103,7 +103,7 @@ export async function renderDiff(
     rightUntil: props.rightUntil,
   });
 
-  const response = await request(`/pyroscope/render-diff?${params}`, {
+  const response = await requestWithOrgID(`/pyroscope/render-diff?${params}`, {
     signal: controller?.signal,
   });
 
