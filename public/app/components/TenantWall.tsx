@@ -13,7 +13,7 @@ import {
   selectTenancy,
   actions,
   selectTenantID,
-} from '@webapp/redux/reducers/tenant';
+} from '@phlare/redux/reducers/tenant';
 
 export function TenantWall({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
