@@ -38,7 +38,7 @@ import (
 	"github.com/grafana/phlare/pkg/distributor"
 	"github.com/grafana/phlare/pkg/frontend"
 	"github.com/grafana/phlare/pkg/ingester"
-	"github.com/grafana/phlare/pkg/objstore"
+	phlareobj "github.com/grafana/phlare/pkg/objstore"
 	objstoreclient "github.com/grafana/phlare/pkg/objstore/client"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb"
@@ -233,7 +233,7 @@ type Phlare struct {
 
 	TenantLimits validation.TenantLimits
 
-	storageBucket objstore.Bucket
+	storageBucket phlareobj.Bucket
 
 	grpcGatewayMux *grpcgw.ServeMux
 
