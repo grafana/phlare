@@ -1,6 +1,7 @@
 ---
 aliases:
   - /docs/phlare/latest/operators-guide/getting-started/
+  - /docs/phlare/latest/operators-guide/get-started/
 description: Learn how to get started with Grafana Phlare.
 menuTitle: Get started
 title: Get started with Grafana Phlare

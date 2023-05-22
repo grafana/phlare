@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /docs/phlare/latest/operators-guide/reference-learning-resources/
 title: "Reference: Learning resources"
 menuTitle: "Reference: Learning resources"
 description: "Blog posts, podcasts, and videos about Grafana Phlare"

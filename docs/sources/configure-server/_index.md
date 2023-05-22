@@ -1,6 +1,7 @@
 ---
 aliases:
   - /docs/phlare/latest/operators-guide/configuring/
+  - /docs/phlare/latest/operators-guide/configure/
 description: This section provides links to Grafana Phlare server configuration topics.
 keywords:
   - Phlare server configuration

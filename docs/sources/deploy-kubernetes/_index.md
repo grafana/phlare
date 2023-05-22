@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /docs/phlare/latest/operators-guide/deploy-kubernetes/
 description: Learn how to get started with Grafana Phlare using the Helm chart.
 menuTitle: Deploy on Kubernetes
 title: Deploy Grafana Phlare using the Helm chart

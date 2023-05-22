@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /docs/phlare/latest/operators-guide/architecture/about-grafana-phlare-architecture/
 title: "About the Grafana Phlare architecture"
 menuTitle: "About the architecture"
 description: "Learn about the Grafana Phlare architecture."

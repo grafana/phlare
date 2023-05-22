@@ -1,4 +1,6 @@
 ---
+aliases:
+  - /docs/phlare/latest/operators-guide/configure-agent/
 title: "Sending profiles from your application"
 menuTitle: "Configure the Client"
 description: ""
