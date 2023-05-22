@@ -4,7 +4,7 @@ aliases:
 description: This section provides links to Grafana Phlare server configuration topics.
 keywords:
   - Phlare server configuration
-menuTitle: Configure the server
+menuTitle: Configure the Server
 title: Configure Grafana Phlare Server
 weight: 40
 ---
