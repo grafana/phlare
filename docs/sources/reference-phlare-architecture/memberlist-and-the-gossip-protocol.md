@@ -16,7 +16,7 @@ Each instance maintains a copy of the hash rings.
 Each Phlare instance updates a hash ring locally and uses memberlist to propagate the changes to other instances.
 Updates generated locally and updates received from other instances are merged together to form the current state of the ring on the instance.
 
-To configure memberlist, refer to [configuring memberlist]({{< relref "../configure/configuring-memberlist.md" >}}).
+To configure memberlist, refer to [configuring memberlist]({{< relref "../configure-server/configuring-memberlist.md" >}}).
 
 ## How memberlist propagates hash ring changes
 

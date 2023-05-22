@@ -14,7 +14,7 @@ to the Grafana Phlare database.
 
 To be able to pull profiles from applications, your applications needs to expose [pprof endpoints](https://pkg.go.dev/net/http/pprof).
 
-For more information about how to instrument your application with pprof endpoints see the [language support]({{< relref "./language-support/">}}) section.
+For more information about how to instrument your application with pprof endpoints see the [language sdk documentation]({{< relref "./language-sdks/">}}) section.
 
 By default the agent will pull profiles every 10s with no timeout using `http` scheme. This can be configured in the `scrape_configs` section:
 
@@ -90,13 +90,13 @@ scrape_configs:
       path_prefix: '/app'
 ```
 
-For more details about available configuration options, please refer to the [configuration reference]({{<relref "../configure/reference-configuration-parameters/#scrape-configs">}}).
+For more details about available configuration options, please refer to the [server configuration reference]({{<relref "../configure-server/reference-configuration-parameters/#scrape-configs">}}).
 
 ## Running the agent
 
-When running Phlare as [monolith]({{<relref "../architecture/deployment-modes/#monolithic-mode">}}) (`-target=all`), the agent is started automatically within the same process and can scrape profiles.
+When running Phlare as [monolith]({{<relref "../reference-phlare-architecture/deployment-modes/#monolithic-mode">}}) (`-target=all`), the agent is started automatically within the same process and can scrape profiles.
 
-When running Phlare as [microservices]({{<relref "../architecture/deployment-modes/#microservices-mode">}}), you'll have to start an agent manually as a standalone component and point it to your Phlare cluster.
+When running Phlare as [microservices]({{<relref "../reference-phlare-architecture/deployment-modes/#microservices-mode">}}), you'll have to start an agent manually as a standalone component and point it to your Phlare cluster.
 This can be handy if you want to run the agent on a different location than the Phlare database.
 
 To start a standalone agent, you can use the following command:

@@ -17,4 +17,4 @@ You must configure the querier with the same `-ingester.ring.*` flags (or their 
 
 ## Querier configuration
 
-For details about querier configuration, refer to [querier]({{< relref "../../configure/reference-configuration-parameters/index.md#querier" >}}).
+For details about querier configuration, refer to [querier]({{< relref "../../configure-server/reference-configuration-parameters/index.md#querier" >}}).

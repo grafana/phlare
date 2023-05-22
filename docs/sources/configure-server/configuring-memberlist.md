@@ -9,7 +9,7 @@ weight: 50
 
 # Configuring Grafana Phlare memberlist
 
-[Hash rings]({{< relref "../architecture/hash-ring/index.md" >}}) are a distributed consistent hashing scheme and are widely used by Grafana Phlare for sharding and replication.
+[Hash rings]({{< relref "../reference-phlare-architecture/hash-ring/index.md" >}}) are a distributed consistent hashing scheme and are widely used by Grafana Phlare for sharding and replication.
 
 Grafana Phlare only support hash ring via memberlist protocol.
 

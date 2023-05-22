@@ -29,7 +29,7 @@ Each ingester could be in one of the following states:
 - `UNHEALTHY`<br />
   The ingester has failed to heartbeat to the hash ring. While in this state, distributors bypass the ingester, which means that the ingester does not receive write or read requests.
 
-To configure the ingesters' hash ring, refer to [configuring memberlist]({{< relref "../../configure/configuring-memberlist.md" >}}).
+To configure the ingesters' hash ring, refer to [configuring memberlist]({{< relref "../../configure-server/configuring-memberlist.md" >}}).
 
 ## Ingesters write de-amplification
 

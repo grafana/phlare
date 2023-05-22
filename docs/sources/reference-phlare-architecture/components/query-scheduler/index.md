@@ -30,7 +30,7 @@ Query-scheduler enables the scaling of query-frontends. To learn more, see Mimir
 ## Configuration
 
 To use the query-scheduler, query-frontends and queriers need to discover the addresses of query-scheduler instances.
-To advertise itself, the query-scheduler uses Ring-based service discovery which is configured via the [memberlist configuration]({{< relref "../../../configure/configuring-memberlist.md" >}}).
+To advertise itself, the query-scheduler uses Ring-based service discovery which is configured via the [memberlist configuration]({{< relref "../../../configure-server/configuring-memberlist.md" >}}).
 
 ## Operational considerations
 
