@@ -309,7 +309,8 @@ func selectMergeTree(ctx context.Context, responses []responseFromIngesters[clie
 	// Collects the results in parallel.
 	span.LogFields(otlog.String("msg", "collecting merge results"))
 	g, _ := errgroup.WithContext(ctx)
-	m := phlaremodel.NewStackTraceMerger()
+	m := phlaremodel.NewTreeMerger()
+	sm := phlaremodel.NewStackTraceMerger()
 	for _, iter := range mergeResults {
 		iter := iter
 		g.Go(util.RecoverPanic(func() error {
@@ -321,15 +322,22 @@ func selectMergeTree(ctx context.Context, responses []responseFromIngesters[clie
 			default:
 				return fmt.Errorf("unknown merge result format")
 			case ingestv1.StacktracesMergeFormat_MERGE_FORMAT_STACKTRACES:
-				m.MergeStackTraces(result.Stacktraces, result.FunctionNames)
+				sm.MergeStackTraces(result.Stacktraces, result.FunctionNames)
 			case ingestv1.StacktracesMergeFormat_MERGE_FORMAT_TREE:
-				m.MergeTreeBytes(result.TreeBytes)
+				err = m.MergeTreeBytes(result.TreeBytes)
 			}
 			return err
 		}))
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
+	}
+	if sm.Size() > 0 {
+		// For backward compatibility: during a rollout, multiple formats
+		// may coexist for some period of time (efficiency is not a concern).
+		if err := m.MergeTreeBytes(sm.TreeBytes(-1)); err != nil {
+			return nil, err
+		}
 	}
 
 	span.LogFields(otlog.String("msg", "building tree"))

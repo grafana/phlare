@@ -3,7 +3,12 @@ package model
 import (
 	"container/heap"
 	"fmt"
+	"io"
+	"sync"
 
+	"github.com/bcmills/unsafeslice"
+	dvarint "github.com/dennwc/varint"
+	"github.com/pyroscope-io/pyroscope/pkg/util/varint"
 	"github.com/xlab/treeprint"
 )
 
@@ -15,7 +20,7 @@ func emptyTree() *Tree {
 	return &Tree{}
 }
 
-func NewTree(stacks []stacktraces) *Tree {
+func newTree(stacks []stacktraces) *Tree {
 	t := emptyTree()
 	for _, stack := range stacks {
 		if stack.value == 0 {
@@ -35,7 +40,7 @@ type stacktraces struct {
 	value     int64
 }
 
-func (t *Tree) Add(name string, self, total int64) *node {
+func (t *Tree) add(name string, self, total int64) *node {
 	new := &node{
 		name:  name,
 		self:  self,
@@ -134,14 +139,6 @@ func MergeTree(dst, src *Tree) {
 			p.total = p.total + toMerge.total
 		}
 	}
-}
-
-func UnmarshalTree([]byte) (*Tree, error) {
-	panic("implement me")
-}
-
-func (t *Tree) Marshal(maxNodes int64) []byte {
-	panic("implement me")
 }
 
 type node struct {
@@ -252,4 +249,157 @@ func (h *minHeap) Pop() interface{} {
 	x := old[n-1]
 	*h = old[0 : n-1]
 	return x
+}
+
+const lostDuringSerializationName = "other"
+
+// MarshalTruncate writes tree byte representation to the writer provider,
+// the number of nodes is limited to maxNodes. The function modifies
+// the tree: truncated nodes are removed from the tree.
+func (t *Tree) MarshalTruncate(w io.Writer, maxNodes int64) (err error) {
+	if len(t.root) == 0 {
+		return nil
+	}
+	vw := varint.NewWriter()
+	minVal := t.minValue(maxNodes)
+	nodes := t.root
+	// Virtual root node.
+	n := &node{children: t.root}
+	for len(nodes) > 0 {
+		if _, _ = vw.Write(w, uint64(len(n.name))); err != nil {
+			return err
+		}
+		if _, _ = w.Write(unsafeslice.OfString(n.name)); err != nil {
+			return err
+		}
+		if _, err = vw.Write(w, uint64(n.self)); err != nil {
+			return err
+		}
+		children := n.children
+		n.children = n.children[:0]
+
+		var other int64
+		for _, cn := range children {
+			isOtherNode := cn.name == lostDuringSerializationName
+			if cn.total >= minVal || isOtherNode {
+				n.children = append(n.children, cn)
+			} else {
+				other += cn.total
+			}
+		}
+		if other > 0 {
+			n.children = append(n.children, &node{
+				parent: n,
+				self:   other,
+				total:  other,
+				name:   lostDuringSerializationName,
+			})
+		}
+
+		if len(n.children) > 0 {
+			nodes = append(n.children, nodes...)
+		} else {
+			n.children = nil // Just to make it eligible for GC.
+		}
+		if _, err = vw.Write(w, uint64(len(n.children))); err != nil {
+			return err
+		}
+		n, nodes = nodes[0], nodes[1:]
+	}
+
+	return nil
+}
+
+var errMalformedTreeBytes = fmt.Errorf("malformed tree bytes")
+
+const estimateBytesPerNode = 16 // Chosen empirically.
+
+func UnmarshalTree(b []byte) (*Tree, error) {
+	t := new(Tree)
+	if len(b) < 2 {
+		return t, nil
+	}
+
+	parents := make([]*node, 1, len(b)/estimateBytesPerNode)
+	// Virtual root node.
+	root := new(node)
+	parents[0] = root
+	var parent *node
+	var offset int
+
+	for len(parents) > 0 {
+		parent, parents = parents[len(parents)-1], parents[:len(parents)-1]
+		nameLen, o := dvarint.Uvarint(b[offset:])
+		if o < 0 {
+			return nil, errMalformedTreeBytes
+		}
+		offset += o
+		name := unsafeslice.AsString(b[offset : offset+int(nameLen)])
+		offset += int(nameLen)
+		value, o := dvarint.Uvarint(b[offset:])
+		if o < 0 {
+			return nil, errMalformedTreeBytes
+		}
+		offset += o
+		childrenLen, o := dvarint.Uvarint(b[offset:])
+		if o < 0 {
+			return nil, errMalformedTreeBytes
+		}
+		offset += o
+
+		n := &node{
+			parent:   parent,
+			children: make([]*node, 0, childrenLen),
+			self:     int64(value),
+			name:     name,
+		}
+
+		pn := n
+		for pn.parent != nil {
+			pn.total += n.self
+			pn = pn.parent
+		}
+
+		parent.children = append(parent.children, n)
+		for i := uint64(0); i < childrenLen; i++ {
+			parents = append(parents, n)
+		}
+	}
+
+	// Virtual root.
+	t.root = root.children[0].children
+
+	return t, nil
+}
+
+type TreeMerger struct {
+	mu sync.Mutex
+	t  *Tree
+}
+
+func NewTreeMerger() *TreeMerger {
+	return new(TreeMerger)
+}
+
+func (m *TreeMerger) MergeTreeBytes(b []byte) error {
+	m.mu.Lock()
+	t, err := UnmarshalTree(b)
+	if err != nil {
+		m.mu.Unlock()
+		return err
+	}
+	if m.t != nil {
+		MergeTree(m.t, t)
+	} else {
+		m.t = t
+	}
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *TreeMerger) Tree() *Tree {
+	if m.t == nil {
+		return new(Tree)
+	}
+	return m.t
 }

@@ -36,7 +36,7 @@ func Test_ExportToFlamebearer(t *testing.T) {
 	}
 	actual := ExportToFlamebearer(
 		NewFlameGraph(
-			NewTree([]stacktraces{
+			newTree([]stacktraces{
 				{
 					locations: []string{"e", "b", "a"},
 					value:     1,
@@ -72,7 +72,7 @@ func BenchmarkFlamegraph(b *testing.B) {
 			value:     1,
 		}
 	}
-	tr := NewTree(stacks)
+	tr := newTree(stacks)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

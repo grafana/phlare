@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func Test_Tree(t *testing.T) {
 			},
 			func() *Tree {
 				tr := emptyTree()
-				tr.Add("bar", 0, 2).Add("buz", 2, 2)
+				tr.add("bar", 0, 2).Add("buz", 2, 2)
 				return tr
 			},
 		},
@@ -49,7 +50,7 @@ func Test_Tree(t *testing.T) {
 			},
 			func() *Tree {
 				tr := emptyTree()
-				buz := tr.Add("bar", 0, 3).Add("buz", 0, 3)
+				buz := tr.add("bar", 0, 3).Add("buz", 0, 3)
 				buz.Add("blip", 1, 1)
 				buz.Add("blop", 0, 2).Add("blap", 2, 2)
 				return tr
@@ -86,22 +87,53 @@ func Test_Tree(t *testing.T) {
 			func() *Tree {
 				tr := emptyTree()
 
-				bar := tr.Add("bar", 0, 9)
+				bar := tr.add("bar", 0, 9)
 
 				buz := bar.Add("buz", 2, 5)
 				buz.Add("foo", 1, 1)
 				buz.Add("blop", 2, 2)
 				bar.Add("blip", 4, 4)
 
-				tr.Add("buz", 1, 1)
+				tr.add("buz", 1, 1)
 				return tr
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			expected := tc.expected()
-			tr := NewTree(tc.stacks)
+			tr := newTree(tc.stacks)
 			require.Equal(t, tr, expected, "tree should be equal got:%s\n expected:%s\n", tr.String(), expected)
 		})
 	}
+}
+
+func Test_TreeMarshalUnmarshal(t *testing.T) {
+	t.Run("empty tree", func(t *testing.T) {
+		expected := new(Tree)
+		var buf bytes.Buffer
+		require.NoError(t, expected.MarshalTruncate(&buf, -1))
+		actual, err := UnmarshalTree(buf.Bytes())
+		require.NoError(t, err)
+		require.Equal(t, expected.String(), actual.String())
+	})
+
+	t.Run("non-empty tree", func(t *testing.T) {
+		expected := newTree([]stacktraces{
+			{locations: []string{"c", "b", "a"}, value: 1},
+			{locations: []string{"c", "b", "a"}, value: 1},
+			{locations: []string{"c1", "b", "a"}, value: 1},
+			{locations: []string{"c", "b1", "a"}, value: 1},
+			{locations: []string{"c1", "b1", "a"}, value: 1},
+			{locations: []string{"c", "b", "a1"}, value: 1},
+			{locations: []string{"c1", "b", "a1"}, value: 1},
+			{locations: []string{"c", "b1", "a1"}, value: 1},
+			{locations: []string{"c1", "b1", "a1"}, value: 1},
+		})
+
+		var buf bytes.Buffer
+		require.NoError(t, expected.MarshalTruncate(&buf, -1))
+		actual, err := UnmarshalTree(buf.Bytes())
+		require.NoError(t, err)
+		require.Equal(t, expected.String(), actual.String())
+	})
 }

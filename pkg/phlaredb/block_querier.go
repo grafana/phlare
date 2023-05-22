@@ -566,7 +566,7 @@ func (q Queriers) MergeProfilesStacktraces(ctx context.Context, stream *connect.
 	err = stream.Send(&ingestv1.MergeProfilesStacktracesResponse{
 		Result: &ingestv1.MergeProfilesStacktracesResult{
 			Format:    ingestv1.StacktracesMergeFormat_MERGE_FORMAT_TREE,
-			TreeBytes: m.Tree().Marshal(r.GetMaxNodes()),
+			TreeBytes: m.TreeBytes(r.GetMaxNodes()),
 		},
 	})
 	if err != nil {
