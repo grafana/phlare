@@ -9,7 +9,7 @@ title: Configure Grafana Phlare Server
 weight: 40
 ---
 
-# Configure Grafana Phlare
+# Configure Grafana Phlare Server
 
 Grafana Phlare's server is built to be horizontally scalable and to support organizations of all sizes.
 
