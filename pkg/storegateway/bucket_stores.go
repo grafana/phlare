@@ -116,7 +116,7 @@ func NewBucketStores(cfg BucketStoreConfig, shardingStrategy ShardingStrategy, s
 		// todo open in parallel
 		result := make([]Block, len(metas))
 		for i := range metas {
-			result[i] = phlaredb.NewSingleBlockQuerierFromMeta(ctx, phlareobjstore.BucketWithPrefix(storageBucket, "/"+tenantID+"/phlaredb"), metas[i])
+			result[i] = phlaredb.NewSingleBlockQuerierFromMeta(ctx, phlareobjstore.BucketWithPrefix(storageBucket, tenantID+"/phlaredb"), metas[i])
 			// Actually Open the block.
 			if err := result[i].Open(ctx); err != nil {
 				return nil, errors.Wrap(err, "open block")
