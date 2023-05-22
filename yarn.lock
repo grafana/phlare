@@ -3652,6 +3652,20 @@
   dependencies:
     "@types/lodash" "*"
 
+"@types/lodash.groupby@^4.6.7":
+  version "4.6.7"
+  resolved "https://registry.yarnpkg.com/@types/lodash.groupby/-/lodash.groupby-4.6.7.tgz#35fdb9647f100450d1004f65f74cbd964cdb567a"
+  integrity sha512-dFUR1pqdMgjIBbgPJ/8axJX6M1C7zsL+HF4qdYMQeJ7XOp0Qbf37I3zh9gpXr/ks6tgEYPDRqyZRAnFYvewYHQ==
+  dependencies:
+    "@types/lodash" "*"
+
+"@types/lodash.map@^4.6.13":
+  version "4.6.13"
+  resolved "https://registry.yarnpkg.com/@types/lodash.map/-/lodash.map-4.6.13.tgz#7d776611d4c0345e48cfdfe466d7b291b31d1d13"
+  integrity sha512-kppRBzlpuvQQsr7R2nv/DDDZds8fglRFNAK70WUOkOC18KOcuQ22oQF9Kgy5Z2v/eDNkBm0ltrT6FThSkuWwow==
+  dependencies:
+    "@types/lodash" "*"
+
 "@types/lodash@*":
   version "4.14.192"
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.192.tgz#5790406361a2852d332d41635d927f1600811285"
