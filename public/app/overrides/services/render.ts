@@ -117,8 +117,8 @@ export interface RenderExploreOutput {
   groups: Groups;
 }
 export async function renderExplore(
-  props: unknown,
-  controller?: {
+  _props: unknown,
+  _controller?: {
     signal?: AbortSignal;
   }
 ) {
