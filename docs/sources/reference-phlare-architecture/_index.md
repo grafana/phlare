@@ -1,6 +1,6 @@
 ---
 title: "Grafana Phlare architecture"
-menuTitle: "Architecture"
+menuTitle: "Reference: Phlare Architecture"
 description: "Learn about the Grafana Phlare architecture components and services."
 weight: 60
 ---
