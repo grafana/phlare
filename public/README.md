@@ -21,5 +21,5 @@ It may be confusing to see different imports, so let's go over the most common e
 `@phlare` -> Refers to code in this repository. Note that this is needed since other
 downstream repositories may use this repository, and they also may want to override specific files.
 
-In the future, once both `grafana/pyroscope` and `grafana/pyroscope` are merged, there will
+In the future, once both `grafana/pyroscope` and `grafana/phlare` are merged, there will
 be no need for `@webapp` and similar to happen, since there will be no `grafana/pyroscope` repo anymore.
