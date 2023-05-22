@@ -113,15 +113,35 @@ export async function renderDiff(
   );
 }
 
+const RenderExploreSchema = FlamebearerProfileSchema.extend({
+  groups: z.preprocess((groups) => {
+    const groupNames = Object.keys(groups as Groups);
+    return groupNames.length
+      ? groupNames
+          .filter((g) => !!g.trim())
+          .reduce(
+            (acc, current) => ({
+              ...acc,
+              [current]: (groups as Groups)[current],
+            }),
+            {}
+          )
+      : groups;
+  }, GroupsSchema),
+}).transform((values) => {
+  return {
+    profile: values,
+    groups: values.groups,
+  };
+});
+
 interface RenderExploreProps extends Omit<RenderSingleProps, 'maxNodes'> {
   groupBy: string;
   grouByTagValue: string;
 }
 
-export interface RenderExploreOutput {
-  profile: Profile;
-  groups: Groups;
-}
+export type RenderExploreOutput = z.infer<typeof RenderExploreSchema>;
+
 export async function renderExplore(
   props: RenderExploreProps,
   controller?: {
@@ -132,45 +152,5 @@ export async function renderExplore(
   const response = await requestWithOrgID(`/pyroscope/${url}&format=json`, {
     signal: controller?.signal,
   });
-  if (response.isErr) {
-    return Result.err<RenderExploreOutput, RequestError>(response.error);
-  }
-  const parsed = FlamebearerProfileSchema.merge(
-    z.object({ timeline: TimelineSchema })
-  )
-    .merge(
-      z.object({
-        telemetry: z.object({}).passthrough().optional(),
-        annotations: defaultAnnotationsSchema,
-      })
-    )
-    .merge(
-      z.object({
-        groups: z.preprocess((groups) => {
-          const groupNames = Object.keys(groups as Groups);
-          return groupNames.length
-            ? groupNames
-                .filter((g) => !!g.trim())
-                .reduce(
-                  (acc, current) => ({
-                    ...acc,
-                    [current]: (groups as Groups)[current],
-                  }),
-                  {}
-                )
-            : groups;
-        }, GroupsSchema),
-      })
-    )
-    .safeParse(response.value);
-  if (parsed.success) {
-    const profile = parsed.data;
-    const { groups, annotations } = parsed.data;
-    return Result.ok({
-      profile,
-      groups,
-      annotations,
-    });
-  }
-  return Result.err(parsed.error);
+  return parseResponse<RenderExploreOutput>(response, RenderExploreSchema);
 }
