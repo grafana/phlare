@@ -17,6 +17,7 @@ import (
 	"github.com/gogo/status"
 	"github.com/google/pprof/profile"
 	"github.com/grafana/dskit/multierror"
+	"github.com/grafana/dskit/runutil"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
@@ -25,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
+	"github.com/thanos-io/objstore"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -34,7 +36,8 @@ import (
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
-	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
+	phlareobj "github.com/grafana/phlare/pkg/objstore"
+	parquetobj "github.com/grafana/phlare/pkg/objstore/parquet"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	"github.com/grafana/phlare/pkg/phlaredb/query"
@@ -44,7 +47,7 @@ import (
 )
 
 type tableReader interface {
-	open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error
+	open(ctx context.Context, bucketReader phlareobj.BucketReader) error
 	io.Closer
 }
 
@@ -52,21 +55,21 @@ type BlockQuerier struct {
 	phlarectx context.Context
 	logger    log.Logger
 
-	bucketReader phlareobjstore.BucketReader
+	bkt phlareobj.Bucket
 
 	queriers     []*singleBlockQuerier
 	queriersLock sync.RWMutex
 }
 
-func NewBlockQuerier(phlarectx context.Context, bucketReader phlareobjstore.BucketReader) *BlockQuerier {
+func NewBlockQuerier(phlarectx context.Context, bucketReader phlareobj.Bucket) *BlockQuerier {
 	return &BlockQuerier{
 		phlarectx: contextWithBlockMetrics(phlarectx,
 			newBlocksMetrics(
 				phlarecontext.Registry(phlarectx),
 			),
 		),
-		logger:       phlarecontext.Logger(phlarectx),
-		bucketReader: bucketReader,
+		logger: phlarecontext.Logger(phlarectx),
+		bkt:    bucketReader,
 	}
 }
 
@@ -75,7 +78,7 @@ func (b *BlockQuerier) reconstructMetaFromBlock(ctx context.Context, ulid ulid.U
 	fakeMeta := block.NewMeta()
 	fakeMeta.ULID = ulid
 
-	q := NewSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, fakeMeta)
+	q := NewSingleBlockQuerierFromMeta(b.phlarectx, b.bkt, fakeMeta)
 	defer q.Close()
 
 	meta, err := q.reconstructMeta(ctx)
@@ -98,7 +101,7 @@ func (b *BlockQuerier) Queriers() Queriers {
 
 func (b *BlockQuerier) BlockMetas(ctx context.Context) (metas []*block.Meta, _ error) {
 	var names []ulid.ULID
-	if err := b.bucketReader.Iter(ctx, "", func(n string) error {
+	if err := b.bkt.Iter(ctx, "", func(n string) error {
 		ulid, ok := block.IsBlockDir(n)
 		if !ok {
 			return nil
@@ -116,9 +119,9 @@ func (b *BlockQuerier) BlockMetas(ctx context.Context) (metas []*block.Meta, _ e
 		func(pos int) {
 			g.Go(util.RecoverPanic(func() error {
 				path := filepath.Join(names[pos].String(), block.MetaFilename)
-				metaReader, err := b.bucketReader.Get(ctx, path)
+				metaReader, err := b.bkt.Get(ctx, path)
 				if err != nil {
-					if b.bucketReader.IsObjNotFoundErr(err) {
+					if b.bkt.IsObjNotFoundErr(err) {
 						level.Warn(b.logger).Log("msg", block.MetaFilename+" not found in block try to generate it", "block", names[pos].String())
 
 						meta, err := b.reconstructMetaFromBlock(ctx, names[pos])
@@ -207,7 +210,7 @@ func (b *BlockQuerier) Sync(ctx context.Context) error {
 			continue
 		}
 
-		b.queriers[pos] = NewSingleBlockQuerierFromMeta(b.phlarectx, b.bucketReader, m)
+		b.queriers[pos] = NewSingleBlockQuerierFromMeta(b.phlarectx, b.bkt, m)
 	}
 	// ensure queriers are in ascending order.
 	sort.Slice(b.queriers, func(i, j int) bool {
@@ -300,8 +303,8 @@ type singleBlockQuerier struct {
 	logger  log.Logger
 	metrics *blocksMetrics
 
-	bucketReader phlareobjstore.BucketReader
-	meta         *block.Meta
+	bkt  phlareobj.Bucket
+	meta *block.Meta
 
 	tables []tableReader
 
@@ -316,13 +319,29 @@ type singleBlockQuerier struct {
 	profiles    parquetReader[*schemav1.Profile, *schemav1.ProfilePersister]
 }
 
-func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobjstore.BucketReader, meta *block.Meta) *singleBlockQuerier {
+func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobj.Bucket, meta *block.Meta) *singleBlockQuerier {
 	q := &singleBlockQuerier{
 		logger:  phlarecontext.Logger(phlarectx),
 		metrics: contextBlockMetrics(phlarectx),
 
-		bucketReader: phlareobjstore.BucketReaderWithPrefix(bucketReader, meta.ULID.String()),
-		meta:         meta,
+		bkt:  phlareobj.NewPrefixedBucket(bucketReader, meta.ULID.String()),
+		meta: meta,
+	}
+	for _, f := range meta.Files {
+		switch f.RelPath {
+		case q.stacktraces.relPath():
+			q.stacktraces.size = int64(f.SizeBytes)
+		case q.profiles.relPath():
+			q.profiles.size = int64(f.SizeBytes)
+		case q.locations.relPath():
+			q.locations.size = int64(f.SizeBytes)
+		case q.functions.relPath():
+			q.functions.size = int64(f.SizeBytes)
+		case q.mappings.relPath():
+			q.mappings.size = int64(f.SizeBytes)
+		case q.strings.relPath():
+			q.strings.size = int64(f.SizeBytes)
+		}
 	}
 	q.tables = []tableReader{
 		&q.strings,
@@ -332,6 +351,7 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 		&q.stacktraces,
 		&q.profiles,
 	}
+
 	return q
 }
 
@@ -945,7 +965,7 @@ func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []mi
 	return tsBoundary, tsBoundaryPerRowGroup, nil
 }
 
-func newByteSliceFromBucketReader(ctx context.Context, bucketReader phlareobjstore.BucketReader, path string) (index.RealByteSlice, error) {
+func newByteSliceFromBucketReader(ctx context.Context, bucketReader objstore.BucketReader, path string) (index.RealByteSlice, error) {
 	f, err := bucketReader.Get(ctx, path)
 	if err != nil {
 		return nil, err
@@ -988,7 +1008,7 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(util.RecoverPanic(func() error {
 		// open tsdb index
-		indexBytes, err := newByteSliceFromBucketReader(ctx, q.bucketReader, block.IndexFilename)
+		indexBytes, err := newByteSliceFromBucketReader(ctx, q.bkt, block.IndexFilename)
 		if err != nil {
 			return errors.Wrap(err, "error reading tsdb index")
 		}
@@ -1004,7 +1024,7 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 	for _, tableReader := range q.tables {
 		tableReader := tableReader
 		g.Go(util.RecoverPanic(func() error {
-			if err := tableReader.open(contextWithBlockMetrics(ctx, q.metrics), q.bucketReader); err != nil {
+			if err := tableReader.open(contextWithBlockMetrics(ctx, q.metrics), q.bkt); err != nil {
 				return err
 			}
 			return nil
@@ -1017,31 +1037,37 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 type parquetReader[M Models, P schemav1.PersisterName] struct {
 	persister P
 	file      *parquet.File
-	reader    phlareobjstore.ReaderAt
+	reader    phlareobj.ReaderAtCloser
+	size      int64
 	metrics   *blocksMetrics
 }
 
-func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
+func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.BucketReader) error {
 	r.metrics = contextBlockMetrics(ctx)
 	filePath := r.persister.Name() + block.ParquetSuffix
 
 	ra, err := bucketReader.ReaderAt(ctx, filePath)
 	if err != nil {
-		return errors.Wrapf(err, "opening file '%s'", filePath)
+		return errors.Wrapf(err, "create reader '%s'", filePath)
 	}
+	ra = parquetobj.NewOptimizedReader(ra)
 	r.reader = ra
 
 	// first try to open file, this is required otherwise OpenFile panics
-	parquetFile, err := parquet.OpenFile(ra, ra.Size(), parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
+	parquetFile, err := parquet.OpenFile(ra, r.size, parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
 	if parquetFile.NumRows() == 0 {
 		return fmt.Errorf("error parquet file '%s' contains no rows", filePath)
 	}
-
+	opts := []parquet.FileOption{
+		parquet.SkipBloomFilters(true), // we don't use bloom filters
+		parquet.FileReadMode(parquet.ReadModeAsync),
+		parquet.ReadBufferSize(1024 * 1024),
+	}
 	// now open it for real
-	r.file, err = parquet.OpenFile(ra, ra.Size())
+	r.file, err = parquet.OpenFile(ra, r.size, opts...)
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
@@ -1098,30 +1124,37 @@ type ResultWithRowNum[M any] struct {
 type inMemoryparquetReader[M Models, P schemav1.PersisterName] struct {
 	persister P
 	file      *parquet.File
-	reader    phlareobjstore.ReaderAt
+	size      int64
+	reader    phlareobj.ReaderAtCloser
 	cache     []M
 }
 
-func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phlareobjstore.BucketReader) error {
+func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.BucketReader) error {
 	filePath := r.persister.Name() + block.ParquetSuffix
 
 	ra, err := bucketReader.ReaderAt(ctx, filePath)
 	if err != nil {
-		return errors.Wrapf(err, "opening file '%s'", filePath)
+		return errors.Wrapf(err, "create reader '%s'", filePath)
 	}
+	ra = parquetobj.NewOptimizedReader(ra)
+
 	r.reader = ra
 
 	// first try to open file, this is required otherwise OpenFile panics
-	parquetFile, err := parquet.OpenFile(ra, ra.Size(), parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
+	parquetFile, err := parquet.OpenFile(ra, r.size, parquet.SkipPageIndex(true), parquet.SkipBloomFilters(true))
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
 	if parquetFile.NumRows() == 0 {
 		return fmt.Errorf("error parquet file '%s' contains no rows", filePath)
 	}
-
+	opts := []parquet.FileOption{
+		parquet.SkipBloomFilters(true), // we don't use bloom filters
+		parquet.FileReadMode(parquet.ReadModeAsync),
+		parquet.ReadBufferSize(1024 * 1024),
+	}
 	// now open it for real
-	r.file, err = parquet.OpenFile(ra, ra.Size())
+	r.file, err = parquet.OpenFile(ra, r.size, opts...)
 	if err != nil {
 		return errors.Wrapf(err, "opening parquet file '%s'", filePath)
 	}
@@ -1130,16 +1163,22 @@ func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phl
 	r.cache = make([]M, r.file.NumRows())
 	var read int
 	for _, rg := range r.file.RowGroups() {
-		reader := parquet.NewGenericRowGroupReader[M](rg)
-		for {
-			n, err := reader.Read(r.cache[read:])
-			read += n
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
+		err := func(rg parquet.RowGroup) error {
+			reader := parquet.NewGenericRowGroupReader[M](rg)
+			defer runutil.CloseWithLogOnErr(util.Logger, reader, "closing parquet generic row group reader")
+			for {
+				n, err := reader.Read(r.cache[read:])
+				read += n
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						return nil
+					}
+					return errors.Wrapf(err, "reading row group from parquet file '%s'", filePath)
 				}
-				return errors.Wrapf(err, "reading row group from parquet file '%s'", filePath)
 			}
+		}(rg)
+		if err != nil {
+			return err
 		}
 	}
 

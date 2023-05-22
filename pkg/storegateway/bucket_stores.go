@@ -12,7 +12,9 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/backoff"
 	"github.com/grafana/dskit/multierror"
-	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
+	"golang.org/x/sync/errgroup"
+
+	phlareobj "github.com/grafana/phlare/pkg/objstore"
 	"github.com/grafana/phlare/pkg/phlaredb"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	"github.com/grafana/phlare/pkg/phlaredb/bucket"
@@ -87,7 +89,7 @@ func (cfg *BucketStoreConfig) Validate(logger log.Logger) error {
 }
 
 type BucketStores struct {
-	storageBucket     phlareobjstore.Bucket
+	storageBucket     phlareobj.Bucket
 	cfg               BucketStoreConfig
 	logger            log.Logger
 	syncBackoffConfig backoff.Config
@@ -109,18 +111,30 @@ type BucketStores struct {
 	metrics           *Metrics
 }
 
-func NewBucketStores(cfg BucketStoreConfig, shardingStrategy ShardingStrategy, storageBucket phlareobjstore.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*BucketStores, error) {
+func NewBucketStores(cfg BucketStoreConfig, shardingStrategy ShardingStrategy, storageBucket phlareobj.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*BucketStores, error) {
 	c, err := NewBlocksCache(func(ctx context.Context, metas []*block.Meta, tenantID string) ([]Block, error) {
 		// todo we should cache metadata in memcached.
 		// but it means we need to have a different way of opening a block. Not just with meta.
-		// todo open in parallel
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(128) // todo make this configurable.
 		result := make([]Block, len(metas))
 		for i := range metas {
-			result[i] = phlaredb.NewSingleBlockQuerierFromMeta(ctx, phlareobjstore.BucketWithPrefix(storageBucket, tenantID+"/phlaredb"), metas[i])
+			meta := metas[i]
+			block := phlaredb.NewSingleBlockQuerierFromMeta(ctx, phlareobj.NewPrefixedBucket(storageBucket, tenantID+"/phlaredb"), meta)
+			result[i] = block
 			// Actually Open the block.
-			if err := result[i].Open(ctx); err != nil {
-				return nil, errors.Wrap(err, "open block")
-			}
+			g.Go(func() error {
+				start := time.Now()
+				if err := block.Open(ctx); err != nil {
+					return errors.Wrap(err, "open block")
+				}
+				level.Debug(logger).Log("msg", "block opened", "ID", meta.ULID.String(), "duration", time.Since(start))
+				return nil
+			})
+
+		}
+		if err := g.Wait(); err != nil {
+			return nil, err
 		}
 		return result, nil
 	})

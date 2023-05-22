@@ -5,10 +5,6 @@ import (
 	"flag"
 	"time"
 
-	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
-	"github.com/grafana/phlare/pkg/util"
-	"github.com/grafana/phlare/pkg/validation"
-
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/kv"
@@ -18,6 +14,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	phlareobj "github.com/grafana/phlare/pkg/objstore"
+	"github.com/grafana/phlare/pkg/util"
+	"github.com/grafana/phlare/pkg/validation"
 )
 
 const (
@@ -77,7 +77,7 @@ func (c *Config) Validate(limits validation.Limits) error {
 	return nil
 }
 
-func NewStoreGateway(gatewayCfg Config, storageBucket phlareobjstore.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*StoreGateway, error) {
+func NewStoreGateway(gatewayCfg Config, storageBucket phlareobj.Bucket, limits Limits, logger log.Logger, reg prometheus.Registerer) (*StoreGateway, error) {
 	ringStore, err := kv.NewClient(
 		gatewayCfg.ShardingRing.KVStore,
 		ring.GetCodec(),
@@ -91,7 +91,7 @@ func NewStoreGateway(gatewayCfg Config, storageBucket phlareobjstore.Bucket, lim
 	return newStoreGateway(gatewayCfg, storageBucket, ringStore, limits, logger, reg)
 }
 
-func newStoreGateway(gatewayCfg Config, storageBucket phlareobjstore.Bucket, ringStore kv.Client, limits Limits, logger log.Logger, reg prometheus.Registerer) (*StoreGateway, error) {
+func newStoreGateway(gatewayCfg Config, storageBucket phlareobj.Bucket, ringStore kv.Client, limits Limits, logger log.Logger, reg prometheus.Registerer) (*StoreGateway, error) {
 	var err error
 
 	g := &StoreGateway{

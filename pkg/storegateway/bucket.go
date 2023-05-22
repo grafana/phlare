@@ -20,7 +20,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 
-	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
+	phlareobj "github.com/grafana/phlare/pkg/objstore"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 )
 
@@ -28,7 +28,7 @@ import (
 const blockSyncConcurrency = 100
 
 type BucketStore struct {
-	bucket            phlareobjstore.Bucket
+	bucket            phlareobj.Bucket
 	tenantID, syncDir string
 
 	logger log.Logger
@@ -42,9 +42,9 @@ type BucketStore struct {
 	metrics *Metrics
 }
 
-func NewBucketStore(bucket phlareobjstore.Bucket, blocksCache *blocksCache, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
+func NewBucketStore(bucket phlareobj.Bucket, blocksCache *blocksCache, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
 	s := &BucketStore{
-		bucket:      phlareobjstore.BucketWithPrefix(bucket, tenantID+"/phlaredb"),
+		bucket:      phlareobj.NewPrefixedBucket(bucket, tenantID+"/phlaredb"),
 		tenantID:    tenantID,
 		syncDir:     syncDir,
 		logger:      logger,
@@ -89,18 +89,15 @@ func (b *BucketStore) InitialSync(ctx context.Context) error {
 			level.Warn(b.logger).Log("msg", "failed to remove block which is not needed", "err", err)
 		}
 	}
+
 	// todo remove testing.
-	blocks, err := b.openBlocksForReading(ctx, int64(model.Now().Add(-3*time.Hour)), int64(model.Now()))
+	blocks, err := b.openBlocksForReading(ctx, int64(model.Now().Add(-24*time.Hour)), int64(model.Now()))
 	if err != nil {
 		level.Warn(b.logger).Log("msg", "failed to open blocks", "err", err)
 		return nil
 	}
 	level.Info(b.logger).Log("msg", "opened blocks", "blocks", len(blocks))
-	blocks, err = b.openBlocksForReading(ctx, int64(model.Now().Add(-3*time.Hour)), int64(model.Now()))
-	if err != nil {
-		level.Warn(b.logger).Log("msg", "failed to open blocks", "err", err)
-		return nil
-	}
+
 	return nil
 }
 
@@ -261,7 +258,7 @@ func (s *BucketStore) RemoveBlocksAndClose() error {
 func (s *BucketStore) fetchBlocksMeta(ctx context.Context) (map[ulid.ULID]*block.Meta, error) {
 	var (
 		to   = time.Now()
-		from = to.Add(-time.Hour * 24 * 31)
+		from = to.Add(-time.Hour * 24 * 31) // todo make this configurable
 	)
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(128)

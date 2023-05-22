@@ -19,14 +19,13 @@ import (
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
-	"github.com/grafana/phlare/pkg/objstore/client"
+	phlareobj "github.com/grafana/phlare/pkg/objstore"
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
@@ -79,6 +78,7 @@ type PhlareDB struct {
 }
 
 func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareDB, error) {
+	// todo: should be instrumented.
 	fs, err := filesystem.NewBucket(cfg.DataPath)
 	if err != nil {
 		return nil, err
@@ -105,9 +105,7 @@ func New(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*PhlareD
 	f.wg.Add(1)
 	go f.loop()
 
-	bucketReader := client.ReaderAtBucket(pathLocal, fs, prometheus.WrapRegistererWithPrefix("pyroscopedb_", reg))
-
-	f.blockQuerier = NewBlockQuerier(phlarectx, bucketReader)
+	f.blockQuerier = NewBlockQuerier(phlarectx, phlareobj.NewPrefixedBucket(fs, pathLocal))
 
 	// do an initial querier sync
 	ctx := context.Background()

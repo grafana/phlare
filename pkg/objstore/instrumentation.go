@@ -36,7 +36,8 @@ func NewTracingBucket(bkt Bucket) InstrumentedBucket {
 	}
 }
 
-func (t TracingBucket) ReaderAt(ctx context.Context, name string) (r ReaderAt, err error) {
+func (t TracingBucket) ReaderAt(ctx context.Context, name string) (r ReaderAtCloser, err error) {
+	// todo instrument Reads of the ReaderAtCloser
 	tracing.DoWithSpan(ctx, "ReaderAt", func(spanCtx context.Context, span opentracing.Span) {
 		span.LogKV("name", name)
 		r, err = t.bkt.ReaderAt(spanCtx, name)
@@ -67,7 +68,7 @@ type MetricBucket struct {
 	bkt Bucket
 }
 
-func NewMetricBucket(bkt Bucket, reg prometheus.Registerer) InstrumentedBucket {
+func BucketWithMetrics(bkt Bucket, reg prometheus.Registerer) InstrumentedBucket {
 	name := bkt.Name()
 	return MetricBucket{
 		InstrumentedBucket: objstore.BucketWithMetrics(name, bkt, reg),
@@ -75,7 +76,8 @@ func NewMetricBucket(bkt Bucket, reg prometheus.Registerer) InstrumentedBucket {
 	}
 }
 
-func (t MetricBucket) ReaderAt(ctx context.Context, name string) (r ReaderAt, err error) {
+func (t MetricBucket) ReaderAt(ctx context.Context, name string) (r ReaderAtCloser, err error) {
+	// todo instrument Reads of the ReaderAtCloser
 	return t.bkt.ReaderAt(ctx, name)
 }
 

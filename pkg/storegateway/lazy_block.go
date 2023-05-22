@@ -7,17 +7,17 @@ import (
 
 	"github.com/dgraph-io/ristretto"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 
-	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
 	"github.com/grafana/phlare/pkg/phlaredb"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
+	"github.com/grafana/phlare/pkg/util"
 )
 
 type lazyBlock struct {
 	meta   *block.Meta
 	logger log.Logger
-	bucker phlareobjstore.Bucket
 }
 
 func OpenFromDisk(dir string, meta *block.Meta, logger log.Logger) (*lazyBlock, error) {
@@ -72,14 +72,16 @@ type blocksCache struct {
 }
 
 func NewBlocksCache(openBlocks func(context.Context, []*block.Meta, string) ([]Block, error)) (*blocksCache, error) {
-	// 250 block max for now of cost 1 which is around 20MB per block so 5GB of memory
+	// 500 block max for now of cost 1 which is around 20MB per block so 10GB of memory
 	c, err := ristretto.NewCache(&ristretto.Config{
 		NumCounters: 2500,
-		MaxCost:     250,
+		MaxCost:     500,
 		BufferItems: 64,
-		OnExit: func(val interface{}) {
-			// todo log error
-			val.(Block).Close()
+		OnEvict: func(item *ristretto.Item) {
+			err := item.Value.(Block).Close()
+			if err != nil {
+				level.Error(util.Logger).Log("msg", "block cache on-evict close", "err", err)
+			}
 		},
 	})
 	if err != nil {
@@ -123,9 +125,21 @@ func (b *blocksCache) Get(ctx context.Context, metas []*block.Meta, tenantID str
 		// todo cost... by measuring the size of the block
 
 		if ok := b.lru.Set(cacheKey(missing[i], tenantID), block, 1); !ok {
-			// todo we have to close the block once it's not used anymore
+			// block is rejected by the cache, closing should be done by the caller.
+			level.Debug(util.Logger).Log("msg", "block cache rejected", "block", missing[i].ULID.String())
+			continue
 		}
+		// the block is cached so we don't want to close it, eviction will close it.
+		result[missingIdx[i]] = noopCloseBlock{block}
 	}
 
 	return result, nil
+}
+
+type noopCloseBlock struct {
+	Block
+}
+
+func (n noopCloseBlock) Close() error {
+	return nil
 }
