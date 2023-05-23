@@ -343,7 +343,7 @@ func (t *stacktraceTree) insert(stack []int32, v int64) {
 		// so that the same function ID is evaluated.
 		i = n.ns
 	}
-	// Reached end of the stack,
+	// Reached end of the stack.
 	n = &t.nodes[n.i]
 	n.val += v
 	t.nodes[n.i] = *n
@@ -373,8 +373,8 @@ func (t *stacktraceTree) minValue(maxNodes int64) int64 {
 	return (*mh)[0]
 }
 
-func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, frames []string) {
-	if len(t.nodes) == 0 || len(frames) == 0 {
+func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, funcs []string) {
+	if len(t.nodes) == 0 || len(funcs) == 0 {
 		return
 	}
 	min := t.minValue(maxNodes)
@@ -420,9 +420,9 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, frames []string) {
 		var name []byte
 		switch n.fid {
 		default:
-			// It is guaranteed that frames slice and its contents are immutable,
+			// It is guaranteed that funcs slice and its contents are immutable,
 			// and the byte slice backing capacity is managed by GC.
-			name = unsafeStringBytes(frames[n.fid])
+			name = unsafeStringBytes(funcs[n.fid])
 		case otherStubReference:
 			name = otherStubBytes
 		}
@@ -442,13 +442,4 @@ func unsafeStringBytes(s string) []byte {
 	hdr.Cap = len(s)
 	hdr.Len = len(s)
 	return b
-}
-
-func unsafeBytesAsString(b []byte) string {
-	p := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&b)).Data)
-	var s string
-	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	hdr.Data = uintptr(p)
-	hdr.Len = len(b)
-	return s
 }

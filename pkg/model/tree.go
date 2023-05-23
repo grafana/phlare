@@ -126,12 +126,10 @@ func (t *Tree) Merge(src *Tree) {
 	dstRoot := &node{children: t.root}
 	dstNodes = append(dstNodes, dstRoot)
 
+	var st, dt *node
 	for len(srcNodes) > 0 {
-		st := srcNodes[0]
-		srcNodes = srcNodes[1:]
-
-		dt := dstNodes[0]
-		dstNodes = dstNodes[1:]
+		st, srcNodes = srcNodes[len(srcNodes)-1], srcNodes[:len(srcNodes)-1]
+		dt, dstNodes = dstNodes[len(dstNodes)-1], dstNodes[:len(dstNodes)-1]
 
 		dt.self += st.self
 		dt.total += st.total
@@ -139,8 +137,8 @@ func (t *Tree) Merge(src *Tree) {
 		for _, srcChildNode := range st.children {
 			// Note that we don't copy the name, but reference it.
 			dstChildNode := dt.insert(srcChildNode.name)
-			srcNodes = prependTreeNode(srcNodes, srcChildNode)
-			dstNodes = prependTreeNode(dstNodes, dstChildNode)
+			srcNodes = append(srcNodes, srcChildNode)
+			dstNodes = append(dstNodes, dstChildNode)
 		}
 	}
 
@@ -336,12 +334,9 @@ func (t *Tree) MarshalTruncate(w io.Writer, maxNodes int64) (err error) {
 			}
 		}
 		if other > 0 {
-			n.children = append(n.children, &node{
-				parent: n,
-				self:   other,
-				total:  other,
-				name:   lostDuringSerializationName,
-			})
+			o := n.insert(lostDuringSerializationName)
+			o.total += other
+			o.self += other
 		}
 
 		if len(n.children) > 0 {

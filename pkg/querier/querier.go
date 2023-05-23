@@ -276,18 +276,18 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 		sp.Finish()
 	}()
 
-	t, err := q.selectTree(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-
 	if req.Msg.MaxNodes == nil || *req.Msg.MaxNodes == 0 {
 		mn := maxNodesDefault
 		req.Msg.MaxNodes = &mn
 	}
 
+	t, err := q.selectTree(ctx, req.Msg)
+	if err != nil {
+		return nil, err
+	}
+
 	return connect.NewResponse(&querierv1.SelectMergeStacktracesResponse{
-		Flamegraph: phlaremodel.NewFlameGraph(t, *req.Msg.MaxNodes),
+		Flamegraph: phlaremodel.NewFlameGraph(t, req.Msg.GetMaxNodes()),
 	}), nil
 }
 
