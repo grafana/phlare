@@ -256,6 +256,7 @@ func (r *functionsRewriter) union(names []string) {
 		if !found {
 			position = len(r.names)
 			r.names = append(r.names, name)
+			r.positions[name] = position
 		}
 		r.tmp[i] = int32(position)
 	}
@@ -306,9 +307,12 @@ func (t *stacktraceTree) insert(stack []int32, v int64) {
 		i int32
 		n = new(stacktraceNode)
 	)
+	// Iterate over the stack in reverse order.
+	// Note that j is not decremented automatically.
 	for j := len(stack) - 1; j >= 0; {
 		r := stack[j]
 		if i < 0 {
+			// Next node is not found.
 			x := t.newNode(r)
 			n.fc = x.i
 			t.nodes[n.i] = *n
@@ -317,6 +321,8 @@ func (t *stacktraceTree) insert(stack []int32, v int64) {
 			n = &t.nodes[i]
 		}
 		if n.fid == r && n.i != 0 {
+			// There already is a node with this function ID.
+			// Update it and go to the next level.
 			n.total += v
 			t.nodes[n.i] = *n
 			i = n.fc
@@ -327,14 +333,17 @@ func (t *stacktraceTree) insert(stack []int32, v int64) {
 			i = n.fc
 			continue
 		}
+		// No more siblings, insert one.
 		if n.ns < 0 {
 			x := t.newNode(r)
 			n.ns = x.i
 			t.nodes[n.i] = *n
 		}
+		// Go to the next sibling, without decrementing j,
+		// so that the same function ID is evaluated.
 		i = n.ns
 	}
-
+	// Reached end of the stack,
 	n = &t.nodes[n.i]
 	n.val += v
 	t.nodes[n.i] = *n

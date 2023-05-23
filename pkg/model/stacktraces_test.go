@@ -3,10 +3,10 @@ package model
 import (
 	"testing"
 
-	"github.com/grafana/phlare/pkg/testhelper"
 	"github.com/stretchr/testify/require"
 
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
+	"github.com/grafana/phlare/pkg/testhelper"
 )
 
 func TestMergeBatchResponse(t *testing.T) {
