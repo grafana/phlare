@@ -117,6 +117,27 @@ func (t Tree) String() string {
 	return tree.String()
 }
 
+func (t *Tree) Total() (v int64) {
+	for _, n := range t.root {
+		v += n.total
+	}
+	return v
+}
+
+func (t *Tree) InsertStack(v int64, stack ...string) {
+	r := &node{children: t.root}
+	n := r
+	for j := range stack {
+		n.total += v
+		n = n.insert(stack[j])
+		fmt.Println(n)
+	}
+	// Leaf.
+	n.total += v
+	n.self += v
+	t.root = r.children
+}
+
 func (t *Tree) Merge(src *Tree) {
 	srcNodes := make([]*node, 0, 128)
 	srcRoot := &node{children: src.root}
@@ -198,7 +219,7 @@ func (n *node) String() string {
 	return fmt.Sprintf("{%s: self %d total %d}", n.name, n.self, n.total)
 }
 
-func (n *node) Add(name string, self, total int64) *node {
+func (n *node) add(name string, self, total int64) *node {
 	new := &node{
 		parent: n,
 		name:   name,

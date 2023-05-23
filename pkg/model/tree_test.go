@@ -32,7 +32,7 @@ func Test_Tree(t *testing.T) {
 			},
 			func() *Tree {
 				tr := emptyTree()
-				tr.add("bar", 0, 2).Add("buz", 2, 2)
+				tr.add("bar", 0, 2).add("buz", 2, 2)
 				return tr
 			},
 		},
@@ -50,9 +50,9 @@ func Test_Tree(t *testing.T) {
 			},
 			func() *Tree {
 				tr := emptyTree()
-				buz := tr.add("bar", 0, 3).Add("buz", 0, 3)
-				buz.Add("blip", 1, 1)
-				buz.Add("blop", 0, 2).Add("blap", 2, 2)
+				buz := tr.add("bar", 0, 3).add("buz", 0, 3)
+				buz.add("blip", 1, 1)
+				buz.add("blop", 0, 2).add("blap", 2, 2)
 				return tr
 			},
 		},
@@ -88,11 +88,11 @@ func Test_Tree(t *testing.T) {
 				tr := emptyTree()
 
 				bar := tr.add("bar", 0, 9)
-				bar.Add("blip", 4, 4)
+				bar.add("blip", 4, 4)
 
-				buz := bar.Add("buz", 2, 5)
-				buz.Add("blop", 2, 2)
-				buz.Add("foo", 1, 1)
+				buz := bar.add("buz", 2, 5)
+				buz.add("blop", 2, 2)
+				buz.add("foo", 1, 1)
 
 				tr.add("buz", 1, 1)
 				return tr
