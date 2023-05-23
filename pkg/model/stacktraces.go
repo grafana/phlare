@@ -5,11 +5,12 @@ import (
 	"container/heap"
 	"encoding/binary"
 	"io"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
+	"unsafe"
 
-	"github.com/bcmills/unsafeslice"
 	"github.com/cespare/xxhash/v2"
 	"github.com/pyroscope-io/pyroscope/pkg/util/varint"
 
@@ -221,7 +222,10 @@ func (m *StacktraceMerger) TreeBytes(maxNodes int64) []byte {
 }
 
 func (m *StacktraceMerger) Size() int {
-	return len(m.s.nodes)
+	if m.s != nil {
+		return len(m.s.nodes)
+	}
+	return 0
 }
 
 func newFunctionsRewriter(names []string) *functionsRewriter {
@@ -259,8 +263,7 @@ func (r *functionsRewriter) union(names []string) {
 
 func (r *functionsRewriter) rewrite(stack []int32) {
 	for i := range stack {
-		x := stack[i]
-		stack[i] = r.tmp[x]
+		stack[i] = r.tmp[stack[i]]
 	}
 }
 
@@ -275,7 +278,7 @@ type stacktraceNode struct {
 	i     int32
 	fc    int32
 	ns    int32
-	ref   int32
+	fid   int32
 	val   int64
 	total int64
 }
@@ -286,9 +289,9 @@ func newStacktraceTree(size int) *stacktraceTree {
 	return &t
 }
 
-func (t *stacktraceTree) newNode(ref int32) *stacktraceNode {
+func (t *stacktraceTree) newNode(fid int32) *stacktraceNode {
 	n := stacktraceNode{
-		ref: ref,
+		fid: fid,
 		i:   int32(len(t.nodes)),
 		fc:  -1,
 		ns:  -1,
@@ -297,14 +300,14 @@ func (t *stacktraceTree) newNode(ref int32) *stacktraceNode {
 	return &t.nodes[n.i]
 }
 
-func (t *stacktraceTree) insert(refs []int32, v int64) {
+// stack of function IDs, the root it the last element.
+func (t *stacktraceTree) insert(stack []int32, v int64) {
 	var (
 		i int32
-		j int
 		n = new(stacktraceNode)
 	)
-	for j < len(refs) {
-		r := refs[j]
+	for j := len(stack) - 1; j >= 0; {
+		r := stack[j]
 		if i < 0 {
 			x := t.newNode(r)
 			n.fc = x.i
@@ -313,11 +316,11 @@ func (t *stacktraceTree) insert(refs []int32, v int64) {
 		} else {
 			n = &t.nodes[i]
 		}
-		if n.ref == r && n.i != 0 {
+		if n.fid == r && n.i != 0 {
 			n.total += v
 			t.nodes[n.i] = *n
 			i = n.fc
-			j++
+			j--
 			continue
 		}
 		if n.i == 0 {
@@ -362,6 +365,9 @@ func (t *stacktraceTree) minValue(maxNodes int64) int64 {
 }
 
 func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, frames []string) {
+	if len(t.nodes) == 0 || len(frames) == 0 {
+		return
+	}
 	min := t.minValue(maxNodes)
 	vw := varint.NewWriter()
 	children := make([]int32, 0, 128) // Children per node.
@@ -375,13 +381,13 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, frames []string) {
 		current, nodes, children = nodes[len(nodes)-1], nodes[:len(nodes)-1], children[:0]
 		var truncated int64
 		n := &t.nodes[current]
-		if n.ref == otherStubReference {
+		if n.fid == otherStubReference {
 			goto write
 		}
 
 		for x := n.fc; x > 0; {
 			child := &t.nodes[x]
-			if child.total >= min && child.ref != otherStubReference {
+			if child.total >= min && child.fid != otherStubReference {
 				children = append(children, x)
 			} else {
 				truncated += child.total
@@ -403,9 +409,11 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, frames []string) {
 
 	write:
 		var name []byte
-		switch n.ref {
+		switch n.fid {
 		default:
-			name = unsafeslice.OfString(frames[n.ref])
+			// It is guaranteed that frames slice and its contents are immutable,
+			// and the byte slice backing capacity is managed by GC.
+			name = unsafeStringBytes(frames[n.fid])
 		case otherStubReference:
 			name = otherStubBytes
 		}
@@ -415,4 +423,23 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, frames []string) {
 		_, _ = vw.Write(dst, uint64(n.val))
 		_, _ = vw.Write(dst, uint64(len(children)))
 	}
+}
+
+func unsafeStringBytes(s string) []byte {
+	p := unsafe.Pointer((*reflect.StringHeader)(unsafe.Pointer(&s)).Data)
+	var b []byte
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	hdr.Data = uintptr(p)
+	hdr.Cap = len(s)
+	hdr.Len = len(s)
+	return b
+}
+
+func unsafeBytesAsString(b []byte) string {
+	p := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&b)).Data)
+	var s string
+	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	hdr.Data = uintptr(p)
+	hdr.Len = len(b)
+	return s
 }

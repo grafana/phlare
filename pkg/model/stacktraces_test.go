@@ -140,11 +140,11 @@ func TestStackTraceMerger(t *testing.T) {
 				{
 					Stacktraces: []*ingestv1.StacktraceSample{
 						{
-							FunctionIds: []int32{0, 1},
+							FunctionIds: []int32{1, 0},
 							Value:       1,
 						},
 						{
-							FunctionIds: []int32{0, 1, 2},
+							FunctionIds: []int32{2, 1, 0},
 							Value:       3,
 						},
 					},
@@ -162,11 +162,11 @@ func TestStackTraceMerger(t *testing.T) {
 				{
 					Stacktraces: []*ingestv1.StacktraceSample{
 						{
-							FunctionIds: []int32{0, 1},
+							FunctionIds: []int32{1, 0},
 							Value:       1,
 						},
 						{
-							FunctionIds: []int32{0, 1, 2},
+							FunctionIds: []int32{2, 1, 0},
 							Value:       3,
 						},
 						{
@@ -179,11 +179,11 @@ func TestStackTraceMerger(t *testing.T) {
 				{
 					Stacktraces: []*ingestv1.StacktraceSample{
 						{
-							FunctionIds: []int32{0, 1},
+							FunctionIds: []int32{1, 0},
 							Value:       1,
 						},
 						{
-							FunctionIds: []int32{0, 1, 2},
+							FunctionIds: []int32{2, 1, 0},
 							Value:       3,
 						},
 						{

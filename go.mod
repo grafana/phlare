@@ -3,7 +3,6 @@ module github.com/grafana/phlare
 go 1.19
 
 require (
-	github.com/bcmills/unsafeslice v0.2.0
 	github.com/bufbuild/connect-go v1.4.1
 	github.com/bufbuild/connect-grpchealth-go v1.0.0
 	github.com/cespare/xxhash/v2 v2.2.0

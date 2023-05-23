@@ -4,9 +4,9 @@ import (
 	"container/heap"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 
-	"github.com/bcmills/unsafeslice"
 	dvarint "github.com/dennwc/varint"
 	"github.com/pyroscope-io/pyroscope/pkg/util/varint"
 	"github.com/xlab/treeprint"
@@ -30,7 +30,7 @@ func newTree(stacks []stacktraces) *Tree {
 			t = stackToTree(stack)
 			continue
 		}
-		MergeTree(t, stackToTree(stack))
+		t.Merge(stackToTree(stack))
 	}
 	return t
 }
@@ -117,7 +117,55 @@ func (t Tree) String() string {
 	return tree.String()
 }
 
-func MergeTree(dst, src *Tree) {
+func (t *Tree) Merge(src *Tree) {
+	srcNodes := make([]*node, 0, 128)
+	srcRoot := &node{children: src.root}
+	srcNodes = append(srcNodes, srcRoot)
+
+	dstNodes := make([]*node, 0, 128)
+	dstRoot := &node{children: t.root}
+	dstNodes = append(dstNodes, dstRoot)
+
+	for len(srcNodes) > 0 {
+		st := srcNodes[0]
+		srcNodes = srcNodes[1:]
+
+		dt := dstNodes[0]
+		dstNodes = dstNodes[1:]
+
+		dt.self += st.self
+		dt.total += st.total
+
+		for _, srcChildNode := range st.children {
+			// Note that we don't copy the name, but reference it.
+			dstChildNode := dt.insert(srcChildNode.name)
+			srcNodes = prependTreeNode(srcNodes, srcChildNode)
+			dstNodes = prependTreeNode(dstNodes, dstChildNode)
+		}
+	}
+
+	t.root = dstRoot.children
+}
+
+func (n *node) insert(name string) *node {
+	i := sort.Search(len(n.children), func(i int) bool {
+		return n.children[i].name >= name
+	})
+	if i < len(n.children) && n.children[i].name == name {
+		return n.children[i]
+	}
+	// We don't clone the name: it is caller responsibility
+	// to maintain memory ownership.
+	child := &node{parent: n, name: name}
+	n.children = append(n.children, child)
+	copy(n.children[i+1:], n.children[i:])
+	n.children[i] = child
+	return child
+}
+
+// mergeTree merges two tree roots.
+// DEPRECATED: Use Tree.Merge method instead.
+func mergeTree(dst, src *Tree) {
 	// walk src and insert src's nodes into dst
 	for _, rootNode := range src.root {
 		parent, found, toMerge := findNodeOrParent(dst.root, rootNode)
@@ -269,7 +317,7 @@ func (t *Tree) MarshalTruncate(w io.Writer, maxNodes int64) (err error) {
 		if _, _ = vw.Write(w, uint64(len(n.name))); err != nil {
 			return err
 		}
-		if _, _ = w.Write(unsafeslice.OfString(n.name)); err != nil {
+		if _, _ = w.Write(unsafeStringBytes(n.name)); err != nil {
 			return err
 		}
 		if _, err = vw.Write(w, uint64(n.self)); err != nil {
@@ -319,8 +367,11 @@ func UnmarshalTree(b []byte) (*Tree, error) {
 	if len(b) < 2 {
 		return t, nil
 	}
-
-	parents := make([]*node, 1, len(b)/estimateBytesPerNode)
+	size := estimateBytesPerNode
+	if e := len(b) / estimateBytesPerNode; e > estimateBytesPerNode {
+		size = e
+	}
+	parents := make([]*node, 1, size)
 	// Virtual root node.
 	root := new(node)
 	parents[0] = root
@@ -334,7 +385,8 @@ func UnmarshalTree(b []byte) (*Tree, error) {
 			return nil, errMalformedTreeBytes
 		}
 		offset += o
-		name := unsafeslice.AsString(b[offset : offset+int(nameLen)])
+		// Note that we allocate a string, instead of referencing b's capacity.
+		name := string(b[offset : offset+int(nameLen)])
 		offset += int(nameLen)
 		value, o := dvarint.Uvarint(b[offset:])
 		if o < 0 {
@@ -347,12 +399,9 @@ func UnmarshalTree(b []byte) (*Tree, error) {
 		}
 		offset += o
 
-		n := &node{
-			parent:   parent,
-			children: make([]*node, 0, childrenLen),
-			self:     int64(value),
-			name:     name,
-		}
+		n := parent.insert(name)
+		n.children = make([]*node, 0, childrenLen)
+		n.self = int64(value)
 
 		pn := n
 		for pn.parent != nil {
@@ -360,7 +409,6 @@ func UnmarshalTree(b []byte) (*Tree, error) {
 			pn = pn.parent
 		}
 
-		parent.children = append(parent.children, n)
 		for i := uint64(0); i < childrenLen; i++ {
 			parents = append(parents, n)
 		}
@@ -382,14 +430,16 @@ func NewTreeMerger() *TreeMerger {
 }
 
 func (m *TreeMerger) MergeTreeBytes(b []byte) error {
-	m.mu.Lock()
+	// TODO(kolesnikovae): Ideally, we should not have
+	// the intermediate tree t but update m.t reading
+	// raw bytes b directly.
 	t, err := UnmarshalTree(b)
 	if err != nil {
-		m.mu.Unlock()
 		return err
 	}
+	m.mu.Lock()
 	if m.t != nil {
-		MergeTree(m.t, t)
+		m.t.Merge(t)
 	} else {
 		m.t = t
 	}

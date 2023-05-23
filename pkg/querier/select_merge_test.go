@@ -78,7 +78,7 @@ func TestSelectMergeStacktraces(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Len(t, res, 1)
+	requireFakeMergeProfilesStacktracesResultTree(t, res)
 	all := []testProfile{}
 	all = append(all, resp1.kept...)
 	all = append(all, resp2.kept...)
@@ -114,7 +114,7 @@ func TestSelectMergeStacktraces(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Len(t, res, 1)
+	requireFakeMergeProfilesStacktracesResultTree(t, res)
 }
 
 func TestSelectMergeByLabels(t *testing.T) {
