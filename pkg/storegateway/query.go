@@ -4,8 +4,10 @@ import (
 	"context"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/prometheus/common/model"
 
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
+	"github.com/grafana/phlare/pkg/phlaredb"
 	"github.com/grafana/phlare/pkg/tenant"
 )
 
@@ -40,15 +42,26 @@ func (s *StoreGateway) forBucketStore(ctx context.Context, f func(*BucketStore) 
 	return f(store)
 }
 
+func (s *BucketStore) openBlocksForReading(ctx context.Context, minT, maxT model.Time) (phlaredb.Queriers, error) {
+	blks := s.blockSet.getFor(minT, maxT)
+	querier := make(phlaredb.Queriers, 0, len(blks))
+	for _, b := range blks {
+		querier = append(querier, b)
+	}
+	if err := querier.Open(ctx); err != nil {
+		return nil, err
+	}
+	return querier, nil
+}
+
 func (store *BucketStore) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
-	// store.blockSet.getFor(mint int64, maxt int64)
-	return nil
+	return phlaredb.MergeProfilesStacktraces(ctx, stream, store.openBlocksForReading)
 }
 
 func (store *BucketStore) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
-	return nil
+	return phlaredb.MergeProfilesLabels(ctx, stream, store.openBlocksForReading)
 }
 
 func (store *BucketStore) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
-	return nil
+	return phlaredb.MergeProfilesPprof(ctx, stream, store.openBlocksForReading)
 }

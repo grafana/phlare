@@ -33,26 +33,24 @@ type BucketStore struct {
 
 	logger log.Logger
 
-	blocksMx    sync.RWMutex
-	blocks      map[ulid.ULID]*lazyBlock
-	blockSet    *bucketBlockSet
-	blocksCache *blocksCache
+	blocksMx sync.RWMutex
+	blocks   map[ulid.ULID]*Block
+	blockSet *bucketBlockSet
 
 	filters []BlockMetaFilter
 	metrics *Metrics
 }
 
-func NewBucketStore(bucket phlareobj.Bucket, blocksCache *blocksCache, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
+func NewBucketStore(bucket phlareobj.Bucket, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
 	s := &BucketStore{
-		bucket:      phlareobj.NewPrefixedBucket(bucket, tenantID+"/phlaredb"),
-		tenantID:    tenantID,
-		syncDir:     syncDir,
-		logger:      logger,
-		filters:     filters,
-		blockSet:    newBucketBlockSet(),
-		blocksCache: blocksCache,
-		blocks:      map[ulid.ULID]*lazyBlock{},
-		metrics:     Metrics,
+		bucket:   phlareobj.NewPrefixedBucket(bucket, tenantID+"/phlaredb"),
+		tenantID: tenantID,
+		syncDir:  syncDir,
+		logger:   logger,
+		filters:  filters,
+		blockSet: newBucketBlockSet(),
+		blocks:   map[ulid.ULID]*Block{},
+		metrics:  Metrics,
 	}
 
 	if err := os.MkdirAll(syncDir, 0o750); err != nil {
@@ -90,18 +88,10 @@ func (b *BucketStore) InitialSync(ctx context.Context) error {
 		}
 	}
 
-	// todo remove testing.
-	blocks, err := b.openBlocksForReading(ctx, int64(model.Now().Add(-24*time.Hour)), int64(model.Now()))
-	if err != nil {
-		level.Warn(b.logger).Log("msg", "failed to open blocks", "err", err)
-		return nil
-	}
-	level.Info(b.logger).Log("msg", "opened blocks", "blocks", len(blocks))
-
 	return nil
 }
 
-func (s *BucketStore) getBlock(id ulid.ULID) *lazyBlock {
+func (s *BucketStore) getBlock(id ulid.ULID) *Block {
 	s.blocksMx.RLock()
 	defer s.blocksMx.RUnlock()
 	return s.blocks[id]
@@ -160,16 +150,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	return nil
 }
 
-func (s *BucketStore) openBlocksForReading(ctx context.Context, minT, maxT int64) ([]Block, error) {
-	blks := s.blockSet.getFor(minT, maxT)
-	metas := make([]*block.Meta, 0, len(blks))
-	for _, b := range blks {
-		metas = append(metas, b.meta)
-	}
-	return s.blocksCache.Get(ctx, metas, s.tenantID)
-}
-
-func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error) {
+func (bs *BucketStore) addBlock(ctx context.Context, meta *block.Meta) (err error) {
 	level.Debug(bs.logger).Log("msg", "loading new block", "id", meta.ULID)
 
 	dir := bs.localPath(meta.ULID.String())
@@ -190,8 +171,7 @@ func (bs *BucketStore) addBlock(_ context.Context, meta *block.Meta) (err error)
 
 	bs.blocksMx.Lock()
 	defer bs.blocksMx.Unlock()
-	// todo create the block dir and download the index, but only download stacktraces for some blocks (14d)
-	b, err := OpenFromDisk(bs.syncDir, meta, bs.logger)
+	b, err := bs.createBlock(ctx, meta)
 	if err != nil {
 		return errors.Wrap(err, "load block from disk")
 	}
@@ -392,7 +372,7 @@ func blockPrefixesFromTo(from, to time.Time, orderOfSplit uint8) (prefixes []str
 // bucketBlockSet holds all blocks.
 type bucketBlockSet struct {
 	mtx    sync.RWMutex
-	blocks []*lazyBlock // Blocks sorted by mint, then maxt.
+	blocks []*Block // Blocks sorted by mint, then maxt.
 }
 
 // newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
@@ -402,7 +382,7 @@ func newBucketBlockSet() *bucketBlockSet {
 	return &bucketBlockSet{}
 }
 
-func (s *bucketBlockSet) add(b *lazyBlock) error {
+func (s *bucketBlockSet) add(b *Block) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -435,7 +415,7 @@ func (s *bucketBlockSet) remove(id ulid.ULID) {
 // It supports overlapping blocks.
 //
 // NOTE: s.blocks are expected to be sorted in minTime order.
-func (s *bucketBlockSet) getFor(mint, maxt int64) (bs []*lazyBlock) {
+func (s *bucketBlockSet) getFor(mint, maxt model.Time) (bs []*Block) {
 	if mint > maxt {
 		return nil
 	}
@@ -445,11 +425,11 @@ func (s *bucketBlockSet) getFor(mint, maxt int64) (bs []*lazyBlock) {
 
 	// Fill the given interval with the blocks within the request mint and maxt.
 	for _, b := range s.blocks {
-		if int64(b.meta.MaxTime) <= mint {
+		if b.meta.MaxTime <= mint {
 			continue
 		}
 		// NOTE: Block intervals are half-open: [b.MinTime, b.MaxTime).
-		if int64(b.meta.MinTime) > maxt {
+		if b.meta.MinTime > maxt {
 			break
 		}
 

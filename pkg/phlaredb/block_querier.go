@@ -372,6 +372,7 @@ func (b *singleBlockQuerier) Close() error {
 			errs.Add(err)
 		}
 	}
+	b.opened = false
 	return errs.Err()
 }
 
@@ -483,16 +484,32 @@ type Querier interface {
 	MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error)
 	MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error)
 	MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*profile.Profile, error)
-
+	Open(ctx context.Context) error
 	// Sorts profiles for retrieval.
 	Sort([]Profile) []Profile
 }
 
 type Queriers []Querier
 
+func (queriers Queriers) Open(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(128)
+	for _, q := range queriers {
+		q := q
+		g.Go(func() error {
+			if err := q.Open(ctx); err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
 func (queriers Queriers) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
 	iters := make([]iter.Iterator[Profile], 0, len(queriers))
-
+	// todo: if blocks overlap in time we should be deduping
+	// otherwise we can just append
 	for _, q := range queriers {
 		it, err := q.SelectMatchingProfiles(ctx, params)
 		if err != nil {
@@ -504,17 +521,19 @@ func (queriers Queriers) SelectMatchingProfiles(ctx context.Context, params *ing
 	return iter.NewSortProfileIterator(iters), nil
 }
 
-func (queriers Queriers) ForTimeRange(start, end model.Time) Queriers {
+func (queriers Queriers) ForTimeRange(_ context.Context, start, end model.Time) (Queriers, error) {
 	result := make(Queriers, 0, len(queriers))
 	for _, q := range queriers {
 		if q.InRange(start, end) {
 			result = append(result, q)
 		}
 	}
-	return result
+	return result, nil
 }
 
-func (q Queriers) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
+type BlockGetter func(ctx context.Context, start, end model.Time) (Queriers, error)
+
+func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse], blockGetter BlockGetter) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesStacktraces")
 	defer sp.Finish()
 
@@ -537,7 +556,10 @@ func (q Queriers) MergeProfilesStacktraces(ctx context.Context, stream *connect.
 		otlog.String("profile_id", request.Type.ID),
 	)
 
-	queriers := q.ForTimeRange(model.Time(request.Start), model.Time(request.End))
+	queriers, err := blockGetter(ctx, model.Time(request.Start), model.Time(request.End))
+	if err != nil {
+		return err
+	}
 
 	result := make([]*ingestv1.MergeProfilesStacktracesResult, 0, len(queriers))
 	var lock sync.Mutex
@@ -600,7 +622,7 @@ func (q Queriers) MergeProfilesStacktraces(ctx context.Context, stream *connect.
 	return nil
 }
 
-func (q Queriers) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
+func MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse], blockGetter BlockGetter) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesLabels")
 	defer sp.Finish()
 
@@ -626,7 +648,10 @@ func (q Queriers) MergeProfilesLabels(ctx context.Context, stream *connect.BidiS
 		otlog.String("by", strings.Join(by, ",")),
 	)
 
-	queriers := q.ForTimeRange(model.Time(request.Start), model.Time(request.End))
+	queriers, err := blockGetter(ctx, model.Time(request.Start), model.Time(request.End))
+	if err != nil {
+		return err
+	}
 	result := make([][]*typesv1.Series, 0, len(queriers))
 	g, ctx := errgroup.WithContext(ctx)
 	s := lo.Synchronize()
@@ -686,7 +711,7 @@ func (q Queriers) MergeProfilesLabels(ctx context.Context, stream *connect.BidiS
 	return nil
 }
 
-func (q Queriers) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
+func MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse], blockGetter BlockGetter) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesPprof")
 	defer sp.Finish()
 
@@ -709,7 +734,10 @@ func (q Queriers) MergeProfilesPprof(ctx context.Context, stream *connect.BidiSt
 		otlog.String("profile_id", request.Type.ID),
 	)
 
-	queriers := q.ForTimeRange(model.Time(request.Start), model.Time(request.End))
+	queriers, err := blockGetter(ctx, model.Time(request.Start), model.Time(request.End))
+	if err != nil {
+		return err
+	}
 
 	result := make([]*profile.Profile, 0, len(queriers))
 	var lock sync.Mutex
@@ -1079,6 +1107,8 @@ func (r *parquetReader[M, P]) Close() error {
 	if r.reader != nil {
 		return r.reader.Close()
 	}
+	r.reader = nil
+	r.file = nil
 	return nil
 }
 
@@ -1193,6 +1223,9 @@ func (r *inMemoryparquetReader[M, P]) Close() error {
 	if r.reader != nil {
 		return r.reader.Close()
 	}
+	r.reader = nil
+	r.file = nil
+	r.cache = nil
 	return nil
 }
 

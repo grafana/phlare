@@ -29,6 +29,10 @@ func (q *headOnDiskQuerier) rowGroup() *rowGroupOnDisk {
 	return q.head.profiles.rowGroups[q.rowGroupIdx]
 }
 
+func (q *headOnDiskQuerier) Open(_ context.Context) error {
+	return nil
+}
+
 func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - HeadOnDisk")
 	defer sp.Finish()
@@ -157,6 +161,10 @@ type headInMemoryQuerier struct {
 	head *Head
 }
 
+func (q *headInMemoryQuerier) Open(_ context.Context) error {
+	return nil
+}
+
 func (q *headInMemoryQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - HeadInMemory")
 	defer sp.Finish()
@@ -184,7 +192,7 @@ func (q *headInMemoryQuerier) SelectMatchingProfiles(ctx context.Context, params
 			continue
 		}
 
-		var profiles = make([]*schemav1.Profile, len(profileSeries.profiles))
+		profiles := make([]*schemav1.Profile, len(profileSeries.profiles))
 		copy(profiles, profileSeries.profiles)
 
 		iters = append(iters,
@@ -259,7 +267,6 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 	}
 
 	return q.head.resolvePprof(ctx, stacktraceSamples), nil
-
 }
 
 func (q *headInMemoryQuerier) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error) {

@@ -190,15 +190,15 @@ func (f *PhlareDB) Queriers() Queriers {
 }
 
 func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
-	return f.Queriers().MergeProfilesStacktraces(ctx, stream)
+	return MergeProfilesStacktraces(ctx, stream, f.blockQuerier.Queriers().ForTimeRange)
 }
 
 func (f *PhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
-	return f.Queriers().MergeProfilesLabels(ctx, stream)
+	return MergeProfilesLabels(ctx, stream, f.blockQuerier.Queriers().ForTimeRange)
 }
 
 func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
-	return f.Queriers().MergeProfilesPprof(ctx, stream)
+	return MergeProfilesPprof(ctx, stream, f.blockQuerier.Queriers().ForTimeRange)
 }
 
 type BidiServerMerge[Res any, Req any] interface {

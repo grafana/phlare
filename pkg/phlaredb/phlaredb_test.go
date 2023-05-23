@@ -98,6 +98,18 @@ type ingesterHandlerPhlareDB struct {
 	// *PhlareDB
 }
 
+func (i *ingesterHandlerPhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
+	return MergeProfilesStacktraces(ctx, stream, i.ForTimeRange)
+}
+
+func (i *ingesterHandlerPhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
+	return MergeProfilesLabels(ctx, stream, i.ForTimeRange)
+}
+
+func (i *ingesterHandlerPhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
+	return MergeProfilesPprof(ctx, stream, i.ForTimeRange)
+}
+
 func (i *ingesterHandlerPhlareDB) Push(context.Context, *connect.Request[pushv1.PushRequest]) (*connect.Response[pushv1.PushResponse], error) {
 	return nil, errors.New("not implemented")
 }
