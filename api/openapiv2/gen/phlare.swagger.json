@@ -19,6 +19,9 @@
     },
     {
       "name": "StatusService"
+    },
+    {
+      "name": "StoreGatewayService"
     }
   ],
   "consumes": [

@@ -30,6 +30,7 @@ import (
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"
 	"github.com/grafana/phlare/api/gen/proto/go/querier/v1/querierv1connect"
 	statusv1 "github.com/grafana/phlare/api/gen/proto/go/status/v1"
+	"github.com/grafana/phlare/api/gen/proto/go/storegateway/v1/storegatewayv1connect"
 	"github.com/grafana/phlare/api/openapiv2"
 	"github.com/grafana/phlare/pkg/agent"
 	"github.com/grafana/phlare/pkg/distributor"
@@ -242,8 +243,7 @@ func (a *API) RegisterIngester(svc *ingester.Ingester) {
 }
 
 func (a *API) RegisterStoreGateway(svc *storegateway.StoreGateway) {
-	// todo
-	// storegatewaypb.RegisterStoreGatewayServer(a.server.GRPC, s)
+	storegatewayv1connect.RegisterStoreGatewayServiceHandler(a.server.HTTP, svc, a.grpcAuthMiddleware)
 
 	a.indexPage.AddLinks(defaultWeight, "Store-gateway", []IndexPageLink{
 		{Desc: "Ring status", Path: "/store-gateway/ring"},
