@@ -60,7 +60,6 @@
     "react-svg-loader": "^3.0.3",
     "sass": "^1.60.0",
     "ts-jest": "^29.1.0",
-    "tsconfig-paths-jest": "^0.0.1",
     "tsconfig-paths-webpack-plugin": "^4.0.1",
     "webpack": "^5.77.0",
     "webpack-cli": "^5.0.1",

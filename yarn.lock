@@ -14123,11 +14123,6 @@ ts-node@^10.4.0:
     v8-compile-cache-lib "^3.0.1"
     yn "3.1.1"
 
-tsconfig-paths-jest@^0.0.1:
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/tsconfig-paths-jest/-/tsconfig-paths-jest-0.0.1.tgz#a977a5648c434037b69884e644ce1b82bf025b68"
-  integrity sha512-YKhUKqbteklNppC2NqL7dv1cWF8eEobgHVD5kjF1y9Q4ocqpBiaDlYslQ9eMhtbqIPRrA68RIEXqknEjlxdwxw==
-
 tsconfig-paths-webpack-plugin@^4.0.1:
   version "4.0.1"
   resolved "https://registry.yarnpkg.com/tsconfig-paths-webpack-plugin/-/tsconfig-paths-webpack-plugin-4.0.1.tgz#a24651d0f69668a1abad38d3c2489855c257460d"
