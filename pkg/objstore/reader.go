@@ -46,7 +46,7 @@ type ReaderAt struct {
 func (b *ReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
 	rc, err := b.GetRangeReader.GetRange(b.ctx, b.name, off, int64(len(p)))
 	if err != nil {
-		return -1, err
+		return 0, err
 	}
 	defer rc.Close()
 
@@ -57,7 +57,7 @@ func (b *ReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
 			return totalBytes, nil
 		}
 		if err != nil {
-			return -1, err
+			return 0, err
 		}
 		if byteCount == 0 {
 			return totalBytes, nil

@@ -4,16 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/model"
 
 	"github.com/grafana/phlare/pkg/phlaredb"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
-	"github.com/grafana/phlare/pkg/util"
 )
 
 type BlockCloser interface {
@@ -51,19 +47,9 @@ func (bs *BucketStore) createBlock(ctx context.Context, meta *block.Meta) (*Bloc
 		}
 	}
 
-	blk := phlaredb.NewSingleBlockQuerierFromMeta(ctx, bs.bucket, meta)
-	// Load the block into memory if it's within the last 24 hours.
-	// Todo make this configurable
-	if blk.InRange(model.Now().Add(-24*time.Hour), model.Now()) {
-		go func() {
-			if err := blk.Open(ctx); err != nil {
-				level.Error(util.Logger).Log("msg", "open block", "err", err)
-			}
-		}()
-	}
 	return &Block{
 		meta:        meta,
 		logger:      bs.logger,
-		BlockCloser: blk,
+		BlockCloser: phlaredb.NewSingleBlockQuerierFromMeta(ctx, bs.bucket, meta),
 	}, nil
 }

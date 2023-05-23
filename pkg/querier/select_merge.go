@@ -478,7 +478,7 @@ func selectMergeSeries(ctx context.Context, responses []responseFromIngesters[cl
 		s := s
 		seriesIters = append(seriesIters, newSeriesIterator(s.Labels, s.Points))
 	}
-	return iter.NewSortProfileIterator(seriesIters), nil
+	return iter.NewMergeIterator(ProfileValue{Ts: math.MaxInt64}, false, seriesIters...), nil
 }
 
 type seriesIterator struct {

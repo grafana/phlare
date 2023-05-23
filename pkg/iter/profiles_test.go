@@ -1,6 +1,7 @@
 package iter
 
 import (
+	"math"
 	"testing"
 
 	"github.com/prometheus/common/model"
@@ -28,42 +29,113 @@ func (p profile) Timestamp() model.Time {
 	return model.Time(p.timestamp)
 }
 
-func TestSortProfiles(t *testing.T) {
-	it := NewSortProfileIterator([]Iterator[profile]{
-		NewSliceIterator([]profile{
-			{labels: aLabels, timestamp: 1},
-			{labels: aLabels, timestamp: 2},
-			{labels: aLabels, timestamp: 3},
-		}),
-		NewSliceIterator([]profile{
-			{labels: bLabels, timestamp: 1},
-			{labels: bLabels, timestamp: 2},
-			{labels: bLabels, timestamp: 3},
-		}),
-		NewSliceIterator([]profile{
-			{labels: cLabels, timestamp: 1},
-			{labels: cLabels, timestamp: 2},
-			{labels: cLabels, timestamp: 3},
-		}),
-	})
-
-	actual := []profile{}
-	for it.Next() {
-		actual = append(actual, it.At())
+func TestMergeIterator(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		deduplicate bool
+		input       [][]profile
+		expected    []profile
+	}{
+		{
+			name:        "deduplicate exact",
+			deduplicate: true,
+			input: [][]profile{
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: aLabels, timestamp: 2},
+					{labels: aLabels, timestamp: 3},
+				},
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: aLabels, timestamp: 2},
+					{labels: aLabels, timestamp: 3},
+				},
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: aLabels, timestamp: 2},
+					{labels: aLabels, timestamp: 3},
+				},
+			},
+			expected: []profile{
+				{labels: aLabels, timestamp: 1},
+				{labels: aLabels, timestamp: 2},
+				{labels: aLabels, timestamp: 3},
+			},
+		},
+		{
+			name: "no deduplicate",
+			input: [][]profile{
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: aLabels, timestamp: 2},
+					{labels: aLabels, timestamp: 3},
+				},
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: aLabels, timestamp: 3},
+				},
+				{
+					{labels: aLabels, timestamp: 2},
+				},
+			},
+			expected: []profile{
+				{labels: aLabels, timestamp: 1},
+				{labels: aLabels, timestamp: 1},
+				{labels: aLabels, timestamp: 2},
+				{labels: aLabels, timestamp: 2},
+				{labels: aLabels, timestamp: 3},
+				{labels: aLabels, timestamp: 3},
+			},
+		},
+		{
+			name:        "deduplicate and sort",
+			deduplicate: true,
+			input: [][]profile{
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: aLabels, timestamp: 2},
+					{labels: aLabels, timestamp: 3},
+					{labels: aLabels, timestamp: 4},
+				},
+				{
+					{labels: aLabels, timestamp: 1},
+					{labels: cLabels, timestamp: 2},
+					{labels: aLabels, timestamp: 3},
+				},
+				{
+					{labels: aLabels, timestamp: 2},
+					{labels: bLabels, timestamp: 4},
+				},
+			},
+			expected: []profile{
+				{labels: aLabels, timestamp: 1},
+				{labels: aLabels, timestamp: 2},
+				{labels: cLabels, timestamp: 2},
+				{labels: aLabels, timestamp: 3},
+				{labels: aLabels, timestamp: 4},
+				{labels: bLabels, timestamp: 4},
+			},
+		},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			iters := make([]Iterator[profile], len(tt.input))
+			for i, input := range tt.input {
+				iters[i] = NewSliceIterator(input)
+			}
+			it := NewMergeIterator(
+				profile{timestamp: math.MaxInt64},
+				tt.deduplicate,
+				iters...)
+			actual := []profile{}
+			for it.Next() {
+				actual = append(actual, it.At())
+			}
+			require.NoError(t, it.Err())
+			require.NoError(t, it.Close())
+			require.Equal(t, tt.expected, actual)
+		})
 	}
-	require.NoError(t, it.Err())
-	require.NoError(t, it.Close())
-	require.Equal(t, []profile{
-		{labels: aLabels, timestamp: 1},
-		{labels: bLabels, timestamp: 1},
-		{labels: cLabels, timestamp: 1},
-		{labels: aLabels, timestamp: 2},
-		{labels: bLabels, timestamp: 2},
-		{labels: cLabels, timestamp: 2},
-		{labels: aLabels, timestamp: 3},
-		{labels: bLabels, timestamp: 3},
-		{labels: cLabels, timestamp: 3},
-	}, actual)
 }
 
 // todo test timedRangeIterator

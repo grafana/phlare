@@ -21,6 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	phlareobj "github.com/grafana/phlare/pkg/objstore"
+	"github.com/grafana/phlare/pkg/phlaredb"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 )
 
@@ -39,6 +40,7 @@ type BucketStore struct {
 
 	filters []BlockMetaFilter
 	metrics *Metrics
+	stats   storegateway.BucketStoreStats
 }
 
 func NewBucketStore(bucket phlareobj.Bucket, tenantID string, syncDir string, filters []BlockMetaFilter, logger log.Logger, Metrics *Metrics) (*BucketStore, error) {
@@ -87,7 +89,6 @@ func (b *BucketStore) InitialSync(ctx context.Context) error {
 			level.Warn(b.logger).Log("msg", "failed to remove block which is not needed", "err", err)
 		}
 	}
-
 	return nil
 }
 
@@ -146,6 +147,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}
 		level.Info(s.logger).Log("msg", "dropped outdated block", "block", id)
 	}
+	s.stats.BlocksLoaded = len(s.blocks)
 
 	return nil
 }
@@ -169,22 +171,44 @@ func (bs *BucketStore) addBlock(ctx context.Context, meta *block.Meta) (err erro
 
 	bs.metrics.blockLoads.Inc()
 
-	bs.blocksMx.Lock()
-	defer bs.blocksMx.Unlock()
-	b, err := bs.createBlock(ctx, meta)
+	b, err := func() (*Block, error) {
+		bs.blocksMx.Lock()
+		defer bs.blocksMx.Unlock()
+		b, err := bs.createBlock(ctx, meta)
+		if err != nil {
+			return nil, errors.Wrap(err, "load block from disk")
+		}
+		if err = bs.blockSet.add(b); err != nil {
+			return nil, errors.Wrap(err, "add block to set")
+		}
+		bs.blocks[meta.ULID] = b
+		return b, nil
+	}()
 	if err != nil {
-		return errors.Wrap(err, "load block from disk")
+		return err
 	}
-	if err = bs.blockSet.add(b); err != nil {
-		return errors.Wrap(err, "add block to set")
-	}
-	bs.blocks[meta.ULID] = b
+	// Load the block into memory if it's within the last 24 hours.
+	// Todo make this configurable
+	if phlaredb.InRange(b, model.Now().Add(-24*time.Hour), model.Now()) {
+		level.Debug(bs.logger).Log("msg", "opening block",
+			"id", meta.ULID.String(),
+			"min", b.meta.MinTime.Time().Format(time.RFC3339),
+			"max", b.meta.MaxTime.Time().Format(time.RFC3339),
+		)
 
+		start := time.Now()
+		defer func() {
+			level.Info(bs.logger).Log("msg", "block opened", "duration", time.Since(start), "id", meta.ULID.String())
+		}()
+		if err := b.Open(ctx); err != nil {
+			level.Error(bs.logger).Log("msg", "open block", "err", err)
+		}
+	}
 	return nil
 }
 
 func (b *BucketStore) Stats() storegateway.BucketStoreStats {
-	return storegateway.BucketStoreStats{}
+	return b.stats
 }
 
 func (s *BucketStore) removeBlock(id ulid.ULID) (returnErr error) {
@@ -225,13 +249,9 @@ func (s *BucketStore) localPath(id string) string {
 
 // RemoveBlocksAndClose remove all blocks from local disk and releases all resources associated with the BucketStore.
 func (s *BucketStore) RemoveBlocksAndClose() error {
-	// todo cleanup
-	// err := s.removeAllBlocks()
-
-	// // Release other resources even if it failed to close some blocks.
-	// s.indexReaderPool.Close()
-
-	// return err
+	if err := os.RemoveAll(s.syncDir); err != nil {
+		return errors.Wrap(err, "delete block")
+	}
 	return nil
 }
 

@@ -99,9 +99,9 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 	return iter.NewSliceIterator(profiles), nil
 }
 
-func (q *headOnDiskQuerier) InRange(start, end model.Time) bool {
+func (q *headOnDiskQuerier) Bounds() (model.Time, model.Time) {
 	// TODO: Use per rowgroup information
-	return q.head.InRange(start, end)
+	return q.head.Bounds()
 }
 
 func (q *headOnDiskQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
@@ -204,12 +204,12 @@ func (q *headInMemoryQuerier) SelectMatchingProfiles(ctx context.Context, params
 		)
 	}
 
-	return iter.NewSortProfileIterator(iters), nil
+	return iter.NewMergeIterator(maxBlockProfile, false, iters...), nil
 }
 
-func (q *headInMemoryQuerier) InRange(start, end model.Time) bool {
+func (q *headInMemoryQuerier) Bounds() (model.Time, model.Time) {
 	// TODO: Use per rowgroup information
-	return q.head.InRange(start, end)
+	return q.head.Bounds()
 }
 
 func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {

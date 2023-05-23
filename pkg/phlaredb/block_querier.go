@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -295,10 +296,6 @@ type minMax struct {
 	min, max model.Time
 }
 
-func (mm *minMax) InRange(start, end model.Time) bool {
-	return block.InRange(mm.min, mm.max, start, end)
-}
-
 type singleBlockQuerier struct {
 	logger  log.Logger
 	metrics *blocksMetrics
@@ -376,8 +373,8 @@ func (b *singleBlockQuerier) Close() error {
 	return errs.Err()
 }
 
-func (b *singleBlockQuerier) InRange(start, end model.Time) bool {
-	return b.meta.InRange(start, end)
+func (b *singleBlockQuerier) Bounds() (model.Time, model.Time) {
+	return b.meta.MinTime, b.meta.MaxTime
 }
 
 // reconstructMeta can regenerate a missing metadata file from the parquet structures
@@ -479,7 +476,7 @@ type Profile interface {
 }
 
 type Querier interface {
-	InRange(start, end model.Time) bool
+	Bounds() (model.Time, model.Time)
 	SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error)
 	MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error)
 	MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error)
@@ -487,6 +484,17 @@ type Querier interface {
 	Open(ctx context.Context) error
 	// Sorts profiles for retrieval.
 	Sort([]Profile) []Profile
+}
+
+func InRange(q Querier, start, end model.Time) bool {
+	min, max := q.Bounds()
+	if start > max {
+		return false
+	}
+	if end < min {
+		return false
+	}
+	return true
 }
 
 type Queriers []Querier
@@ -508,8 +516,6 @@ func (queriers Queriers) Open(ctx context.Context) error {
 
 func (queriers Queriers) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
 	iters := make([]iter.Iterator[Profile], 0, len(queriers))
-	// todo: if blocks overlap in time we should be deduping
-	// otherwise we can just append
 	for _, q := range queriers {
 		it, err := q.SelectMatchingProfiles(ctx, params)
 		if err != nil {
@@ -518,13 +524,13 @@ func (queriers Queriers) SelectMatchingProfiles(ctx context.Context, params *ing
 		iters = append(iters, it)
 	}
 
-	return iter.NewSortProfileIterator(iters), nil
+	return iter.NewMergeIterator(maxBlockProfile, true, iters...), nil
 }
 
 func (queriers Queriers) ForTimeRange(_ context.Context, start, end model.Time) (Queriers, error) {
 	result := make(Queriers, 0, len(queriers))
 	for _, q := range queriers {
-		if q.InRange(start, end) {
+		if InRange(q, start, end) {
 			result = append(result, q)
 		}
 	}
@@ -814,6 +820,10 @@ func MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1
 	return nil
 }
 
+var maxBlockProfile Profile = BlockProfile{
+	ts: model.Time(math.MaxInt64),
+}
+
 type BlockProfile struct {
 	labels phlaremodel.Labels
 	fp     model.Fingerprint
@@ -915,7 +925,7 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
 	}
 
-	return iter.NewSortProfileIterator(iters), nil
+	return iter.NewMergeIterator(maxBlockProfile, false, iters...), nil
 }
 
 func (b *singleBlockQuerier) Sort(in []Profile) []Profile {
