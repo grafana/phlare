@@ -65,9 +65,13 @@ module.exports = {
         __dirname,
         '../../public/app/redux/hooks'
       ),
+      '@webapp/models/app': path.resolve(
+        __dirname,
+        '../../public/app/overrides/models/app'
+      ),
       '@webapp/services/apps': path.resolve(
         __dirname,
-        '../../public/app/overrides/services/appNames'
+        '../../public/app/overrides/services/apps'
       ),
       '@webapp/services/render': path.resolve(
         __dirname,
