@@ -44,9 +44,17 @@ module.exports = {
         __dirname,
         '../../public/app/overrides/components/TimelineChart/ContextMenu.plugin'
       ),
+      //'@webapp/components/AppSelector': path.resolve(
+      //  __dirname,
+      //  '../../public/app/overrides/components/AppSelector/AppSelector'
+      //),
       '@webapp/components/AppSelector/Label': path.resolve(
         __dirname,
         '../../public/app/overrides/components/AppSelector/Label'
+      ),
+      '@webapp/components/Toolbar': path.resolve(
+        __dirname,
+        '../../public/app/overrides/components/Toolbar'
       ),
       '@webapp/ui/Sidebar': path.resolve(
         __dirname,

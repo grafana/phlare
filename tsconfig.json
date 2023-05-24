@@ -25,6 +25,9 @@
       "@webapp/components/AppSelector/Label": [
         "./public/app/overrides/components/AppSelector/Label"
       ],
+      "@webapp/components/Toolbar": [
+        "./public/app/overrides/components/Toolbar"
+      ],
       "@webapp/ui/Sidebar": ["./public/app/overrides/ui/Sidebar"],
       "@webapp/util/baseurl": ["./public/app/overrides/util/baseurl"],
 

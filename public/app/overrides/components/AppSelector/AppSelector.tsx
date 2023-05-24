@@ -1,3 +1,4 @@
+export * from '@pyroscope/webapp/javascript/components/AppSelector';
 //import React, { useState, useEffect, useMemo } from 'react';
 //import ModalWithToggle from '@webapp/ui/Modals/ModalWithToggle';
 //import Input from '@webapp/ui/Input';
@@ -5,10 +6,6 @@
 //import SelectButton from '@webapp/components/AppSelector/SelectButton';
 //import { Label, LabelString } from '@webapp/components/AppSelector/Label';
 //import styles from './AppSelector.module.scss';
-
-export default function AppSelector() {
-  return <div>hey</div>;
-}
 
 //interface AppSelectorProps {
 //  /** Triggered when an app is selected */
@@ -19,6 +16,7 @@ export default function AppSelector() {
 //
 //  selectedAppName: string;
 //}
+//
 //
 //const AppSelector = ({
 //  onSelected,
