@@ -189,18 +189,6 @@ func Test_TreeMerge(t *testing.T) {
 			})
 		}
 	})
-
-	t.Run("mergeTree", func(t *testing.T) {
-		// mergeTree may produce unexpected result.
-		t.Skip()
-		for _, tc := range testCases() {
-			tc := tc
-			t.Run(tc.description, func(t *testing.T) {
-				mergeTree(tc.dst, tc.src)
-				require.Equal(t, tc.expected.String(), tc.dst.String())
-			})
-		}
-	})
 }
 
 func Test_Tree_MarshalUnmarshal(t *testing.T) {
@@ -232,4 +220,81 @@ func Test_Tree_MarshalUnmarshal(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expected.String(), actual.String())
 	})
+}
+
+func emptyTree() *Tree {
+	return &Tree{}
+}
+
+func newTree(stacks []stacktraces) *Tree {
+	t := emptyTree()
+	for _, stack := range stacks {
+		if stack.value == 0 {
+			continue
+		}
+		if t == nil {
+			t = stackToTree(stack)
+			continue
+		}
+		t.Merge(stackToTree(stack))
+	}
+	return t
+}
+
+type stacktraces struct {
+	locations []string
+	value     int64
+}
+
+func (t *Tree) add(name string, self, total int64) *node {
+	new := &node{
+		name:  name,
+		self:  self,
+		total: total,
+	}
+	t.root = append(t.root, new)
+	return new
+}
+
+func stackToTree(stack stacktraces) *Tree {
+	t := emptyTree()
+	if len(stack.locations) == 0 {
+		return t
+	}
+	current := &node{
+		self:  stack.value,
+		total: stack.value,
+		name:  stack.locations[0],
+	}
+	if len(stack.locations) == 1 {
+		t.root = append(t.root, current)
+		return t
+	}
+	remaining := stack.locations[1:]
+	for len(remaining) > 0 {
+
+		location := remaining[0]
+		name := location
+		remaining = remaining[1:]
+
+		// This pack node with the same name as the next location
+		// Disable for now but we might want to introduce it if we find it useful.
+		// for len(remaining) != 0 {
+		// 	if remaining[0].function == name {
+		// 		remaining = remaining[1:]
+		// 		continue
+		// 	}
+		// 	break
+		// }
+
+		parent := &node{
+			children: []*node{current},
+			total:    current.total,
+			name:     name,
+		}
+		current.parent = parent
+		current = parent
+	}
+	t.root = []*node{current}
+	return t
 }
