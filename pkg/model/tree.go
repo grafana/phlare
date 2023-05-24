@@ -127,30 +127,6 @@ func (n *node) add(name string, self, total int64) *node {
 	return new
 }
 
-// Walks into root nodes to find a node, return the latest common parent visited.
-func findNodeOrParent(root []*node, new *node) (parent, found, toMerge *node) {
-	current := new
-	var lastParent *node
-	remaining := root
-	for len(remaining) > 0 {
-		n := remaining[0]
-		remaining = remaining[1:]
-		// we found the common parent so we go down
-		if n.name == current.name {
-			// we reach the end of the new path to find.
-			if len(current.children) == 0 {
-				return lastParent, n, current
-			}
-			lastParent = n
-			remaining = n.children
-			current = current.children[0]
-			continue
-		}
-	}
-
-	return lastParent, nil, current
-}
-
 // minValue returns the minimum "total" value a node in a tree has to have to show up in
 // the resulting flamegraph
 func (t *Tree) minValue(maxNodes int64) int64 {
