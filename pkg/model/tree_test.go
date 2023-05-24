@@ -220,6 +220,34 @@ func Test_Tree_MarshalUnmarshal(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expected.String(), actual.String())
 	})
+
+	t.Run("truncation", func(t *testing.T) {
+		fullTree := newTree([]stacktraces{
+			{locations: []string{"c", "b", "a"}, value: 1},
+			{locations: []string{"c", "b", "a"}, value: 1},
+			{locations: []string{"c1", "b", "a"}, value: 1},
+			{locations: []string{"c", "b1", "a"}, value: 1},
+			{locations: []string{"c1", "b1", "a"}, value: 1},
+			{locations: []string{"c", "b", "a1"}, value: 1},
+			{locations: []string{"c1", "b", "a1"}, value: 1},
+			{locations: []string{"c", "b1", "a1"}, value: 1},
+			{locations: []string{"c1", "b1", "a1"}, value: 1},
+		})
+
+		var buf bytes.Buffer
+		require.NoError(t, fullTree.MarshalTruncate(&buf, 3))
+
+		actual, err := UnmarshalTree(buf.Bytes())
+		require.NoError(t, err)
+
+		expected := newTree([]stacktraces{
+			{locations: []string{"other", "b", "a"}, value: 3},
+			{locations: []string{"other", "a"}, value: 2},
+			{locations: []string{"other", "a1"}, value: 4},
+		})
+
+		require.Equal(t, expected.String(), actual.String())
+	})
 }
 
 func emptyTree() *Tree {
@@ -253,6 +281,17 @@ func (t *Tree) add(name string, self, total int64) *node {
 		total: total,
 	}
 	t.root = append(t.root, new)
+	return new
+}
+
+func (n *node) add(name string, self, total int64) *node {
+	new := &node{
+		parent: n,
+		name:   name,
+		self:   self,
+		total:  total,
+	}
+	n.children = append(n.children, new)
 	return new
 }
 

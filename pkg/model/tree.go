@@ -16,6 +16,13 @@ type Tree struct {
 	root []*node
 }
 
+type node struct {
+	parent      *node
+	children    []*node
+	self, total int64
+	name        string
+}
+
 func (t Tree) String() string {
 	type branch struct {
 		nodes []*node
@@ -61,12 +68,19 @@ func (t *Tree) InsertStack(v int64, stack ...string) {
 	t.root = r.children
 }
 
+// Default Depth First Search slice capacity. The value should be equal
+// to the number of all the siblings of the tree leaf ascendants.
+//
+// Chosen empirically. For very deep stacks (>128), it's likely that the
+// slice will grow to 1-4K nodes, depending on the trace branching.
+const defaultDFSSize = 128
+
 func (t *Tree) Merge(src *Tree) {
-	srcNodes := make([]*node, 0, 128)
+	srcNodes := make([]*node, 0, defaultDFSSize)
 	srcRoot := &node{children: src.root}
 	srcNodes = append(srcNodes, srcRoot)
 
-	dstNodes := make([]*node, 0, 128)
+	dstNodes := make([]*node, 0, defaultDFSSize)
 	dstRoot := &node{children: t.root}
 	dstNodes = append(dstNodes, dstRoot)
 
@@ -89,6 +103,10 @@ func (t *Tree) Merge(src *Tree) {
 	t.root = dstRoot.children
 }
 
+func (n *node) String() string {
+	return fmt.Sprintf("{%s: self %d total %d}", n.name, n.self, n.total)
+}
+
 func (n *node) insert(name string) *node {
 	i := sort.Search(len(n.children), func(i int) bool {
 		return n.children[i].name >= name
@@ -97,34 +115,12 @@ func (n *node) insert(name string) *node {
 		return n.children[i]
 	}
 	// We don't clone the name: it is caller responsibility
-	// to maintain memory ownership.
+	// to maintain the memory ownership.
 	child := &node{parent: n, name: name}
 	n.children = append(n.children, child)
 	copy(n.children[i+1:], n.children[i:])
 	n.children[i] = child
 	return child
-}
-
-type node struct {
-	parent      *node
-	children    []*node
-	self, total int64
-	name        string
-}
-
-func (n *node) String() string {
-	return fmt.Sprintf("{%s: self %d total %d}", n.name, n.self, n.total)
-}
-
-func (n *node) add(name string, self, total int64) *node {
-	new := &node{
-		parent: n,
-		name:   name,
-		self:   self,
-		total:  total,
-	}
-	n.children = append(n.children, new)
-	return new
 }
 
 // minValue returns the minimum "total" value a node in a tree has to have to show up in
@@ -133,32 +129,33 @@ func (t *Tree) minValue(maxNodes int64) int64 {
 	if maxNodes == -1 { // -1 means show all nodes
 		return 0
 	}
-	nodes := t.root
 
-	mh := &minHeap{}
-	heap.Init(mh)
+	// We should not re-use t.root capacity for nodes.
+	nodes := make([]*node, len(t.root), max(int64(len(t.root)), defaultDFSSize))
+	copy(nodes, t.root)
+	s := make(minHeap, 0, maxNodes)
+	h := &s
 
+	var n *node
 	for len(nodes) > 0 {
-		node := nodes[0]
-		nodes = nodes[1:]
-		number := node.total
-
-		if mh.Len() < int(maxNodes) {
-			heap.Push(mh, number)
-		} else {
-			if number > (*mh)[0] {
-				heap.Pop(mh)
-				heap.Push(mh, number)
-				nodes = append(node.children, nodes...)
+		last := len(nodes) - 1
+		n, nodes = nodes[last], nodes[:last]
+		if h.Len() >= int(maxNodes) {
+			if n.total > (*h)[0] {
+				heap.Pop(h)
+			} else {
+				continue
 			}
 		}
+		heap.Push(h, n.total)
+		nodes = append(nodes, n.children...)
 	}
 
-	if mh.Len() < int(maxNodes) {
+	if h.Len() < int(maxNodes) {
 		return 0
 	}
 
-	return (*mh)[0]
+	return (*h)[0]
 }
 
 // minHeap is a custom min-heap data structure that stores integers.
@@ -200,12 +197,16 @@ func (t *Tree) MarshalTruncate(w io.Writer, maxNodes int64) (err error) {
 	if len(t.root) == 0 {
 		return nil
 	}
+
 	vw := varint.NewWriter()
 	minVal := t.minValue(maxNodes)
-	nodes := t.root
-	// Virtual root node.
-	n := &node{children: t.root}
+	nodes := make([]*node, 1, defaultDFSSize)
+	nodes[0] = &node{children: t.root} // Virtual root node.
+	var n *node
+
 	for len(nodes) > 0 {
+		last := len(nodes) - 1
+		n, nodes = nodes[last], nodes[:last]
 		if _, _ = vw.Write(w, uint64(len(n.name))); err != nil {
 			return err
 		}
@@ -215,18 +216,19 @@ func (t *Tree) MarshalTruncate(w io.Writer, maxNodes int64) (err error) {
 		if _, err = vw.Write(w, uint64(n.self)); err != nil {
 			return err
 		}
-		children := n.children
-		n.children = n.children[:0]
 
 		var other int64
-		for _, cn := range children {
-			isOtherNode := cn.name == lostDuringSerializationName
-			if cn.total >= minVal || isOtherNode {
-				n.children = append(n.children, cn)
+		var j int
+		for _, cn := range n.children {
+			if cn.total >= minVal || cn.name == lostDuringSerializationName {
+				n.children[j] = cn
+				j++
 			} else {
 				other += cn.total
 			}
 		}
+
+		n.children = n.children[:j]
 		if other > 0 {
 			o := n.insert(lostDuringSerializationName)
 			o.total += other
@@ -234,14 +236,11 @@ func (t *Tree) MarshalTruncate(w io.Writer, maxNodes int64) (err error) {
 		}
 
 		if len(n.children) > 0 {
-			nodes = append(n.children, nodes...)
-		} else {
-			n.children = nil // Just to make it eligible for GC.
+			nodes = append(nodes, n.children...)
 		}
 		if _, err = vw.Write(w, uint64(len(n.children))); err != nil {
 			return err
 		}
-		n, nodes = nodes[0], nodes[1:]
 	}
 
 	return nil
@@ -303,7 +302,7 @@ func UnmarshalTree(b []byte) (*Tree, error) {
 		}
 	}
 
-	// Virtual root.
+	// Remove the virtual root.
 	t.root = root.children[0].children
 
 	return t, nil

@@ -271,10 +271,6 @@ func (r *functionsRewriter) rewrite(stack []int32) {
 // stacktraceTree represents a profile built from a collection of StacktraceSamples.
 type stacktraceTree struct{ nodes []stacktraceNode }
 
-const otherStubReference = -1
-
-var otherStubBytes = []byte("other")
-
 type stacktraceNode struct {
 	i     int32
 	fc    int32
@@ -373,6 +369,10 @@ func (t *stacktraceTree) minValue(maxNodes int64) int64 {
 	return (*mh)[0]
 }
 
+const lostDuringSerializationNameReference = -1
+
+var lostDuringSerializationNameBytes = []byte(lostDuringSerializationName)
+
 func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, funcs []string) {
 	if len(t.nodes) == 0 || len(funcs) == 0 {
 		return
@@ -390,13 +390,13 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, funcs []string) {
 		current, nodes, children = nodes[len(nodes)-1], nodes[:len(nodes)-1], children[:0]
 		var truncated int64
 		n := &t.nodes[current]
-		if n.fid == otherStubReference {
+		if n.fid == lostDuringSerializationNameReference {
 			goto write
 		}
 
 		for x := n.fc; x > 0; {
 			child := &t.nodes[x]
-			if child.total >= min && child.fid != otherStubReference {
+			if child.total >= min && child.fid != lostDuringSerializationNameReference {
 				children = append(children, x)
 			} else {
 				truncated += child.total
@@ -406,7 +406,7 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, funcs []string) {
 
 		if truncated > 0 {
 			// Create a stub for removed nodes.
-			s := t.newNode(otherStubReference)
+			s := t.newNode(lostDuringSerializationNameReference)
 			s.val = truncated
 			t.nodes[s.i] = *s
 			children = append(children, s.i)
@@ -423,8 +423,8 @@ func (t *stacktraceTree) bytes(dst io.Writer, maxNodes int64, funcs []string) {
 			// It is guaranteed that funcs slice and its contents are immutable,
 			// and the byte slice backing capacity is managed by GC.
 			name = unsafeStringBytes(funcs[n.fid])
-		case otherStubReference:
-			name = otherStubBytes
+		case lostDuringSerializationNameReference:
+			name = lostDuringSerializationNameBytes
 		}
 
 		_, _ = vw.Write(dst, uint64(len(name)))
