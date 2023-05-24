@@ -33,14 +33,12 @@ import (
 )
 
 type Config struct {
-	PoolConfig      clientpool.PoolConfig `yaml:"pool_config,omitempty"`
-	ExtraQueryDelay time.Duration         `yaml:"extra_query_delay,omitempty"`
+	PoolConfig clientpool.PoolConfig `yaml:"pool_config,omitempty"`
 }
 
 // RegisterFlags registers distributor-related flags.
 func (cfg *Config) RegisterFlags(fs *flag.FlagSet) {
 	cfg.PoolConfig.RegisterFlagsWithPrefix("querier", fs)
-	fs.DurationVar(&cfg.ExtraQueryDelay, "querier.extra-query-delay", 0, "Time to wait before sending more than the minimum successful query requests.")
 }
 
 type Querier struct {
@@ -51,8 +49,6 @@ type Querier struct {
 	cfg    Config
 	logger log.Logger
 
-	ingestersRing   ring.ReadRing
-	pool            *ring_client.Pool
 	ingesterQuerier *IngesterQuerier
 }
 
@@ -68,20 +64,23 @@ func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactor
 	})
 
 	q := &Querier{
-		cfg:           cfg,
-		logger:        logger,
-		ingestersRing: ingestersRing,
-		pool:          clientpool.NewPool(cfg.PoolConfig, ingestersRing, factory, clientsMetrics, logger, clientsOptions...),
+		cfg:    cfg,
+		logger: logger,
+		ingesterQuerier: NewIngesterQuerier(
+			clientpool.NewPool(cfg.PoolConfig, ingestersRing, factory, clientsMetrics, logger, clientsOptions...),
+			ingestersRing,
+		),
+		// todo wire store gateway querier.
 	}
 	var err error
-	q.subservices, err = services.NewManager(q.pool)
+	// should we watch for the ring module status ?
+	q.subservices, err = services.NewManager(q.ingesterQuerier.pool)
 	if err != nil {
 		return nil, errors.Wrap(err, "services manager")
 	}
 	q.subservicesWatcher = services.NewFailureWatcher()
 	q.subservicesWatcher.WatchManager(q.subservices)
 	q.Service = services.NewBasicService(q.starting, q.running, q.stopping)
-	q.ingesterQuerier = NewIngesterQuerier(q.pool, ingestersRing, cfg.ExtraQueryDelay)
 	return q, nil
 }
 
@@ -206,7 +205,7 @@ func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.Ser
 	}
 	return connect.NewResponse(&querierv1.SeriesResponse{
 		LabelsSet: lo.UniqBy(
-			lo.FlatMap(responses, func(r responseFromIngesters[[]*typesv1.Labels], _ int) []*typesv1.Labels {
+			lo.FlatMap(responses, func(r ResponseFromReplica[[]*typesv1.Labels], _ int) []*typesv1.Labels {
 				return r.response
 			}),
 			func(t *typesv1.Labels) uint64 {
@@ -303,9 +302,7 @@ func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStac
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(_ context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesStacktraces, error) {
-		// we plan to use those streams to merge profiles
-		// so we use the main context here otherwise will be canceled
+	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesStacktraces, error) {
 		return ic.MergeProfilesStacktraces(ctx), nil
 	})
 	if err != nil {
@@ -361,9 +358,7 @@ func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[q
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(_ context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesPprof, error) {
-		// we plan to use those streams to merge profiles
-		// so we use the main context here otherwise will be canceled
+	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesPprof, error) {
 		return ic.MergeProfilesPprof(ctx), nil
 	})
 	if err != nil {
@@ -437,7 +432,7 @@ func (q *Querier) SelectSeries(ctx context.Context, req *connect.Request[querier
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(_ context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesLabels, error) {
+	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesLabels, error) {
 		return ic.MergeProfilesLabels(ctx), nil
 	})
 	if err != nil {
@@ -532,7 +527,7 @@ Outer:
 	return series
 }
 
-func uniqueSortedStrings(responses []responseFromIngesters[[]string]) []string {
+func uniqueSortedStrings(responses []ResponseFromReplica[[]string]) []string {
 	total := 0
 	for _, r := range responses {
 		total += len(r.response)

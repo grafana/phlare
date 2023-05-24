@@ -66,7 +66,7 @@ func TestSelectMergeStacktraces(t *testing.T) {
 			},
 		},
 	})
-	res, err := selectMergeStacktraces(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
+	res, err := selectMergeStacktraces(context.Background(), []ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces]{
 		{
 			response: resp1,
 		},
@@ -92,7 +92,7 @@ func TestSelectMergeStacktraces(t *testing.T) {
 		{Ts: 5, Labels: &typesv1.Labels{Labels: foobarlabels}},
 		{Ts: 6, Labels: &typesv1.Labels{Labels: foobarlabels}},
 	})
-	res, err = selectMergeStacktraces(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
+	res, err = selectMergeStacktraces(context.Background(), []ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces]{
 		{
 			response: newFakeBidiClientStacktraces([]*ingestv1.ProfileSets{
 				{
@@ -171,7 +171,7 @@ func TestSelectMergeByLabels(t *testing.T) {
 		Points: []*typesv1.Point{{Timestamp: 5, Value: 5.0}, {Timestamp: 6, Value: 6.0}},
 	})
 
-	res, err := selectMergeSeries(context.Background(), []responseFromIngesters[clientpool.BidiClientMergeProfilesLabels]{
+	res, err := selectMergeSeries(context.Background(), []ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels]{
 		{
 			response: resp1,
 		},
@@ -217,7 +217,7 @@ func BenchmarkSelectMergeStacktraces(b *testing.B) {
 	seriesCount := 50
 	// todo stacktraces := 1000
 
-	responses := make([]responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces], clientsCount*rf)
+	responses := make([]ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces], clientsCount*rf)
 
 	for clientId := 0; clientId < clientsCount; clientId++ {
 		batches := make([]*ingestv1.ProfileSets, batchCount)
@@ -245,7 +245,7 @@ func BenchmarkSelectMergeStacktraces(b *testing.B) {
 			}
 		}
 		for replica := 0; replica < rf; replica++ {
-			responses[replica+(clientId*rf)] = responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]{
+			responses[replica+(clientId*rf)] = ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces]{
 				response: newFakeBidiClientStacktraces(batches),
 			}
 		}

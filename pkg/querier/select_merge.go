@@ -82,7 +82,7 @@ func NewMergeIterator[
 	R any,
 	Req Request,
 	Res Response,
-](ctx context.Context, r responseFromIngesters[BidiClientMerge[Req, Res]],
+](ctx context.Context, r ResponseFromReplica[BidiClientMerge[Req, Res]],
 ) *mergeIterator[R, Req, Res] {
 	it := &mergeIterator[R, Req, Res]{
 		bidi:           r.response,
@@ -283,7 +283,7 @@ type stacktraces struct {
 }
 
 // selectMergeStacktraces selects the  profile from each ingester by deduping them and request merges of stacktraces of them.
-func selectMergeStacktraces(ctx context.Context, responses []responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]) ([]stacktraces, error) {
+func selectMergeStacktraces(ctx context.Context, responses []ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces]) ([]stacktraces, error) {
 	span, ctx := opentracing.StartSpanFromContext(ctx, "selectMergeStacktraces")
 	defer span.Finish()
 
@@ -292,10 +292,10 @@ func selectMergeStacktraces(ctx context.Context, responses []responseFromIngeste
 	var wg sync.WaitGroup
 	for i, resp := range responses {
 		wg.Add(1)
-		go func(i int, resp responseFromIngesters[clientpool.BidiClientMergeProfilesStacktraces]) {
+		go func(i int, resp ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces]) {
 			defer wg.Done()
 			it := NewMergeIterator[*ingestv1.MergeProfilesStacktracesResult](
-				ctx, responseFromIngesters[BidiClientMerge[*ingestv1.MergeProfilesStacktracesRequest, *ingestv1.MergeProfilesStacktracesResponse]]{
+				ctx, ResponseFromReplica[BidiClientMerge[*ingestv1.MergeProfilesStacktracesRequest, *ingestv1.MergeProfilesStacktracesResponse]]{
 					addr:     resp.addr,
 					response: resp.response,
 				})
@@ -336,16 +336,16 @@ func selectMergeStacktraces(ctx context.Context, responses []responseFromIngeste
 }
 
 // selectMergePprofProfile selects the  profile from each ingester by deduping them and request merges of stacktraces in the pprof format.
-func selectMergePprofProfile(ctx context.Context, ty *typesv1.ProfileType, responses []responseFromIngesters[clientpool.BidiClientMergeProfilesPprof]) (*googlev1.Profile, error) {
+func selectMergePprofProfile(ctx context.Context, ty *typesv1.ProfileType, responses []ResponseFromReplica[clientpool.BidiClientMergeProfilesPprof]) (*googlev1.Profile, error) {
 	mergeResults := make([]MergeResult[[]byte], len(responses))
 	iters := make([]MergeIterator, len(responses))
 	var wg sync.WaitGroup
 	for i, resp := range responses {
 		wg.Add(1)
-		go func(i int, resp responseFromIngesters[clientpool.BidiClientMergeProfilesPprof]) {
+		go func(i int, resp ResponseFromReplica[clientpool.BidiClientMergeProfilesPprof]) {
 			defer wg.Done()
 			it := NewMergeIterator[[]byte](
-				ctx, responseFromIngesters[BidiClientMerge[*ingestv1.MergeProfilesPprofRequest, *ingestv1.MergeProfilesPprofResponse]]{
+				ctx, ResponseFromReplica[BidiClientMerge[*ingestv1.MergeProfilesPprofRequest, *ingestv1.MergeProfilesPprofResponse]]{
 					addr:     resp.addr,
 					response: resp.response,
 				})
@@ -429,16 +429,16 @@ func (p ProfileValue) Timestamp() model.Time {
 }
 
 // selectMergeSeries selects the  profile from each ingester by deduping them and request merges of total values.
-func selectMergeSeries(ctx context.Context, responses []responseFromIngesters[clientpool.BidiClientMergeProfilesLabels]) (iter.Iterator[ProfileValue], error) {
+func selectMergeSeries(ctx context.Context, responses []ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels]) (iter.Iterator[ProfileValue], error) {
 	mergeResults := make([]MergeResult[[]*typesv1.Series], len(responses))
 	iters := make([]MergeIterator, len(responses))
 	var wg sync.WaitGroup
 	for i, resp := range responses {
 		wg.Add(1)
-		go func(i int, resp responseFromIngesters[clientpool.BidiClientMergeProfilesLabels]) {
+		go func(i int, resp ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels]) {
 			defer wg.Done()
 			it := NewMergeIterator[[]*typesv1.Series](
-				ctx, responseFromIngesters[BidiClientMerge[*ingestv1.MergeProfilesLabelsRequest, *ingestv1.MergeProfilesLabelsResponse]]{
+				ctx, ResponseFromReplica[BidiClientMerge[*ingestv1.MergeProfilesLabelsRequest, *ingestv1.MergeProfilesLabelsResponse]]{
 					addr:     resp.addr,
 					response: resp.response,
 				})
