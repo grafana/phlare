@@ -2,11 +2,13 @@ package connectgrpc
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/bufbuild/connect-go"
 	"google.golang.org/protobuf/proto"
@@ -49,7 +51,7 @@ type GRPCHandler interface {
 	Handle(ctx context.Context, req *httpgrpc.HTTPRequest) (*httpgrpc.HTTPResponse, error)
 }
 
-func RoundTripUnary[Req any, Res any](rt GRPCRoundTripper, ctx context.Context, in *connect.Request[Req]) (*connect.Response[Res], error) {
+func RoundTripUnary[Req any, Res any](ctx context.Context, rt GRPCRoundTripper, in *connect.Request[Req]) (*connect.Response[Res], error) {
 	req, err := encodeRequest(in)
 	if err != nil {
 		return nil, err
@@ -61,15 +63,7 @@ func RoundTripUnary[Req any, Res any](rt GRPCRoundTripper, ctx context.Context, 
 	if res.Code/100 != 2 {
 		return nil, connect.NewError(HTTPToCode(res.Code), errors.New(string(res.Body)))
 	}
-	result := &connect.Response[Res]{
-		Msg: new(Res),
-	}
-
-	err = proto.Unmarshal(res.Body, result.Any().(proto.Message))
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	return decodeResponse[Res](res)
 }
 
 func encodeResponse[Req any](resp *connect.Response[Req]) (*httpgrpc.HTTPResponse, error) {
@@ -132,6 +126,42 @@ func encodeRequest[Req any](req *connect.Request[Req]) (*httpgrpc.HTTPRequest, e
 		return nil, err
 	}
 	return out, nil
+}
+
+func decodeResponse[Resp any](r *httpgrpc.HTTPResponse) (*connect.Response[Resp], error) {
+	if err := decompressResponse(r); err != nil {
+		return nil, err
+	}
+	resp := &connect.Response[Resp]{Msg: new(Resp)}
+	if err := proto.Unmarshal(r.Body, resp.Any().(proto.Message)); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func decompressResponse(r *httpgrpc.HTTPResponse) error {
+	for _, h := range r.Headers {
+		if h.Key == "Content-Encoding" {
+			for _, v := range h.Values {
+				switch {
+				default:
+					return fmt.Errorf("unsupported Content-Encoding")
+				case v == "":
+				case strings.EqualFold(v, "gzip"):
+					// bytes.Buffer implements flate.Reader, therefore
+					// a gzip reader does not allocate a buffers.
+					g, err := gzip.NewReader(bytes.NewBuffer(r.Body))
+					if err != nil {
+						return err
+					}
+					r.Body, err = io.ReadAll(g)
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 func CodeToHTTP(code connect.Code) int32 {

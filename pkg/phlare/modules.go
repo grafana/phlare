@@ -93,7 +93,7 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 		return nil, err
 	}
 	f.API.RegisterQueryFrontend(frontendSvc)
-	f.API.RegisterQuerier(querier.NewGRPCRoundTripper(frontendSvc))
+	f.API.RegisterQuerier(frontendSvc)
 
 	return frontendSvc, nil
 }
