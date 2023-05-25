@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ModalWithToggle from '@webapp/ui/Modals/ModalWithToggle';
 import Input from '@webapp/ui/Input';
-import { App } from '@webapp/models/app';
+import { App, appFromQuery, appToQuery } from '@webapp/models/app';
 import { parse, brandQuery, Query } from '@webapp/models/query';
 import cx from 'classnames';
 //import SelectButton from '@webapp/components/AppSelector/SelectButton';
@@ -21,7 +21,7 @@ interface AppSelectorProps {
   /** List of all applications */
   apps: App[];
 
-  selectedQuery: string;
+  selectedQuery: Query;
 }
 
 /**
@@ -47,28 +47,32 @@ export function AppSelector({
   apps,
   selectedQuery,
 }: AppSelectorProps) {
+  const selectedApp = appFromQuery(selectedQuery);
+
   return (
     <div className={styles.container}>
       <SelectorModalWithToggler
         apps={apps}
         onSelected={(app) => onSelected(appToQuery(app))}
-        selectedQuery={selectedQuery}
+        selectedApp={selectedApp}
       />
     </div>
   );
 }
 
-function appToQuery(app: App) {
-  return brandQuery(
-    `${app.__profile_type__}{pyroscope_app="${app.pyroscope_app}"}`
-  );
-}
-
+//ggfunction appToQuery(app: App) {
+//gg  return brandQuery(
+//gg    `${app.__profile_type__}{pyroscope_app="${app.pyroscope_app}"}`
+//gg  );
+//gg}
+//gg
 export const SelectorModalWithToggler = ({
   apps,
+  selectedApp,
   onSelected,
 }: {
   apps: App[];
+  selectedApp?: App;
   onSelected: (app: App) => void;
 }) => {
   const appNames = getAppNames(apps);
@@ -79,6 +83,7 @@ export const SelectorModalWithToggler = ({
 
   // TODO: use memo
   const matchedApps = findAppsWithName(apps, selectedAppName || '');
+  const label = 'Select an application';
 
   return (
     <ModalWithToggle
@@ -93,11 +98,11 @@ export const SelectorModalWithToggler = ({
           </div>
         ) : null
       }
-      toggleText={'TEST'}
+      toggleText={selectedApp ? appToQuery(selectedApp) : label}
       headerEl={
         <></> && (
           <>
-            <div className={styles.headerTitle}>{'TEST'}</div>
+            <div className={styles.headerTitle}>{label}</div>
             <Input
               name="application search"
               type="text"

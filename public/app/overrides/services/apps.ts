@@ -12,18 +12,32 @@ type SeriesResponse = {
   ];
 };
 
-const SeriesResponseSchema = z.object({
-  labelsSet: z.array(
-    z.object({
-      labels: z.array(
-        z.object({
-          name: z.string(),
-          value: z.string(),
-        })
-      ),
-    })
-  ),
-});
+const SeriesResponseSchema = z.preprocess(
+  (arg) => {
+    const noop = {
+      labelsSet: [],
+    };
+
+    // The backend may return an empty object ({})
+    if (!arg || !('labelsSet' in arg)) {
+      return noop;
+    }
+
+    return arg;
+  },
+  z.object({
+    labelsSet: z.array(
+      z.object({
+        labels: z.array(
+          z.object({
+            name: z.string(),
+            value: z.string(),
+          })
+        ),
+      })
+    ),
+  })
+);
 
 z.string()
   .transform((val) => val.length)
@@ -51,8 +65,8 @@ function addQueryAndName(v: ReturnType<typeof mergeLabels>) {
   return {
     ...v,
     query,
-    FOO: 'foo',
-    name: `${v[appTag]}.${v['__profile_type__']}`, // the app selector expects this
+    name: v[appTag],
+    //    name: `${v[appTag]}.${v['__profile_type__']}`, // the app selector expects this
   };
 }
 

@@ -4,16 +4,18 @@ export * from '@pyroscope/webapp/javascript/models/query';
 
 // ParseQuery parses a string of $app_name<{<$tag_matchers>}> form.
 // It assumes the query is well formed
-export function parse(query: Query): {
-  profileId: string;
-  tags?: Record<string, string>;
-} {
+export function parse(query: Query):
+  | {
+      profileId: string;
+      tags?: Record<string, string>;
+    }
+  | undefined {
   const regex = /(.+){(.*)}/;
   const match = query.match(regex);
 
   if (!match) {
     // TODO: return a Nothing() ?
-    return { profileId: '' };
+    return undefined;
   }
 
   const [_original, head, tail] = match;

@@ -2,9 +2,9 @@ import { brandQuery } from '@webapp/models/query';
 import { parse } from './query';
 
 const cases: Array<
-  [string, { profileId: string; tags?: Record<string, string> }]
+  [string, { profileId: string; tags?: Record<string, string> } | undefined]
 > = [
-  ['{}', { profileId: '' }],
+  ['{}', undefined],
   [
     'process_cpu:cpu:nanoseconds:cpu:nanoseconds{}',
     { profileId: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds' },

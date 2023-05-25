@@ -27,7 +27,8 @@ interface ToolbarProps {
 function Toolbar({ onSelectedApp, filterApp = () => true }: ToolbarProps) {
   const dispatch = useAppDispatch();
   const appNamesState = useAppSelector(selectAppNamesState);
-  const apps = useAppSelector(selectApps).filter((a) => filterApp(a.name));
+  const apps = useAppSelector(selectApps);
+  //const apps = useAppSelector(selectApps).filter((a) => filterApp(a.name));
   //  const appNames = apps.map((a) => a.name);
   const { query } = useAppSelector(selectQueries);
   const selectedQuery = query;
