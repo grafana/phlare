@@ -24,8 +24,8 @@ type headOnDiskQuerier struct {
 }
 
 func (q *headOnDiskQuerier) rowGroup() *rowGroupOnDisk {
-	q.head.profiles.lock.RLock()
-	defer q.head.profiles.lock.RUnlock()
+	q.head.profiles.rowsLock.RLock()
+	defer q.head.profiles.rowsLock.RUnlock()
 	return q.head.profiles.rowGroups[q.rowGroupIdx]
 }
 
@@ -114,6 +114,7 @@ func (q *headOnDiskQuerier) MergeByStacktraces(ctx context.Context, rows iter.It
 		return nil, err
 	}
 
+	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
 }
 
@@ -123,7 +124,7 @@ func (q *headOnDiskQuerier) MergePprof(ctx context.Context, rows iter.Iterator[P
 
 	stacktraceSamples := profileSampleMap{}
 
-	if err := mergeByStacktraces(ctx, q.head.profiles.rowGroups[q.rowGroupIdx], rows, stacktraceSamples); err != nil {
+	if err := mergeByStacktraces(ctx, q.rowGroup(), rows, stacktraceSamples); err != nil {
 		return nil, err
 	}
 
@@ -136,7 +137,7 @@ func (q *headOnDiskQuerier) MergeByLabels(ctx context.Context, rows iter.Iterato
 
 	seriesByLabels := make(seriesByLabels)
 
-	if err := mergeByLabels(ctx, q.head.profiles.rowGroups[q.rowGroupIdx], rows, seriesByLabels, by...); err != nil {
+	if err := mergeByLabels(ctx, q.rowGroup(), rows, seriesByLabels, by...); err != nil {
 		return nil, err
 	}
 
@@ -229,10 +230,12 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 			if s.Value == 0 {
 				continue
 			}
-			if _, exists := stacktraceSamples[int64(s.StacktraceID)]; !exists {
-				stacktraceSamples[int64(s.StacktraceID)] = &ingestv1.StacktraceSample{}
+			sample, exists := stacktraceSamples[int64(s.StacktraceID)]
+			if !exists {
+				sample = &ingestv1.StacktraceSample{}
+				stacktraceSamples[int64(s.StacktraceID)] = sample
 			}
-			stacktraceSamples[int64(s.StacktraceID)].Value += s.Value
+			sample.Value += s.Value
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -240,6 +243,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 	}
 	q.head.stacktraces.lock.RUnlock()
 
+	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
 }
 

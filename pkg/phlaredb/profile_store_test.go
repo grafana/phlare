@@ -221,6 +221,7 @@ func TestProfileStore_RowGroupSplitting(t *testing.T) {
 			// ensure the correct number of files are created
 			numRows, numRGs, err := store.Flush(context.Background())
 			require.NoError(t, err)
+			require.NoError(t, store.DeleteRowGroups())
 			assert.Equal(t, tc.expectedNumRows, numRows)
 			assert.Equal(t, tc.expectedNumRGs, numRGs)
 
@@ -489,32 +490,14 @@ func TestProfileStore_Querying(t *testing.T) {
 		result, err := bidi.Receive()
 		require.NoError(t, err)
 
-		var (
-			values      []int64
-			stacktraces []string
-			sb          strings.Builder
-		)
-		for _, x := range result.Result.Stacktraces {
-			values = append(values, x.Value)
-			sb.Reset()
-			for _, id := range x.FunctionIds {
-				v := result.Result.FunctionNames[id]
-				sb.WriteString(v)
-				sb.WriteString("/")
-			}
+		at, err := phlaremodel.UnmarshalTree(result.Result.TreeBytes)
+		require.NoError(t, err)
 
-			stacktraces = append(stacktraces, sb.String()[:sb.Len()-1])
-		}
-		assert.Equal(
-			t,
-			[]int64{180, 90},
-			values,
-		)
-		assert.Equal(
-			t,
-			[]string{"func1", "func1/func2"},
-			stacktraces,
-		)
+		et := new(phlaremodel.Tree)
+		et.InsertStack(90, "func2", "func1")
+		et.InsertStack(180, "func1")
+
+		assert.Equal(t, et.String(), at.String())
 	})
 
 	t.Run("merge by pprof", func(t *testing.T) {

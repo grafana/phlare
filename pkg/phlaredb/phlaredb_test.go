@@ -160,7 +160,7 @@ func TestMergeProfilesStacktraces(t *testing.T) {
 	// create client
 	ctx := context.Background()
 
-	client, cleanup := db.Queriers().ingesterClient()
+	client, cleanup := db.queriers().ingesterClient()
 	defer cleanup()
 
 	t.Run("request the one existing series", func(t *testing.T) {
@@ -194,8 +194,10 @@ func TestMergeProfilesStacktraces(t *testing.T) {
 		resp, err = bidi.Receive()
 		require.NoError(t, err)
 		require.NotNil(t, resp.Result)
-		require.Len(t, resp.Result.Stacktraces, 48)
-		require.Len(t, resp.Result.FunctionNames, 247)
+
+		at, err := phlaremodel.UnmarshalTree(resp.Result.TreeBytes)
+		require.NoError(t, err)
+		require.Equal(t, int64(500000000), at.Total())
 	})
 
 	t.Run("request non existing series", func(t *testing.T) {
@@ -288,7 +290,7 @@ func TestMergeProfilesPprof(t *testing.T) {
 	// create client
 	ctx := context.Background()
 
-	client, cleanup := db.Queriers().ingesterClient()
+	client, cleanup := db.queriers().ingesterClient()
 	defer cleanup()
 
 	t.Run("request the one existing series", func(t *testing.T) {

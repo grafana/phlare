@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/pyroscope-io/pyroscope/pkg/structs/flamebearer"
 	"github.com/pyroscope-io/pyroscope/pkg/util/attime"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -109,7 +110,7 @@ func (q *QueryHandlers) RenderDiff(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ExportDiffToFlamebearer(res.Msg.Flamegraph, leftProfileType)); err != nil {
+	if err := json.NewEncoder(w).Encode(phlaremodel.ExportDiffToFlamebearer(res.Msg.Flamegraph, leftProfileType)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -125,6 +126,8 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	groupBy := req.URL.Query()["groupBy"]
 
 	var resFlame *connect.Response[querierv1.SelectMergeStacktracesResponse]
 	g, ctx := errgroup.WithContext(req.Context())
@@ -143,6 +146,7 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 				Start:         selectParams.Start,
 				End:           selectParams.End,
 				Step:          timelineStep,
+				GroupBy:       groupBy,
 			}))
 
 		return err
@@ -159,8 +163,23 @@ func (q *QueryHandlers) Render(w http.ResponseWriter, req *http.Request) {
 		seriesVal = resSeries.Msg.Series[0]
 	}
 
-	fb := ExportToFlamebearer(resFlame.Msg.Flamegraph, profileType)
+	fb := phlaremodel.ExportToFlamebearer(resFlame.Msg.Flamegraph, profileType)
 	fb.Timeline = timeline.New(seriesVal, selectParams.Start, selectParams.End, int64(timelineStep))
+
+	if len(groupBy) > 0 {
+		fb.Groups = make(map[string]*flamebearer.FlamebearerTimelineV1)
+		for _, s := range resSeries.Msg.Series {
+			key := "*"
+			for _, l := range s.Labels {
+				// right now we only support one group by
+				if l.Name == groupBy[0] {
+					key = l.Value
+					break
+				}
+			}
+			fb.Groups[key] = timeline.New(s, selectParams.Start, selectParams.End, int64(timelineStep))
+		}
+	}
 
 	w.Header().Add("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(fb); err != nil {
