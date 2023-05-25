@@ -10,7 +10,7 @@ import (
 
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
-	"github.com/grafana/phlare/pkg/ingester/clientpool"
+	"github.com/grafana/phlare/pkg/clientpool"
 	"github.com/grafana/phlare/pkg/iter"
 	"github.com/grafana/phlare/pkg/model"
 	phlaremodel "github.com/grafana/phlare/pkg/model"

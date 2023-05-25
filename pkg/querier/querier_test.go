@@ -21,7 +21,7 @@ import (
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
-	"github.com/grafana/phlare/pkg/ingester/clientpool"
+	"github.com/grafana/phlare/pkg/clientpool"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	pprofth "github.com/grafana/phlare/pkg/pprof/testhelper"
@@ -844,6 +844,116 @@ func TestRangeSeries(t *testing.T) {
 			in := iter.NewSliceIterator(tc.in)
 			out := rangeSeries(in, 1, 5, 1)
 			testhelper.EqualProto(t, tc.out, out)
+		})
+	}
+}
+
+func Test_splitQueryToStores(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		now             model.Time
+		start, end      model.Time
+		queryStoreAfter time.Duration
+
+		expected storeQueries
+	}{
+		{
+			// ----|-----|-----|----|----
+			//     ^     ^     ^    ^
+			//     cutoff now start end
+			//
+			name:            "start and end are in the future",
+			now:             model.TimeFromUnixNano(0),
+			start:           model.TimeFromUnixNano(int64(time.Hour)),
+			end:             model.TimeFromUnixNano(int64(2 * time.Hour)),
+			queryStoreAfter: 30 * time.Minute,
+
+			expected: storeQueries{
+				storeGateway: storeQuery{
+					shouldQuery: false,
+				},
+				ingester: storeQuery{
+					shouldQuery: false,
+				},
+			},
+		},
+		{
+			// ----|-----|-----|----|----
+			//     ^     ^     ^    ^
+			//    start end cutoff now
+			//
+			name:            "start and end are in the past and cutoff is in the future",
+			now:             model.TimeFromUnixNano(int64(2 * time.Hour)),
+			start:           model.TimeFromUnixNano(0),
+			end:             model.TimeFromUnixNano(int64(time.Hour)),
+			queryStoreAfter: 30 * time.Minute,
+
+			expected: storeQueries{
+				storeGateway: storeQuery{
+					shouldQuery: true,
+					start:       model.TimeFromUnixNano(0),
+					end:         model.TimeFromUnixNano(int64(time.Hour)),
+				},
+				ingester: storeQuery{
+					shouldQuery: false,
+				},
+			},
+		},
+		{
+			// ----|-----|-----|----|----
+			//     ^     ^     ^    ^
+			//    start cutoff end now
+			//
+			name:            "start and end are within cutoff",
+			now:             model.TimeFromUnixNano(int64(1 * time.Hour)),
+			start:           model.TimeFromUnixNano(0),
+			end:             model.TimeFromUnixNano(int64(45 * time.Minute)),
+			queryStoreAfter: 30 * time.Minute,
+
+			expected: storeQueries{
+				storeGateway: storeQuery{
+					shouldQuery: true,
+					start:       model.TimeFromUnixNano(0),
+					end:         model.TimeFromUnixNano(int64(30 * time.Minute)),
+				},
+				ingester: storeQuery{
+					shouldQuery: true,
+					start:       model.TimeFromUnixNano(int64(30*time.Minute)) + 1,
+					end:         model.TimeFromUnixNano(int64(45 * time.Minute)),
+				},
+			},
+		},
+		{
+			// ----|----------|----|----
+			//     ^          ^    ^
+			//   start=cutoff end now
+			//
+			name:            "start is exactly at cutoff",
+			now:             model.TimeFromUnixNano(int64(1 * time.Hour)),
+			start:           model.TimeFromUnixNano(int64(30 * time.Minute)),
+			end:             model.TimeFromUnixNano(int64(45 * time.Minute)),
+			queryStoreAfter: 30 * time.Minute,
+
+			expected: storeQueries{
+				storeGateway: storeQuery{
+					shouldQuery: false,
+				},
+				ingester: storeQuery{
+					shouldQuery: true,
+					start:       model.TimeFromUnixNano(int64(30 * time.Minute)),
+					end:         model.TimeFromUnixNano(int64(45 * time.Minute)),
+				},
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			actual := splitQueryToStores(
+				tc.start,
+				tc.end,
+				tc.now,
+				tc.queryStoreAfter)
+			require.Equal(t, tc.expected, actual)
 		})
 	}
 }

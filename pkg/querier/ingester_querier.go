@@ -6,10 +6,15 @@ import (
 	"github.com/bufbuild/connect-go"
 	"github.com/grafana/dskit/ring"
 	ring_client "github.com/grafana/dskit/ring/client"
+	"github.com/prometheus/prometheus/promql/parser"
+	"golang.org/x/sync/errgroup"
 
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
+	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
-	"github.com/grafana/phlare/pkg/ingester/clientpool"
+	"github.com/grafana/phlare/pkg/clientpool"
+	phlaremodel "github.com/grafana/phlare/pkg/model"
+	"github.com/grafana/phlare/pkg/util"
 )
 
 type IngesterQueryClient interface {
@@ -48,4 +53,47 @@ func forAllIngesters[T any](ctx context.Context, ingesterQuerier *IngesterQuerie
 		}
 		return client.(IngesterQueryClient), nil
 	}, replicationSet, f)
+}
+
+func (q *Querier) selectTreeFromIngesters(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*phlaremodel.Tree, error) {
+	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	_, err = parser.ParseMetricSelector(req.LabelSelector)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesStacktraces, error) {
+		return ic.MergeProfilesStacktraces(ctx), nil
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// send the first initial request to all ingesters.
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, r := range responses {
+		r := r
+		g.Go(util.RecoverPanic(func() error {
+			return r.response.Send(&ingestv1.MergeProfilesStacktracesRequest{
+				Request: &ingestv1.SelectProfilesRequest{
+					LabelSelector: req.LabelSelector,
+					Start:         req.Start,
+					End:           req.End,
+					Type:          profileType,
+				},
+				MaxNodes: req.MaxNodes,
+				// TODO(kolesnikovae): Max stacks.
+			})
+		}))
+	}
+	if err = g.Wait(); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// merge all profiles
+	return selectMergeTree(gCtx, responses)
 }

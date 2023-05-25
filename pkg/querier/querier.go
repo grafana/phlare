@@ -26,7 +26,7 @@ import (
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
-	"github.com/grafana/phlare/pkg/ingester/clientpool"
+	"github.com/grafana/phlare/pkg/clientpool"
 	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/grafana/phlare/pkg/util"
@@ -70,7 +70,7 @@ func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactor
 		cfg:    cfg,
 		logger: logger,
 		ingesterQuerier: NewIngesterQuerier(
-			clientpool.NewPool(cfg.PoolConfig, ingestersRing, factory, clientsMetrics, logger, clientsOptions...),
+			clientpool.NewIngesterPool(cfg.PoolConfig, ingestersRing, factory, clientsMetrics, logger, clientsOptions...),
 			ingestersRing,
 		),
 		storeGatewayQuerier: storeGatewayQuerier,
@@ -298,46 +298,119 @@ func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Reque
 }
 
 func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*phlaremodel.Tree, error) {
-	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	// no store gateways configured so just query the ingesters
+	if q.storeGatewayQuerier == nil {
+		return q.selectTreeFromIngesters(ctx, req)
 	}
-	_, err = parser.ParseMetricSelector(req.LabelSelector)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesStacktraces, error) {
-		return ic.MergeProfilesStacktraces(ctx), nil
+	storeQueries := splitQueryToStores(model.Time(req.Start), (model.Time(req.End)), model.Now(), q.cfg.QueryStoreAfter)
+	if !storeQueries.ingester.shouldQuery && !storeQueries.storeGateway.shouldQuery {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("start and end time are outside of the ingester and store gateway retention"))
+	}
+	if !storeQueries.ingester.shouldQuery {
+		return q.selectTreeFromStoreGateway(ctx, storeQueries.storeGatewayRequest(req))
+	}
+	if !storeQueries.storeGateway.shouldQuery {
+		return q.selectTreeFromIngesters(ctx, storeQueries.ingesterRequest(req))
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	var ingesterTree, storegatewayTree *phlaremodel.Tree
+	g.Go(func() error {
+		var err error
+		ingesterTree, err = q.selectTreeFromIngesters(ctx, storeQueries.ingesterRequest(req))
+		if err != nil {
+			return err
+		}
+		return nil
 	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	g.Go(func() error {
+		var err error
+		storegatewayTree, err = q.selectTreeFromStoreGateway(ctx, storeQueries.storeGatewayRequest(req))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
-	// send the first initial request to all ingesters.
-	g, gCtx := errgroup.WithContext(ctx)
-	for _, r := range responses {
-		r := r
-		g.Go(util.RecoverPanic(func() error {
-			return r.response.Send(&ingestv1.MergeProfilesStacktracesRequest{
-				Request: &ingestv1.SelectProfilesRequest{
-					LabelSelector: req.LabelSelector,
-					Start:         req.Start,
-					End:           req.End,
-					Type:          profileType,
-				},
-				MaxNodes: req.MaxNodes,
-				// TODO(kolesnikovae): Max stacks.
-			})
-		}))
-	}
-	if err = g.Wait(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
+	storegatewayTree.Merge(ingesterTree)
+	return storegatewayTree, nil
+}
 
-	// merge all profiles
-	return selectMergeTree(gCtx, responses)
+type storeQuery struct {
+	start, end  model.Time
+	shouldQuery bool
+}
+
+type storeQueries struct {
+	ingester, storeGateway storeQuery
+}
+
+func (sq storeQueries) ingesterRequest(req *querierv1.SelectMergeStacktracesRequest) *querierv1.SelectMergeStacktracesRequest {
+	return &querierv1.SelectMergeStacktracesRequest{
+		Start:         int64(sq.ingester.start),
+		End:           int64(sq.ingester.end),
+		LabelSelector: req.LabelSelector,
+		ProfileTypeID: req.ProfileTypeID,
+		MaxNodes:      req.MaxNodes,
+	}
+}
+
+func (sq storeQueries) storeGatewayRequest(req *querierv1.SelectMergeStacktracesRequest) *querierv1.SelectMergeStacktracesRequest {
+	return &querierv1.SelectMergeStacktracesRequest{
+		Start:         int64(sq.storeGateway.start),
+		End:           int64(sq.storeGateway.end),
+		LabelSelector: req.LabelSelector,
+		ProfileTypeID: req.ProfileTypeID,
+		MaxNodes:      req.MaxNodes,
+	}
+}
+
+// splitQueryToStores splits the query into ingester and store gateway queries using the given cut off time.
+// todo(ctovena): Later we should try to deduplicate blocks between ingesters and store gateways (prefer) and simply query both
+func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter time.Duration) (queries storeQueries) {
+	if start > now {
+		queries.storeGateway.shouldQuery = false
+		queries.ingester.shouldQuery = false
+		return
+	}
+	if queryStoreAfter == 0 {
+		queries.storeGateway.shouldQuery = true
+		queries.storeGateway.start = start
+		queries.storeGateway.end = end
+
+		queries.ingester.shouldQuery = false
+		return
+	}
+	cutOff := now.Add(-queryStoreAfter)
+	if start == cutOff {
+		queries.storeGateway.shouldQuery = false
+
+		queries.ingester.shouldQuery = true
+		queries.ingester.start = start
+		queries.ingester.end = end
+		return
+	}
+	if cutOff < end && cutOff > start {
+		queries.storeGateway.shouldQuery = true
+		queries.storeGateway.start = start
+		queries.storeGateway.end = cutOff
+
+		queries.ingester.shouldQuery = true
+		queries.ingester.start = cutOff + 1
+		queries.ingester.end = end
+
+		return
+	}
+	queries.storeGateway.shouldQuery = true
+	queries.storeGateway.start = start
+	queries.storeGateway.end = end
+
+	queries.ingester.shouldQuery = false
+
+	return
 }
 
 func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {

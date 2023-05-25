@@ -13,8 +13,15 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/promql/parser"
+	"golang.org/x/sync/errgroup"
 
-	"github.com/grafana/phlare/pkg/storegateway/clientpool"
+	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
+	querierv1 "github.com/grafana/phlare/api/gen/proto/go/querier/v1"
+	"github.com/grafana/phlare/pkg/clientpool"
+	phlaremodel "github.com/grafana/phlare/pkg/model"
+	"github.com/grafana/phlare/pkg/tenant"
+	"github.com/grafana/phlare/pkg/util"
 )
 
 type StoreGatewayQueryClient interface {
@@ -68,7 +75,7 @@ func NewStoreGatewayQuerier(
 		Help:        "The current number of store-gateway clients in the pool.",
 		ConstLabels: map[string]string{"client": "querier"},
 	})
-	pool := clientpool.NewPool(storesRing, factory, clientsMetrics, logger, clientsOptions...)
+	pool := clientpool.NeStoreGatewayPool(storesRing, factory, clientsMetrics, logger, clientsOptions...)
 
 	s := &StoreGatewayQuerier{
 		ring:   storesRing,
@@ -138,4 +145,51 @@ func GetShuffleShardingSubring(ring ring.ReadRing, userID string, limits StoreGa
 	}
 
 	return ring.ShuffleShard(userID, shardSize)
+}
+
+func (q *Querier) selectTreeFromStoreGateway(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*phlaremodel.Tree, error) {
+	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	_, err = parser.ParseMetricSelector(req.LabelSelector)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	tenantID, err := tenant.ExtractTenantIDFromContext(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	responses, err := forAllStoreGateways(ctx, tenantID, q.storeGatewayQuerier, func(ctx context.Context, ic StoreGatewayQueryClient) (clientpool.BidiClientMergeProfilesStacktraces, error) {
+		return ic.MergeProfilesStacktraces(ctx), nil
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// send the first initial request to all ingesters.
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, r := range responses {
+		r := r
+		g.Go(util.RecoverPanic(func() error {
+			return r.response.Send(&ingestv1.MergeProfilesStacktracesRequest{
+				Request: &ingestv1.SelectProfilesRequest{
+					LabelSelector: req.LabelSelector,
+					Start:         req.Start,
+					End:           req.End,
+					Type:          profileType,
+				},
+				MaxNodes: req.MaxNodes,
+				// TODO(kolesnikovae): Max stacks.
+			})
+		}))
+	}
+	if err = g.Wait(); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// merge all profiles
+	return selectMergeTree(gCtx, responses)
 }
