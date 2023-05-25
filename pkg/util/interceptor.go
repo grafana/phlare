@@ -6,6 +6,7 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/weaveworks/common/tracing"
 
 	"github.com/grafana/phlare/pkg/tenant"
@@ -62,7 +63,7 @@ func NewLogInterceptor(logger log.Logger) connect.UnaryInterceptorFunc {
 				traceID = "unknown"
 			}
 			defer func() {
-				logger.Log(
+				level.Info(logger).Log(
 					"msg", "request parameters",
 					"route", req.Spec().Procedure,
 					"tenant", tenantID,
