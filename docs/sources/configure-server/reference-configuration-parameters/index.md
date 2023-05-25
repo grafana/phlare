@@ -1122,9 +1122,12 @@ pool_config:
   # CLI flag: -querier.health-check-timeout
   [remote_timeout: <duration> | default = 5s]
 
-# Time to wait before sending more than the minimum successful query requests.
-# CLI flag: -querier.extra-query-delay
-[extra_query_delay: <duration> | default = 0s]
+# The time after which a metric should be queried from storage and not just
+# ingesters. 0 means all queries are sent to store. If this option is enabled,
+# the time range of the query sent to the store-gateway will be manipulated to
+# ensure the query end is not more recent than 'now - query-store-after'.
+# CLI flag: -querier.query-store-after
+[query_store_after: <duration> | default = 2h]
 ```
 
 ### query_frontend

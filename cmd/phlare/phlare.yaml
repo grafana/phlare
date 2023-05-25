@@ -6,3 +6,8 @@ scrape_configs:
     scrape_interval: "15s"
     static_configs:
       - targets: ["127.0.0.1:4100"]
+
+storage:
+  backend: gcs
+  gcs:
+    bucket_name: ops-us-east-0-profiles-ops-001-data
