@@ -182,7 +182,19 @@ func (f *Phlare) setupWorkerTimeout() {
 }
 
 func (f *Phlare) initQuerier() (services.Service, error) {
-	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, f.reg, log.With(f.logger, "component", "querier"), f.auth)
+	var (
+		storeGatewayQuerier *querier.StoreGatewayQuerier
+		err                 error
+	)
+	// In microservices mode the store gateway is mandatory.
+	if f.Cfg.Target.String() != All {
+		storeGatewayQuerier, err = querier.NewStoreGatewayQuerier(f.Cfg.StoreGateway.Config, nil, f.Overrides, log.With(f.logger, "component", "store-gateway-querier"), f.reg, f.auth)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	querierSvc, err := querier.New(f.Cfg.Querier, f.ring, nil, storeGatewayQuerier, f.reg, log.With(f.logger, "component", "querier"), f.auth)
 	if err != nil {
 		return nil, err
 	}

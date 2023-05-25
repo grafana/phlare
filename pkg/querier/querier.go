@@ -33,12 +33,14 @@ import (
 )
 
 type Config struct {
-	PoolConfig clientpool.PoolConfig `yaml:"pool_config,omitempty"`
+	PoolConfig      clientpool.PoolConfig `yaml:"pool_config,omitempty"`
+	QueryStoreAfter time.Duration         `yaml:"query_store_after" category:"advanced"`
 }
 
 // RegisterFlags registers distributor-related flags.
 func (cfg *Config) RegisterFlags(fs *flag.FlagSet) {
 	cfg.PoolConfig.RegisterFlagsWithPrefix("querier", fs)
+	fs.DurationVar(&cfg.QueryStoreAfter, "querier.query-store-after", 2*time.Hour, "The time after which a metric should be queried from storage and not just ingesters. 0 means all queries are sent to store. If this option is enabled, the time range of the query sent to the store-gateway will be manipulated to ensure the query end is not more recent than 'now - query-store-after'.")
 }
 
 type Querier struct {
@@ -49,12 +51,13 @@ type Querier struct {
 	cfg    Config
 	logger log.Logger
 
-	ingesterQuerier *IngesterQuerier
+	ingesterQuerier     *IngesterQuerier
+	storeGatewayQuerier *StoreGatewayQuerier
 }
 
 const maxNodesDefault = int64(2048)
 
-func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactory, reg prometheus.Registerer, logger log.Logger, clientsOptions ...connect.ClientOption) (*Querier, error) {
+func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactory, storeGatewayQuerier *StoreGatewayQuerier, reg prometheus.Registerer, logger log.Logger, clientsOptions ...connect.ClientOption) (*Querier, error) {
 	// disable gzip compression for querier-ingester communication as most of payload are not benefit from it.
 	clientsOptions = append(clientsOptions, connect.WithAcceptCompression("gzip", nil, nil))
 	clientsMetrics := promauto.With(reg).NewGauge(prometheus.GaugeOpts{
@@ -70,11 +73,15 @@ func New(cfg Config, ingestersRing ring.ReadRing, factory ring_client.PoolFactor
 			clientpool.NewPool(cfg.PoolConfig, ingestersRing, factory, clientsMetrics, logger, clientsOptions...),
 			ingestersRing,
 		),
-		// todo wire store gateway querier.
+		storeGatewayQuerier: storeGatewayQuerier,
 	}
 	var err error
+	svcs := []services.Service{q.ingesterQuerier.pool}
+	if storeGatewayQuerier != nil {
+		svcs = append(svcs, storeGatewayQuerier)
+	}
 	// should we watch for the ring module status ?
-	q.subservices, err = services.NewManager(q.ingesterQuerier.pool)
+	q.subservices, err = services.NewManager(svcs...)
 	if err != nil {
 		return nil, errors.Wrap(err, "services manager")
 	}
