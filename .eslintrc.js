@@ -53,4 +53,13 @@ module.exports = {
   parserOptions: {
     project: ['tsconfig.json'],
   },
+  overrides: [
+    {
+      files: ['*.spec.tsx?$'],
+
+      rules: {
+        'no-restricted-imports': 0,
+      },
+    },
+  ],
 };

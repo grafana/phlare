@@ -2,7 +2,7 @@ import React from 'react';
 import 'react-dom';
 
 import { useAppSelector, useAppDispatch } from '@webapp/redux/hooks';
-import { Query, queryToAppName, queryFromAppName } from '@webapp/models/query';
+import { Query, queryToAppName } from '@webapp/models/query';
 import {
   selectApps,
   reloadAppNames,
@@ -14,7 +14,7 @@ import Button from '@webapp/ui/Button';
 import LoadingSpinner from '@webapp/ui/LoadingSpinner';
 import DateRangePicker from '@webapp/components/DateRangePicker';
 import RefreshButton from '@webapp/components/RefreshButton';
-import AppSelector from '@webapp/components/AppSelector';
+import AppSelector from '@phlare/components/AppSelector/AppSelector';
 // TODO
 import styles from '../../../../node_modules/pyroscope-oss/webapp/javascript/components/Toolbar.module.css';
 
@@ -28,18 +28,19 @@ function Toolbar({ onSelectedApp, filterApp = () => true }: ToolbarProps) {
   const dispatch = useAppDispatch();
   const appNamesState = useAppSelector(selectAppNamesState);
   const apps = useAppSelector(selectApps).filter((a) => filterApp(a.name));
-  const appNames = apps.map((a) => a.name);
+  //  const appNames = apps.map((a) => a.name);
   const { query } = useAppSelector(selectQueries);
-  const selectedAppName = queryToAppName(query).mapOr('', (q) =>
-    appNames.indexOf(q) !== -1 ? q : ''
-  );
+  const selectedQuery = query;
+  //  const selectedAppName = queryToAppName(query).mapOr('', (q) =>
+  //    appNames.indexOf(q) !== -1 ? q : ''
+  //  );
 
-  const onSelected = (appName: string) => {
+  const onSelected = (query: Query) => {
     //const query = queryFromAppName(appName);
-    //    onSelectedApp(query);
-    onSelectedApp(
-      'process_cpu:cpu:nanoseconds:cpu:nanoseconds{pyroscope_app="simple.golang.app"}'
-    );
+    onSelectedApp(query);
+    //onSelectedApp(
+    //  'process_cpu:cpu:nanoseconds:cpu:nanoseconds{pyroscope_app="simple.golang.app"}'
+    //);
   };
 
   const appNamesLoading =
@@ -54,7 +55,7 @@ function Toolbar({ onSelectedApp, filterApp = () => true }: ToolbarProps) {
           <AppSelector
             onSelected={onSelected}
             apps={apps}
-            selectedAppName={selectedAppName}
+            selectedQuery={selectedQuery}
           />
           <Button
             aria-label="Refresh Apps"

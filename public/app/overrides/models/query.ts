@@ -1,4 +1,6 @@
-import { Query } from '@webapp/models/query';
+import { Query } from '@pyroscope/webapp/javascript/models/query';
+
+export * from '@pyroscope/webapp/javascript/models/query';
 
 // ParseQuery parses a string of $app_name<{<$tag_matchers>}> form.
 // It assumes the query is well formed
