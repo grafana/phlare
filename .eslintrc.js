@@ -55,10 +55,10 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['*.spec.tsx?$'],
-
+      // For tests it's fine to import with ./myfile, since tests won't be overriden downstream
+      files: ['*.spec.tsx', '*.spec.ts'],
       rules: {
-        'no-restricted-imports': 0,
+        'no-restricted-imports': 'off',
       },
     },
   ],

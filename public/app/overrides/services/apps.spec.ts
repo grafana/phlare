@@ -1,4 +1,4 @@
-import { groupByAppAndProfileId } from './app';
+import { groupByAppAndProfileId } from './apps';
 
 const mockData = {
   labelsSet: [
