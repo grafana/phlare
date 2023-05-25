@@ -140,16 +140,20 @@ func decodeResponse[Resp any](r *httpgrpc.HTTPResponse) (*connect.Response[Resp]
 }
 
 func decompressResponse(r *httpgrpc.HTTPResponse) error {
+	// We use gziphandler to compress responses of some methods,
+	// therefore decompression is very likely to be required.
+	// The handling is pretty much the same as in http.Transport,
+	// which only supports gzip Content-Encoding.
 	for _, h := range r.Headers {
 		if h.Key == "Content-Encoding" {
 			for _, v := range h.Values {
 				switch {
 				default:
-					return fmt.Errorf("unsupported Content-Encoding")
+					return fmt.Errorf("unsupported Content-Encoding: %s", v)
 				case v == "":
 				case strings.EqualFold(v, "gzip"):
 					// bytes.Buffer implements flate.Reader, therefore
-					// a gzip reader does not allocate a buffers.
+					// a gzip reader does not allocate a buffer.
 					g, err := gzip.NewReader(bytes.NewBuffer(r.Body))
 					if err != nil {
 						return err
