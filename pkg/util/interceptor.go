@@ -56,7 +56,7 @@ func NewLogInterceptor(logger log.Logger) connect.UnaryInterceptorFunc {
 			begin := time.Now()
 			tenantID, err := tenant.ExtractTenantIDFromContext(ctx)
 			if err != nil {
-				tenantID = "unknown"
+				tenantID = "anonymous"
 			}
 			traceID, ok := tracing.ExtractTraceID(ctx)
 			if !ok {
