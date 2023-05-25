@@ -6,6 +6,9 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
+	"github.com/weaveworks/common/tracing"
+
+	"github.com/grafana/phlare/pkg/tenant"
 )
 
 type timeoutInterceptor struct {
@@ -49,11 +52,26 @@ func NewLogInterceptor(logger log.Logger) connect.UnaryInterceptorFunc {
 			ctx context.Context,
 			req connect.AnyRequest,
 		) (connect.AnyResponse, error) {
-			logger.Log(
-				"msg", "request parameters",
-				"route", req.Spec().Procedure,
-				"parameters", req.Any(),
-			)
+			begin := time.Now()
+			tenantID, err := tenant.ExtractTenantIDFromContext(ctx)
+			if err != nil {
+				tenantID = "unknown"
+			}
+			traceID, ok := tracing.ExtractTraceID(ctx)
+			if !ok {
+				traceID = "unknown"
+			}
+			defer func() {
+				logger.Log(
+					"msg", "request parameters",
+					"route", req.Spec().Procedure,
+					"tenant", tenantID,
+					"traceID", traceID,
+					"parameters", req.Any(),
+					"duration", time.Since(begin),
+				)
+			}()
+
 			return next(ctx, req)
 		})
 	}
