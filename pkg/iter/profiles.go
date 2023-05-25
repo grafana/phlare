@@ -35,13 +35,19 @@ type MergeIterator[P Profile] struct {
 // NewMergeIterator returns an iterator that k-way merges the given iterators.
 // The given iterators must be sorted by timestamp and labels themselves.
 // Optionally, the iterator can deduplicate profiles with the same timestamp and labels.
-func NewMergeIterator[P Profile](maxVal P, deduplicate bool, iters ...Iterator[P]) Iterator[P] {
+func NewMergeIterator[P Profile](max P, deduplicate bool, iters ...Iterator[P]) Iterator[P] {
+	if len(iters) == 1 {
+		// No need to merge a single iterator.
+		// We should never allow a single iterator to be passed in because
+		return iters[0]
+	}
 	iter := &MergeIterator[P]{
 		deduplicate: deduplicate,
+		current:     max,
 	}
 	iter.tree = loser.New(
 		iters,
-		maxVal,
+		max,
 		func(s Iterator[P]) P {
 			return s.At()
 		},
@@ -53,17 +59,23 @@ func NewMergeIterator[P Profile](maxVal P, deduplicate bool, iters ...Iterator[P
 				iter.errs.Add(err)
 			}
 		})
-	iter.current = maxVal
 	return iter
 }
 
 func (i *MergeIterator[P]) Next() bool {
 	for i.tree.Next() {
 		next := i.tree.Winner()
-		if !i.deduplicate || (next.At().Timestamp() != i.current.Timestamp() || phlaremodel.CompareLabelPairs(next.At().Labels(), i.current.Labels()) != 0) {
+
+		if !i.deduplicate {
 			i.current = next.At()
 			return true
 		}
+		if next.At().Timestamp() != i.current.Timestamp() ||
+			phlaremodel.CompareLabelPairs(next.At().Labels(), i.current.Labels()) != 0 {
+			i.current = next.At()
+			return true
+		}
+
 	}
 	return false
 }

@@ -1098,6 +1098,13 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.B
 	r.metrics = contextBlockMetrics(ctx)
 	filePath := r.persister.Name() + block.ParquetSuffix
 
+	if r.size == 0 {
+		attrs, err := bucketReader.Attributes(ctx, filePath)
+		if err != nil {
+			return errors.Wrapf(err, "getting attributes for '%s'", filePath)
+		}
+		r.size = attrs.Size
+	}
 	ra, err := bucketReader.ReaderAt(ctx, filePath)
 	if err != nil {
 		return errors.Wrapf(err, "create reader '%s'", filePath)
@@ -1186,6 +1193,13 @@ type inMemoryparquetReader[M Models, P schemav1.PersisterName] struct {
 func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.BucketReader) error {
 	filePath := r.persister.Name() + block.ParquetSuffix
 
+	if r.size == 0 {
+		attrs, err := bucketReader.Attributes(ctx, filePath)
+		if err != nil {
+			return errors.Wrapf(err, "getting attributes for '%s'", filePath)
+		}
+		r.size = attrs.Size
+	}
 	ra, err := bucketReader.ReaderAt(ctx, filePath)
 	if err != nil {
 		return errors.Wrapf(err, "create reader '%s'", filePath)

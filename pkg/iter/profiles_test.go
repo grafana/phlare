@@ -18,7 +18,7 @@ var (
 
 type profile struct {
 	labels    phlaremodel.Labels
-	timestamp int64
+	timestamp model.Time
 }
 
 func (p profile) Labels() phlaremodel.Labels {
@@ -26,7 +26,7 @@ func (p profile) Labels() phlaremodel.Labels {
 }
 
 func (p profile) Timestamp() model.Time {
-	return model.Time(p.timestamp)
+	return p.timestamp
 }
 
 func TestMergeIterator(t *testing.T) {
