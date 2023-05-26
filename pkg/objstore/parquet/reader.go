@@ -17,20 +17,20 @@ func NewOptimizedReader(r phlareobjstore.ReaderAtCloser) phlareobjstore.ReaderAt
 	}
 }
 
-// called by parquet-go in OpenFile() to set offset and length of footer section
-func (r *optimizedReaderAt) SetFooterSection(offset, length int64) {
-	// todo cache footer section
-}
+// // called by parquet-go in OpenFile() to set offset and length of footer section
+// func (r *optimizedReaderAt) SetFooterSection(offset, length int64) {
+// 	// todo cache footer section
+// }
 
-// called by parquet-go in OpenFile() to set offset and length of column indexes
-func (r *optimizedReaderAt) SetColumnIndexSection(offset, length int64) {
-	// todo cache column index section
-}
+// // called by parquet-go in OpenFile() to set offset and length of column indexes
+// func (r *optimizedReaderAt) SetColumnIndexSection(offset, length int64) {
+// 	// todo cache column index section
+// }
 
-// called by parquet-go in OpenFile() to set offset and length of offset index section
-func (r *optimizedReaderAt) SetOffsetIndexSection(offset, length int64) {
-	// todo cache offset index section
-}
+// // called by parquet-go in OpenFile() to set offset and length of offset index section
+// func (r *optimizedReaderAt) SetOffsetIndexSection(offset, length int64) {
+// 	// todo cache offset index section
+// }
 
 func (r *optimizedReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	if len(p) == 4 && off == 0 {
@@ -38,7 +38,7 @@ func (r *optimizedReaderAt) ReadAt(p []byte, off int64) (int, error) {
 		return copy(p, []byte("PAR1")), nil
 	}
 
-	// This requires knowing the footer size which we don't have access to in advance.
+	// // This requires knowing the footer size which we don't have access to in advance.
 	// if len(p) == 8 && off == r.Size()-8 && r.footerSize > 0  {
 	// 	// Magic footer
 	// 	binary.LittleEndian.PutUint32(p, r.footerSize)

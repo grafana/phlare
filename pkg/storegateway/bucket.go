@@ -295,10 +295,6 @@ func (s *BucketStore) fetchBlocksMeta(ctx context.Context) (map[ulid.ULID]*block
 					return err
 				}
 				metas[currentIdx] = m
-
-				if err := r.Close(); err != nil { // todo we might want to fail lightly here
-					return err
-				}
 				return nil
 			})
 		}

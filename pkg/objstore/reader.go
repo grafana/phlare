@@ -43,7 +43,7 @@ type ReaderAt struct {
 	ctx  context.Context
 }
 
-func (b *ReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
+func (b *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	rc, err := b.GetRangeReader.GetRange(b.ctx, b.name, off, int64(len(p)))
 	if err != nil {
 		return 0, err
@@ -53,16 +53,16 @@ func (b *ReaderAt) ReadAt(p []byte, off int64) (n int, err error) {
 	totalBytes := 0
 	for {
 		byteCount, err := rc.Read(p[totalBytes:])
+		totalBytes += byteCount
 		if err == io.EOF {
 			return totalBytes, nil
 		}
 		if err != nil {
-			return 0, err
+			return totalBytes, err
 		}
 		if byteCount == 0 {
 			return totalBytes, nil
 		}
-		totalBytes += byteCount
 	}
 }
 

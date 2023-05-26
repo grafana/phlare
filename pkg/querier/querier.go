@@ -371,11 +371,15 @@ func (sq storeQueries) storeGatewayRequest(req *querierv1.SelectMergeStacktraces
 // splitQueryToStores splits the query into ingester and store gateway queries using the given cut off time.
 // todo(ctovena): Later we should try to deduplicate blocks between ingesters and store gateways (prefer) and simply query both
 func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter time.Duration) (queries storeQueries) {
+	// If the start time is in the future, there is nothing to query.
 	if start > now {
 		queries.storeGateway.shouldQuery = false
 		queries.ingester.shouldQuery = false
 		return
 	}
+
+	// If we do not have a query store after duration, then the only store we
+	// need to query is the store gateway.
 	if queryStoreAfter == 0 {
 		queries.storeGateway.shouldQuery = true
 		queries.storeGateway.start = start
@@ -384,6 +388,9 @@ func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter t
 		queries.ingester.shouldQuery = false
 		return
 	}
+
+	// If the cut off is in the middle of the query, then we need to query both
+	// the store gateway and the ingester.
 	cutOff := now.Add(-queryStoreAfter)
 	if start == cutOff {
 		queries.storeGateway.shouldQuery = false
@@ -404,12 +411,14 @@ func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter t
 
 		return
 	}
+
+	// If the cut off is not in the query, then we only need to query the store
+	// gateway.
 	queries.storeGateway.shouldQuery = true
 	queries.storeGateway.start = start
 	queries.storeGateway.end = end
 
 	queries.ingester.shouldQuery = false
-
 	return
 }
 

@@ -187,6 +187,7 @@ require (
 	github.com/hashicorp/nomad/api v0.0.0-20230418003350-3067191c5197 // indirect
 	github.com/hashicorp/serf v0.10.1 // indirect
 	github.com/hetznercloud/hcloud-go v1.42.0 // indirect
+	github.com/huaweicloud/huaweicloud-sdk-go-obs v3.23.3+incompatible // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/ionos-cloud/sdk-go/v6 v6.1.6 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -286,7 +287,7 @@ replace (
 	github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20220708130638-bd88e10a3d91
 	// Using a fork of Prometheus with Mimir-specific changes.
 	github.com/prometheus/prometheus => github.com/grafana/mimir-prometheus v0.0.0-20230505111100-e5eb66f42202
-	github.com/thanos-io/objstore => github.com/simonswine/objstore v0.0.0-20230222100738-890519321a99
+	github.com/thanos-io/objstore => github.com/simonswine/objstore v0.0.0-20230525103805-ffb0b7c6481f
 	// gopkg.in/yaml.v3
 	// + https://github.com/go-yaml/yaml/pull/691
 	// + https://github.com/go-yaml/yaml/pull/876

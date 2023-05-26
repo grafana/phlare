@@ -480,7 +480,7 @@ store_gateway:
     # not required to be persisted between restarts, but it's highly recommended
     # in order to improve the store-gateway startup time.
     # CLI flag: -blocks-storage.bucket-store.sync-dir
-    [sync_dir: <string> | default = "./pyroscope-sync/"]
+    [sync_dir: <string> | default = "./data/pyroscope-sync/"]
 
     # How frequently to scan the bucket, or to refresh the bucket index (if
     # enabled), in order to look for changes (new blocks shipped by ingesters
