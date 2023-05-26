@@ -66,6 +66,12 @@ func RoundTripUnary[Req any, Res any](ctx context.Context, rt GRPCRoundTripper, 
 	return decodeResponse[Res](res)
 }
 
+func CloneRequest[Req any](base *connect.Request[Req], msg *Req) *connect.Request[Req] {
+	r := *base
+	r.Msg = msg
+	return &r
+}
+
 func encodeResponse[Req any](resp *connect.Response[Req]) (*httpgrpc.HTTPResponse, error) {
 	out := &httpgrpc.HTTPResponse{
 		Headers: connectHeaderToHTTPGRPCHeader(resp.Header()),
