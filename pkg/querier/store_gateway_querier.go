@@ -78,9 +78,10 @@ func NewStoreGatewayQuerier(
 	pool := clientpool.NeStoreGatewayPool(storesRing, factory, clientsMetrics, logger, clientsOptions...)
 
 	s := &StoreGatewayQuerier{
-		ring:   storesRing,
-		pool:   pool,
-		limits: limits,
+		ring:               storesRing,
+		pool:               pool,
+		limits:             limits,
+		subservicesWatcher: services.NewFailureWatcher(),
 	}
 	s.subservices, err = services.NewManager(storesRing, pool)
 	if err != nil {
