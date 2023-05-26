@@ -313,17 +313,17 @@ func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStac
 	storeQueries.Log(level.Debug(spanlogger.FromContext(ctx, q.logger)))
 
 	if !storeQueries.ingester.shouldQuery {
-		return q.selectTreeFromStoreGateway(ctx, storeQueries.storeGatewayRequest(req))
+		return q.selectTreeFromStoreGateway(ctx, storeQueries.storeGateway.MergeStacktracesRequest(req))
 	}
 	if !storeQueries.storeGateway.shouldQuery {
-		return q.selectTreeFromIngesters(ctx, storeQueries.ingesterRequest(req))
+		return q.selectTreeFromIngesters(ctx, storeQueries.ingester.MergeStacktracesRequest(req))
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	var ingesterTree, storegatewayTree *phlaremodel.Tree
 	g.Go(func() error {
 		var err error
-		ingesterTree, err = q.selectTreeFromIngesters(ctx, storeQueries.ingesterRequest(req))
+		ingesterTree, err = q.selectTreeFromIngesters(ctx, storeQueries.ingester.MergeStacktracesRequest(req))
 		if err != nil {
 			return err
 		}
@@ -331,7 +331,7 @@ func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStac
 	})
 	g.Go(func() error {
 		var err error
-		storegatewayTree, err = q.selectTreeFromStoreGateway(ctx, storeQueries.storeGatewayRequest(req))
+		storegatewayTree, err = q.selectTreeFromStoreGateway(ctx, storeQueries.storeGateway.MergeStacktracesRequest(req))
 		if err != nil {
 			return err
 		}
@@ -349,6 +349,28 @@ type storeQuery struct {
 	shouldQuery bool
 }
 
+func (sq storeQuery) MergeStacktracesRequest(req *querierv1.SelectMergeStacktracesRequest) *querierv1.SelectMergeStacktracesRequest {
+	return &querierv1.SelectMergeStacktracesRequest{
+		Start:         int64(sq.start),
+		End:           int64(sq.end),
+		LabelSelector: req.LabelSelector,
+		ProfileTypeID: req.ProfileTypeID,
+		MaxNodes:      req.MaxNodes,
+	}
+}
+
+func (sq storeQuery) MergeSeriesRequest(req *querierv1.SelectSeriesRequest, profileType *typesv1.ProfileType) *ingestv1.MergeProfilesLabelsRequest {
+	return &ingestv1.MergeProfilesLabelsRequest{
+		By: req.GroupBy,
+		Request: &ingestv1.SelectProfilesRequest{
+			Type:          profileType,
+			LabelSelector: req.LabelSelector,
+			Start:         int64(sq.start),
+			End:           int64(sq.end),
+		},
+	}
+}
+
 type storeQueries struct {
 	ingester, storeGateway storeQuery
 	queryStoreAfter        time.Duration
@@ -363,26 +385,6 @@ func (sq storeQueries) Log(logger log.Logger) {
 		"store-gateway", sq.storeGateway.shouldQuery,
 		"store-gateway.start", sq.storeGateway.start.Time().Format(time.RFC3339Nano), "store-gateway.end", sq.storeGateway.end.Time().Format(time.RFC3339Nano),
 	)
-}
-
-func (sq storeQueries) ingesterRequest(req *querierv1.SelectMergeStacktracesRequest) *querierv1.SelectMergeStacktracesRequest {
-	return &querierv1.SelectMergeStacktracesRequest{
-		Start:         int64(sq.ingester.start),
-		End:           int64(sq.ingester.end),
-		LabelSelector: req.LabelSelector,
-		ProfileTypeID: req.ProfileTypeID,
-		MaxNodes:      req.MaxNodes,
-	}
-}
-
-func (sq storeQueries) storeGatewayRequest(req *querierv1.SelectMergeStacktracesRequest) *querierv1.SelectMergeStacktracesRequest {
-	return &querierv1.SelectMergeStacktracesRequest{
-		Start:         int64(sq.storeGateway.start),
-		End:           int64(sq.storeGateway.end),
-		LabelSelector: req.LabelSelector,
-		ProfileTypeID: req.ProfileTypeID,
-		MaxNodes:      req.MaxNodes,
-	}
 }
 
 // splitQueryToStores splits the query into ingester and store gateway queries using the given cut off time.
@@ -537,32 +539,32 @@ func (q *Querier) SelectSeries(ctx context.Context, req *connect.Request[querier
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesLabels, error) {
-		return ic.MergeProfilesLabels(ctx), nil
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	storeQueries := splitQueryToStores(model.Time(start), model.Time(req.Msg.End), model.Now(), q.cfg.QueryStoreAfter)
+
+	var responses []ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels]
+
+	if !storeQueries.ingester.shouldQuery && !storeQueries.storeGateway.shouldQuery {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("start and end time are outside of the ingester and store gateway retention"))
 	}
-	// send the first initial request to all ingesters.
-	g, gCtx := errgroup.WithContext(ctx)
-	for _, r := range responses {
-		r := r
-		g.Go(util.RecoverPanic(func() error {
-			return r.response.Send(&ingestv1.MergeProfilesLabelsRequest{
-				Request: &ingestv1.SelectProfilesRequest{
-					LabelSelector: req.Msg.LabelSelector,
-					Start:         start,
-					End:           req.Msg.End,
-					Type:          profileType,
-				},
-				By: req.Msg.GroupBy,
-			})
-		}))
+
+	// todo in parallel
+	if storeQueries.ingester.shouldQuery {
+		ir, err := q.selectSeriesFromIngesters(ctx, storeQueries.ingester.MergeSeriesRequest(req.Msg, profileType))
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, ir...)
 	}
-	if err := g.Wait(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+
+	if storeQueries.storeGateway.shouldQuery {
+		ir, err := q.selectSeriesFromStoreGateway(ctx, storeQueries.storeGateway.MergeSeriesRequest(req.Msg, profileType))
+		if err != nil {
+			return nil, err
+		}
+		responses = append(responses, ir...)
 	}
-	it, err := selectMergeSeries(gCtx, responses)
+
+	it, err := selectMergeSeries(ctx, responses)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
