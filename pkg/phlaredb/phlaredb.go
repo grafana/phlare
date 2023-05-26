@@ -252,19 +252,19 @@ func (f *PhlareDB) Series(ctx context.Context, req *connect.Request[ingestv1.Ser
 func (f *PhlareDB) MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse]) error {
 	f.headLock.RLock()
 	defer f.headLock.RUnlock()
-	return MergeProfilesStacktraces(ctx, stream, f.blockQuerier.Queriers().ForTimeRange)
+	return MergeProfilesStacktraces(ctx, stream, f.queriers().ForTimeRange)
 }
 
 func (f *PhlareDB) MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse]) error {
 	f.headLock.RLock()
 	defer f.headLock.RUnlock()
-	return MergeProfilesLabels(ctx, stream, f.blockQuerier.Queriers().ForTimeRange)
+	return MergeProfilesLabels(ctx, stream, f.queriers().ForTimeRange)
 }
 
 func (f *PhlareDB) MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse]) error {
 	f.headLock.RLock()
 	defer f.headLock.RUnlock()
-	return MergeProfilesPprof(ctx, stream, f.blockQuerier.Queriers().ForTimeRange)
+	return MergeProfilesPprof(ctx, stream, f.queriers().ForTimeRange)
 }
 
 type BidiServerMerge[Res any, Req any] interface {

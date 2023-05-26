@@ -1105,7 +1105,8 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.B
 		}
 		r.size = attrs.Size
 	}
-	ra, err := bucketReader.ReaderAt(ctx, filePath)
+	// the same reader is used to serve all requests, so we pass context.Background() here
+	ra, err := bucketReader.ReaderAt(context.Background(), filePath)
 	if err != nil {
 		return errors.Wrapf(err, "create reader '%s'", filePath)
 	}

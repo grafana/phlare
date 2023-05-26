@@ -314,7 +314,7 @@ func (f *Phlare) setupModuleManager() error {
 		API:            {Server},
 		Agent:          {API},
 		Distributor:    {Overrides, Ring, API, UsageReport},
-		Querier:        {API, MemberlistKV, Ring, UsageReport},
+		Querier:        {Overrides, API, MemberlistKV, Ring, UsageReport},
 		QueryFrontend:  {OverridesExporter, API, MemberlistKV, UsageReport},
 		QueryScheduler: {Overrides, API, MemberlistKV, UsageReport},
 		Ingester:       {Overrides, API, MemberlistKV, Storage, UsageReport},

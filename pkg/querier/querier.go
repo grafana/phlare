@@ -9,9 +9,11 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/ring"
 	ring_client "github.com/grafana/dskit/ring/client"
 	"github.com/grafana/dskit/services"
+	"github.com/grafana/mimir/pkg/util/spanlogger"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
@@ -272,13 +274,13 @@ func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffR
 
 func (q *Querier) SelectMergeStacktraces(ctx context.Context, req *connect.Request[querierv1.SelectMergeStacktracesRequest]) (*connect.Response[querierv1.SelectMergeStacktracesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMergeStacktraces")
+	level.Info(spanlogger.FromContext(ctx, q.logger)).Log(
+		"start", model.Time(req.Msg.Start).Time().String(),
+		"end", model.Time(req.Msg.End).Time().String(),
+		"selector", req.Msg.LabelSelector,
+		"profile_id", req.Msg.ProfileTypeID,
+	)
 	defer func() {
-		sp.LogFields(
-			otlog.String("start", model.Time(req.Msg.Start).Time().String()),
-			otlog.String("end", model.Time(req.Msg.End).Time().String()),
-			otlog.String("selector", req.Msg.LabelSelector),
-			otlog.String("profile_id", req.Msg.ProfileTypeID),
-		)
 		sp.Finish()
 	}()
 
@@ -303,10 +305,13 @@ func (q *Querier) selectTree(ctx context.Context, req *querierv1.SelectMergeStac
 		return q.selectTreeFromIngesters(ctx, req)
 	}
 
-	storeQueries := splitQueryToStores(model.Time(req.Start), (model.Time(req.End)), model.Now(), q.cfg.QueryStoreAfter)
+	storeQueries := splitQueryToStores(model.Time(req.Start), model.Time(req.End), model.Now(), q.cfg.QueryStoreAfter)
 	if !storeQueries.ingester.shouldQuery && !storeQueries.storeGateway.shouldQuery {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("start and end time are outside of the ingester and store gateway retention"))
 	}
+
+	storeQueries.Log(level.Debug(spanlogger.FromContext(ctx, q.logger)))
+
 	if !storeQueries.ingester.shouldQuery {
 		return q.selectTreeFromStoreGateway(ctx, storeQueries.storeGatewayRequest(req))
 	}
@@ -346,6 +351,18 @@ type storeQuery struct {
 
 type storeQueries struct {
 	ingester, storeGateway storeQuery
+	queryStoreAfter        time.Duration
+}
+
+func (sq storeQueries) Log(logger log.Logger) {
+	logger.Log(
+		"msg", "storeQueries",
+		"queryStoreAfter", sq.queryStoreAfter.String(),
+		"ingester", sq.ingester.shouldQuery,
+		"ingester.start", sq.ingester.start.Time().Format(time.RFC3339Nano), "ingester.end", sq.ingester.end.Time().Format(time.RFC3339Nano),
+		"store-gateway", sq.storeGateway.shouldQuery,
+		"store-gateway.start", sq.storeGateway.start.Time().Format(time.RFC3339Nano), "store-gateway.end", sq.storeGateway.end.Time().Format(time.RFC3339Nano),
+	)
 }
 
 func (sq storeQueries) ingesterRequest(req *querierv1.SelectMergeStacktracesRequest) *querierv1.SelectMergeStacktracesRequest {
@@ -371,6 +388,7 @@ func (sq storeQueries) storeGatewayRequest(req *querierv1.SelectMergeStacktraces
 // splitQueryToStores splits the query into ingester and store gateway queries using the given cut off time.
 // todo(ctovena): Later we should try to deduplicate blocks between ingesters and store gateways (prefer) and simply query both
 func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter time.Duration) (queries storeQueries) {
+	queries.queryStoreAfter = queryStoreAfter
 	// If the start time is in the future, there is nothing to query.
 	if start > now {
 		queries.storeGateway.shouldQuery = false
@@ -389,10 +407,8 @@ func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter t
 		return
 	}
 
-	// If the cut off is in the middle of the query, then we need to query both
-	// the store gateway and the ingester.
 	cutOff := now.Add(-queryStoreAfter)
-	if start == cutOff {
+	if start >= cutOff {
 		queries.storeGateway.shouldQuery = false
 
 		queries.ingester.shouldQuery = true
@@ -400,6 +416,8 @@ func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter t
 		queries.ingester.end = end
 		return
 	}
+	// If the cut off is in the middle of the query, then we need to query both
+	// the store gateway and the ingester.
 	if cutOff < end && cutOff > start {
 		queries.storeGateway.shouldQuery = true
 		queries.storeGateway.start = start

@@ -869,6 +869,7 @@ func Test_splitQueryToStores(t *testing.T) {
 			queryStoreAfter: 30 * time.Minute,
 
 			expected: storeQueries{
+				queryStoreAfter: 30 * time.Minute,
 				storeGateway: storeQuery{
 					shouldQuery: false,
 				},
@@ -889,6 +890,7 @@ func Test_splitQueryToStores(t *testing.T) {
 			queryStoreAfter: 30 * time.Minute,
 
 			expected: storeQueries{
+				queryStoreAfter: 30 * time.Minute,
 				storeGateway: storeQuery{
 					shouldQuery: true,
 					start:       model.TimeFromUnixNano(0),
@@ -911,6 +913,7 @@ func Test_splitQueryToStores(t *testing.T) {
 			queryStoreAfter: 30 * time.Minute,
 
 			expected: storeQueries{
+				queryStoreAfter: 30 * time.Minute,
 				storeGateway: storeQuery{
 					shouldQuery: true,
 					start:       model.TimeFromUnixNano(0),
@@ -935,6 +938,30 @@ func Test_splitQueryToStores(t *testing.T) {
 			queryStoreAfter: 30 * time.Minute,
 
 			expected: storeQueries{
+				queryStoreAfter: 30 * time.Minute,
+				storeGateway: storeQuery{
+					shouldQuery: false,
+				},
+				ingester: storeQuery{
+					shouldQuery: true,
+					start:       model.TimeFromUnixNano(int64(30 * time.Minute)),
+					end:         model.TimeFromUnixNano(int64(45 * time.Minute)),
+				},
+			},
+		},
+		{
+			// ----|------|-----|----|----
+			//     ^      ^     ^    ^
+			//    cutoff start end  now
+			//
+			name:            "start is after at cutoff",
+			now:             model.TimeFromUnixNano(int64(1 * time.Hour)),
+			start:           model.TimeFromUnixNano(int64(30 * time.Minute)),
+			end:             model.TimeFromUnixNano(int64(45 * time.Minute)),
+			queryStoreAfter: 30 * time.Minute,
+
+			expected: storeQueries{
+				queryStoreAfter: 30 * time.Minute,
 				storeGateway: storeQuery{
 					shouldQuery: false,
 				},
