@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-
 	"github.com/grafana/mimir/pkg/storage/tsdb"
 	"github.com/grafana/mimir/pkg/util"
+
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 )
 
@@ -139,10 +139,10 @@ func (s *StoreGateway) BlocksHandler(w http.ResponseWriter, req *http.Request) {
 	}, blocksPageTemplate, req)
 }
 
-func formatTimeIfNotZero(t time.Time, format string) string {
-	if t.IsZero() {
-		return ""
-	}
+// func formatTimeIfNotZero(t time.Time, format string) string {
+// 	if t.IsZero() {
+// 		return ""
+// 	}
 
-	return t.Format(format)
-}
+// 	return t.Format(format)
+// }

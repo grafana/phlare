@@ -559,7 +559,7 @@ func (h *Head) ProfileTypes(ctx context.Context, req *connect.Request[ingestv1.P
 
 func (h *Head) Bounds() (mint, maxt model.Time) {
 	h.metaLock.RLock()
-	h.metaLock.RUnlock()
+	defer h.metaLock.RUnlock()
 	return h.meta.MinTime, h.meta.MaxTime
 }
 

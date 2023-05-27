@@ -178,9 +178,7 @@ func (bs *BucketStore) addBlock(ctx context.Context, meta *block.Meta) (err erro
 		if err != nil {
 			return nil, errors.Wrap(err, "load block from disk")
 		}
-		if err = bs.blockSet.add(b); err != nil {
-			return nil, errors.Wrap(err, "add block to set")
-		}
+		bs.blockSet.add(b)
 		bs.blocks[meta.ULID] = b
 		return b, nil
 	}()
@@ -398,7 +396,7 @@ func newBucketBlockSet() *bucketBlockSet {
 	return &bucketBlockSet{}
 }
 
-func (s *bucketBlockSet) add(b *Block) error {
+func (s *bucketBlockSet) add(b *Block) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -411,7 +409,6 @@ func (s *bucketBlockSet) add(b *Block) error {
 		}
 		return s.blocks[j].meta.MinTime < s.blocks[k].meta.MinTime
 	})
-	return nil
 }
 
 func (s *bucketBlockSet) remove(id ulid.ULID) {

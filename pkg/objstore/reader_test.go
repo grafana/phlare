@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/grafana/phlare/pkg/objstore/client"
 	"github.com/grafana/phlare/pkg/objstore/providers/filesystem"
-	"github.com/stretchr/testify/require"
 )
 
 func Test_FileSystem(t *testing.T) {

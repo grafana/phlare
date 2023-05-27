@@ -12,13 +12,13 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/grafana/dskit/backoff"
 	"github.com/grafana/dskit/multierror"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	phlareobj "github.com/grafana/phlare/pkg/objstore"
 	"github.com/grafana/phlare/pkg/phlaredb/bucket"
 	"github.com/grafana/phlare/pkg/util"
-	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var errBucketStoreNotFound = errors.New("bucket store not found")

@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
 	thanosobjstore "github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/providers/filesystem"
+
+	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
 )
 
 type Bucket struct {
