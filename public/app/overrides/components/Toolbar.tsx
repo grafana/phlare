@@ -2,7 +2,7 @@ import React from 'react';
 import 'react-dom';
 
 import { useAppSelector, useAppDispatch } from '@webapp/redux/hooks';
-import { Query, queryToAppName } from '@webapp/models/query';
+import { Query } from '@webapp/models/query';
 import {
   selectApps,
   reloadAppNames,
@@ -24,24 +24,18 @@ interface ToolbarProps {
 
   filterApp?: (names: string) => boolean;
 }
-function Toolbar({ onSelectedApp, filterApp = () => true }: ToolbarProps) {
+function Toolbar({
+  onSelectedApp,
+  filterApp: _filterApp = () => true,
+}: ToolbarProps) {
   const dispatch = useAppDispatch();
   const appNamesState = useAppSelector(selectAppNamesState);
   const apps = useAppSelector(selectApps);
-  //const apps = useAppSelector(selectApps).filter((a) => filterApp(a.name));
-  //  const appNames = apps.map((a) => a.name);
   const { query } = useAppSelector(selectQueries);
   const selectedQuery = query;
-  //  const selectedAppName = queryToAppName(query).mapOr('', (q) =>
-  //    appNames.indexOf(q) !== -1 ? q : ''
-  //  );
 
   const onSelected = (query: Query) => {
-    //const query = queryFromAppName(appName);
     onSelectedApp(query);
-    //onSelectedApp(
-    //  'process_cpu:cpu:nanoseconds:cpu:nanoseconds{pyroscope_app="simple.golang.app"}'
-    //);
   };
 
   const appNamesLoading =

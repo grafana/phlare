@@ -8,9 +8,9 @@ import {
 } from '@webapp/models/app';
 import { Query } from '@webapp/models/query';
 import cx from 'classnames';
-//import SelectButton from '@webapp/components/AppSelector/SelectButton';
+import { SelectButton } from '@phlare/components/AppSelector/SelectButton';
 // TODO:
-import SelectButton from '@pyroscope/webapp/javascript/components/AppSelector/SelectButton';
+//import SelectButton from '@pyroscope/webapp/javascript/components/AppSelector/SelectButton';
 //import { Label, LabelString } from '@webapp/components/AppSelector/Label';
 //import styles from '@pyroscope/webapp/AppSelector.module.scss';
 // TODO:
@@ -32,12 +32,9 @@ interface AppSelectorProps {
 // TODO: unify this with public/app/overrides/services/apps.ts
 function uniqueByName(apps: App[]) {
   const idFn = (b: App) => b[AppNameLabel];
-
   const visited = new Set<string>();
 
   return apps.filter((b) => {
-    // TODO: it may be possible that the same "app" belongs to different languages
-    // with this code we only use the first one
     if (visited.has(idFn(b))) {
       return false;
     }
@@ -53,19 +50,32 @@ function findAppsWithName(apps: App[], appName: string) {
   });
 }
 
+function queryToApp(query: Query, apps: App[]) {
+  const maybeSelectedApp = appFromQuery(query);
+  if (!maybeSelectedApp) {
+    return undefined;
+  }
+
+  return apps.find(
+    (a) =>
+      a.__profile_type__ === maybeSelectedApp?.__profile_type__ &&
+      a[AppNameLabel] === maybeSelectedApp?.[AppNameLabel]
+  );
+}
+
 export function AppSelector({
   onSelected,
   apps,
   selectedQuery,
 }: AppSelectorProps) {
-  const selectedApp = appFromQuery(selectedQuery);
+  const maybeSelectedApp = queryToApp(selectedQuery, apps);
 
   return (
     <div className={styles.container}>
       <SelectorModalWithToggler
         apps={apps}
         onSelected={(app) => onSelected(appToQuery(app))}
-        selectedApp={selectedApp}
+        selectedApp={maybeSelectedApp}
       />
     </div>
   );
@@ -134,7 +144,11 @@ export const SelectorModalWithToggler = ({
           </div>
         ) : null
       }
-      toggleText={selectedApp ? appToQuery(selectedApp) : label}
+      toggleText={
+        selectedApp
+          ? `${selectedApp?.[AppNameLabel]}:${selectedApp.__name__}:${selectedApp.__type__}`
+          : label
+      }
       headerEl={
         <>
           <div className={styles.headerTitle}>{label}</div>
@@ -157,16 +171,16 @@ export const SelectorModalWithToggler = ({
           onClick={() => {
             setSelectedLeftSide(app[AppNameLabel]);
           }}
-          fullList={[]}
+          icon="folder"
           isSelected={isLeftSideSelected(app)}
           key={app[AppNameLabel]}
         />
       ))}
       rightSideEl={matchedApps.map((app) => (
         <SelectButton
-          name={app.__profile_type__}
+          name={`${app.__name__}:${app.__type__}`}
+          icon="pyroscope"
           onClick={() => onSelected(app)}
-          fullList={[]}
           isSelected={isRightSideSelected(app)}
           key={app.__profile_type__}
         />
@@ -174,6 +188,5 @@ export const SelectorModalWithToggler = ({
     />
   );
 };
-//
-//
+
 export default AppSelector;

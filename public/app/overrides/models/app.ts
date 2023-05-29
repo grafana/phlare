@@ -5,22 +5,29 @@ import { z } from 'zod';
 export const AppNameLabel = 'pyroscope_app' as const;
 export type AppNameLabelType = typeof AppNameLabel;
 
-export const AppSchema = z.object({
+// A BasicAppSchema contains the minimum required fields
+export const BasicAppSchema = z.object({
+  // TODO: should we use an enum?
   __profile_type__: z.string(),
   [AppNameLabel]: z.string(),
-
-  // TODO: add more fields (like spyName)
-  // TODO: validate using UnitsSchema
-  //  __type__: z.string(),
-  //  query: z.string(),
-  //  TODO: this field is currently only used as a sortKey in redux
-  name: z.string().optional().default(''),
 });
 
+export const AppSchema = BasicAppSchema.merge(
+  z.object({
+    __type__: z.string(),
+    __name__: z.string(),
+    //  TODO: this field is currently only used as a sortKey in redux
+    name: z.string().optional().default(''),
+  })
+);
+
 export type App = z.infer<typeof AppSchema>;
+export type BasicApp = z.infer<typeof BasicAppSchema>;
 
 // Given a query returns an App
-export function appFromQuery(query: Query): App | undefined {
+export function appFromQuery(
+  query: Query
+): z.infer<typeof BasicAppSchema> | undefined {
   const parsed = parse(query);
 
   if (!parsed) {
@@ -32,7 +39,7 @@ export function appFromQuery(query: Query): App | undefined {
     ...parsed?.tags,
   };
 
-  const parsedApp = AppSchema.safeParse(app);
+  const parsedApp = BasicAppSchema.safeParse(app);
   if (!parsedApp.success) {
     return undefined;
   }
