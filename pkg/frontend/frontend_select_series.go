@@ -25,11 +25,12 @@ func (f *Frontend) SelectSeries(ctx context.Context,
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
 	}
 
+	m := phlaremodel.NewSeriesMerger(false)
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(math.Max(1, validation.SmallestPositiveNonZeroIntPerTenant(tenantIDs, f.limits.MaxQueryParallelism)))
 	interval := validation.MaxDurationOrZeroPerTenant(tenantIDs, f.limits.QuerySplitDuration)
-	intervals := NewTimeIntervalIterator(time.UnixMilli(c.Msg.Start), time.UnixMilli(c.Msg.End), interval)
-	m := phlaremodel.NewSeriesMerger(false)
+	intervals := NewTimeIntervalIterator(time.UnixMilli(c.Msg.Start), time.UnixMilli(c.Msg.End), interval,
+		WithAlignment(time.Second*time.Duration(c.Msg.Step)))
 
 	for intervals.Next() {
 		r := intervals.At()

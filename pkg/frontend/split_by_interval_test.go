@@ -13,6 +13,8 @@ func Test_TimeIntervalIterator(t *testing.T) {
 	type testCase struct {
 		description string
 		inputRange  TimeInterval
+		interval    time.Duration
+		alignment   time.Duration
 		expected    []TimeInterval
 	}
 
@@ -20,6 +22,7 @@ func Test_TimeIntervalIterator(t *testing.T) {
 		{
 			description: "misaligned time range",
 			inputRange:  TimeInterval{time.Unix(0, 1), time.Unix(0, 3602)},
+			interval:    900,
 			expected: []TimeInterval{
 				{time.Unix(0, 1), time.Unix(0, 899)},
 				{time.Unix(0, 900), time.Unix(0, 1799)},
@@ -29,8 +32,26 @@ func Test_TimeIntervalIterator(t *testing.T) {
 			},
 		},
 		{
+			description: "misaligned time range with aligned interval",
+			inputRange:  TimeInterval{time.UnixMilli(1684840541938), time.UnixMilli(1684848292171)},
+			interval:    time.Minute * 15,
+			alignment:   time.Second * 15,
+			expected: []TimeInterval{
+				{Start: time.Unix(0, 1684840541938000000), End: time.Unix(0, 1684841441937999999)},
+				{Start: time.Unix(0, 1684841441938000000), End: time.Unix(0, 1684842341937999999)},
+				{Start: time.Unix(0, 1684842341938000000), End: time.Unix(0, 1684843241937999999)},
+				{Start: time.Unix(0, 1684843241938000000), End: time.Unix(0, 1684844141937999999)},
+				{Start: time.Unix(0, 1684844141938000000), End: time.Unix(0, 1684845041937999999)},
+				{Start: time.Unix(0, 1684845041938000000), End: time.Unix(0, 1684845941937999999)},
+				{Start: time.Unix(0, 1684845941938000000), End: time.Unix(0, 1684846841937999999)},
+				{Start: time.Unix(0, 1684846841938000000), End: time.Unix(0, 1684847741937999999)},
+				{Start: time.Unix(0, 1684847741938000000), End: time.Unix(0, 1684848292171000000)},
+			},
+		},
+		{
 			description: "round range",
 			inputRange:  TimeInterval{time.Unix(0, 0), time.Unix(0, 3600)},
+			interval:    900,
 			expected: []TimeInterval{
 				{time.Unix(0, 0), time.Unix(0, 899)},
 				{time.Unix(0, 900), time.Unix(0, 1799)},
@@ -41,21 +62,55 @@ func Test_TimeIntervalIterator(t *testing.T) {
 		{
 			description: "exact range",
 			inputRange:  TimeInterval{time.Unix(0, 900), time.Unix(0, 1800)},
+			interval:    900,
 			expected:    []TimeInterval{{time.Unix(0, 900), time.Unix(0, 1800)}},
 		},
 		{
-			description: "zero range",
+			description: "range less than interval",
+			inputRange:  TimeInterval{time.Unix(0, 1), time.Unix(0, 501)},
+			interval:    900,
+			expected: []TimeInterval{
+				{time.Unix(0, 1), time.Unix(0, 501)},
+			},
 		},
 		{
-			description: "range less than interval",
+			description: "range less than interval with alignment",
+			inputRange:  TimeInterval{time.Unix(0, 1), time.Unix(0, 501)},
+			interval:    900,
+			alignment:   37,
+			expected: []TimeInterval{
+				{time.Unix(0, 1), time.Unix(0, 501)},
+			},
+		},
+		{
+			description: "range less than alignment",
+			inputRange:  TimeInterval{time.Unix(0, 1), time.Unix(0, 501)},
+			alignment:   900,
+			interval:    90,
+			expected: []TimeInterval{
+				{time.Unix(0, 1), time.Unix(0, 501)},
+			},
+		},
+		{
+			description: "zero range",
+			interval:    900,
+		},
+		{
+			description: "zero range with alignment",
+			interval:    900,
+			alignment:   37,
+		},
+		{
+			description: "zero interval",
 			inputRange:  TimeInterval{time.Unix(0, 1), time.Unix(0, 501)},
 			expected: []TimeInterval{
 				{time.Unix(0, 1), time.Unix(0, 501)},
 			},
 		},
 		{
-			description: "range less than interval",
+			description: "zero interval with alignment",
 			inputRange:  TimeInterval{time.Unix(0, 1), time.Unix(0, 501)},
+			alignment:   37,
 			expected: []TimeInterval{
 				{time.Unix(0, 1), time.Unix(0, 501)},
 			},
@@ -65,26 +120,15 @@ func Test_TimeIntervalIterator(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.description, func(t *testing.T) {
-			actual, err := iter.Slice[TimeInterval](NewTimeIntervalIterator(tc.inputRange.Start, tc.inputRange.End, 900))
+			actual, err := iter.Slice[TimeInterval](NewTimeIntervalIterator(tc.inputRange.Start, tc.inputRange.End, tc.interval,
+				WithAlignment(tc.alignment)))
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, actual)
 		})
 	}
 }
 
-func Test_TimeIntervalIterator_ZeroInterval(t *testing.T) {
-	actual, err := iter.Slice[TimeInterval](NewTimeIntervalIterator(
-		time.UnixMilli(51),
-		time.UnixMilli(211),
-		0))
-
-	require.NoError(t, err)
-	require.Len(t, actual, 1)
-	require.Equal(t, int64(51), actual[0].Start.UnixMilli())
-	require.Equal(t, int64(211), actual[0].End.UnixMilli())
-}
-
-func Test_TimeIntervalIterator_Milli(t *testing.T) {
+func Test_TimeIntervalIterator_MillisecondsTruncation(t *testing.T) {
 	actual, err := iter.Slice[TimeInterval](NewTimeIntervalIterator(
 		time.UnixMilli(51),
 		time.UnixMilli(211),
