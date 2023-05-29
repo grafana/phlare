@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/grafana/phlare/pkg/util/connectgrpc"
 	"github.com/pkg/errors"
 
 	"github.com/pyroscope-io/pyroscope/pkg/convert/speedscope"
@@ -55,7 +56,7 @@ func (h ingestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = h.log.Log("msg", "pyroscope ingest", "err", err)
 		var connectErr *connect.Error
 		if ok := errors.As(err, &connectErr); ok {
-			w.WriteHeader(connectCodeToHTTP(connectErr.Code()))
+			w.WriteHeader(int(connectgrpc.CodeToHTTP(connectErr.Code())))
 			return
 		}
 
