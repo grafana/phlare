@@ -52,6 +52,7 @@ describe('AppSelector', () => {
           {
             __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
             pyroscope_app: 'myapp',
+            name: '',
           },
         ];
 

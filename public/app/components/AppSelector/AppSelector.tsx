@@ -1,9 +1,12 @@
-//export * from '@pyroscope/webapp/javascript/components/AppSelector';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import ModalWithToggle from '@webapp/ui/Modals/ModalWithToggle';
-import Input from '@webapp/ui/Input';
-import { App, appFromQuery, appToQuery } from '@webapp/models/app';
-import { parse, brandQuery, Query } from '@webapp/models/query';
+import {
+  AppNameLabel,
+  App as OgApp,
+  appFromQuery,
+  appToQuery,
+} from '@webapp/models/app';
+import { Query } from '@webapp/models/query';
 import cx from 'classnames';
 //import SelectButton from '@webapp/components/AppSelector/SelectButton';
 // TODO:
@@ -13,6 +16,8 @@ import SelectButton from '@pyroscope/webapp/javascript/components/AppSelector/Se
 // TODO:
 import styles from '../../../../node_modules/pyroscope-oss/webapp/javascript/components/AppSelector/AppSelector.module.scss';
 import styles2 from './AppSelector.module.css';
+
+type App = Omit<OgApp, 'name'>;
 
 interface AppSelectorProps {
   /** Triggered when an app is selected */
@@ -24,21 +29,27 @@ interface AppSelectorProps {
   selectedQuery: Query;
 }
 
-/**
- * Given a flat list of Apps
- * Get unique app names
- */
-function getAppNames(apps: App[]) {
-  const names = apps.map((a) => {
-    return a.pyroscope_app;
-  });
+// TODO: unify this with public/app/overrides/services/apps.ts
+function uniqueByName(apps: App[]) {
+  const idFn = (b: App) => b[AppNameLabel];
 
-  return Array.from(new Set(names));
+  const visited = new Set<string>();
+
+  return apps.filter((b) => {
+    // TODO: it may be possible that the same "app" belongs to different languages
+    // with this code we only use the first one
+    if (visited.has(idFn(b))) {
+      return false;
+    }
+
+    visited.add(idFn(b));
+    return true;
+  });
 }
 
 function findAppsWithName(apps: App[], appName: string) {
   return apps.filter((a) => {
-    return a.pyroscope_app === appName;
+    return a[AppNameLabel] === appName;
   });
 }
 
@@ -60,39 +71,64 @@ export function AppSelector({
   );
 }
 
-//ggfunction appToQuery(app: App) {
-//gg  return brandQuery(
-//gg    `${app.__profile_type__}{pyroscope_app="${app.pyroscope_app}"}`
-//gg  );
-//gg}
-//gg
 export const SelectorModalWithToggler = ({
   apps,
   selectedApp,
-  onSelected,
+  onSelected: onSelectedUpstream,
 }: {
   apps: App[];
   selectedApp?: App;
   onSelected: (app: App) => void;
 }) => {
-  const appNames = getAppNames(apps);
-  //  const [filter, setFilter] = useState('');
-  const [isModalOpen, setModalOpenStatus] = useState(false);
-  // TODO: name
-  const [selectedAppName, setSelectedAppName] = useState<string>();
+  const onSelected = (app: App) => {
+    // Reset state
+    setSelectedLeftSide(undefined);
 
-  // TODO: use memo
-  const matchedApps = findAppsWithName(apps, selectedAppName || '');
+    onSelectedUpstream(app);
+  };
+
+  const leftSideApps = uniqueByName(apps);
+  const [isModalOpen, setModalOpenStatus] = useState(false);
+  const [selectedLeftSide, setSelectedLeftSide] = useState<string>();
+  const matchedApps = findAppsWithName(
+    apps,
+    selectedLeftSide || selectedApp?.[AppNameLabel] || ''
+  );
   const label = 'Select an application';
+
+  // For the left side, it's possible to be selected either via
+  // * The current query (ie. just opened the component)
+  // * The current "expanded state" (ie. clicked on the left side)
+  const isLeftSideSelected = (a: App) => {
+    if (selectedLeftSide) {
+      return selectedLeftSide === a[AppNameLabel];
+    }
+
+    return selectedApp?.[AppNameLabel] === a[AppNameLabel];
+  };
+
+  // For the right side, the only way to be selected is if matches the current query
+  // Since clicking on an item sets that app as the current query
+  const isRightSideSelected = (a: App) => {
+    if (selectedLeftSide) {
+      return false;
+    }
+
+    return selectedApp?.__profile_type__ === a.__profile_type__;
+  };
 
   return (
     <ModalWithToggle
       isModalOpen={isModalOpen}
       setModalOpenStatus={setModalOpenStatus}
       modalClassName={cx(styles.appSelectorModal, styles2.appSelectorModal)}
+      customHandleOutsideClick={() => {
+        setSelectedLeftSide(undefined);
+        setModalOpenStatus(false);
+      }}
       modalHeight={'auto'}
       noDataEl={
-        !appNames?.length ? (
+        !leftSideApps?.length ? (
           <div data-testid="app-selector-no-data" className={styles.noData}>
             No Data
           </div>
@@ -100,9 +136,9 @@ export const SelectorModalWithToggler = ({
       }
       toggleText={selectedApp ? appToQuery(selectedApp) : label}
       headerEl={
-        <></> && (
-          <>
-            <div className={styles.headerTitle}>{label}</div>
+        <>
+          <div className={styles.headerTitle}>{label}</div>
+          {/*
             <Input
               name="application search"
               type="text"
@@ -112,26 +148,26 @@ export const SelectorModalWithToggler = ({
               className={styles.search}
               testId="application-search"
             />
-          </>
-        )
+          */}
+        </>
       }
-      leftSideEl={appNames.map((name) => (
+      leftSideEl={leftSideApps.map((app) => (
         <SelectButton
-          name={name}
+          name={app[AppNameLabel]}
           onClick={() => {
-            setSelectedAppName(name);
+            setSelectedLeftSide(app[AppNameLabel]);
           }}
-          fullList={appNames}
-          isSelected={selectedAppName === name}
-          key={name}
+          fullList={[]}
+          isSelected={isLeftSideSelected(app)}
+          key={app[AppNameLabel]}
         />
       ))}
       rightSideEl={matchedApps.map((app) => (
         <SelectButton
           name={app.__profile_type__}
           onClick={() => onSelected(app)}
-          fullList={appNames}
-          isSelected={false}
+          fullList={[]}
+          isSelected={isRightSideSelected(app)}
           key={app.__profile_type__}
         />
       ))}

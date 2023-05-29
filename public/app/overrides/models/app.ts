@@ -1,9 +1,13 @@
 import { parse, brandQuery, Query } from '@webapp/models/query';
 import { z } from 'zod';
 
+// TODO(eh-am): update to __service_name__ after https://github.com/grafana/phlare/pull/710 is merged
+export const AppNameLabel = 'pyroscope_app' as const;
+export type AppNameLabelType = typeof AppNameLabel;
+
 export const AppSchema = z.object({
   __profile_type__: z.string(),
-  pyroscope_app: z.string(),
+  [AppNameLabel]: z.string(),
 
   // TODO: add more fields (like spyName)
   // TODO: validate using UnitsSchema
@@ -14,9 +18,6 @@ export const AppSchema = z.object({
 });
 
 export type App = z.infer<typeof AppSchema>;
-
-// TODO(eh-am): update to __service_name__ after https://github.com/grafana/phlare/pull/710 is merged
-export const AppNameLabel = 'pyroscope_app';
 
 // Given a query returns an App
 export function appFromQuery(query: Query): App | undefined {
@@ -39,8 +40,10 @@ export function appFromQuery(query: Query): App | undefined {
   return parsedApp.data;
 }
 
-export function appToQuery(app: App): Query {
+export function appToQuery(
+  app: Pick<App, '__profile_type__' | AppNameLabelType>
+): Query {
   return brandQuery(
-    `${app.__profile_type__}{${AppNameLabel}="${app.pyroscope_app}"}`
+    `${app.__profile_type__}{${AppNameLabel}="${app[AppNameLabel]}"}`
   );
 }

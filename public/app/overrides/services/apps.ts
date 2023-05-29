@@ -28,7 +28,7 @@ type SeriesResponse = z.infer<typeof SeriesResponseSchema>;
 // It:
 // * flattens all labels from the same labelSet into an object (App)
 // * remove duplicates
-const ListOfAppsSchema = SeriesResponseSchema.transform(flatAndMergeLabels)
+const ListOfAppsSchema = SeriesResponseSchema.transform(flattenAndMergeLabels)
   .pipe(z.array(AppSchema))
   .transform(removeDuplicateApps)
   .transform((v) => {
@@ -42,7 +42,7 @@ const ListOfAppsSchema = SeriesResponseSchema.transform(flatAndMergeLabels)
     });
   });
 
-function flatAndMergeLabels(s: SeriesResponse) {
+function flattenAndMergeLabels(s: SeriesResponse) {
   return s.labelsSet.map((v) => {
     return v.labels.reduce((acc, curr) => {
       acc[curr.name] = curr.value;
@@ -53,7 +53,7 @@ function flatAndMergeLabels(s: SeriesResponse) {
 
 function removeDuplicateApps(app: App[]) {
   const idFn = (b: (typeof app)[number]) =>
-    `${b.__profile_type__}-${b.pyroscope_app}`;
+    `${b.__profile_type__}-${b[AppNameLabel]}`;
 
   const visited = new Set<string>();
 
