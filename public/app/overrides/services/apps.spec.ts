@@ -1,4 +1,13 @@
-import { groupByAppAndProfileId } from './apps';
+import { Result } from '@webapp/util/fp';
+import { fetchApps } from './apps';
+import * as base from '@webapp/services/base';
+
+jest.mock('@webapp/services/base', () => {
+  return {
+    __esModule: true,
+    ...jest.requireActual('@webapp/services/base'),
+  };
+});
 
 const mockData = {
   labelsSet: [
@@ -621,6 +630,155 @@ const mockData = {
   ],
 };
 
-it('works', () => {
-  expect(groupByAppAndProfileId(mockData)).toBe(true);
+//it('smoke', () => {
+//  expect(groupByAppAndProfileId(mockData)).toBe(true);
+//});
+//
+describe('appsService', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('error cases', () => {
+    test.each([
+      [{}, []],
+      [null, []],
+      [{ labelSets: [] }, []],
+    ])(
+      `server returned='%s', should transform into %s`,
+      async (response, expected) => {
+        const spy = jest.spyOn(base, 'requestWithOrgID');
+        spy.mockReturnValue(Promise.resolve(Result.ok(response)));
+
+        const res = await fetchApps();
+        expect(res.isOk).toBe(true);
+        expect(res.value).toMatchObject(expected);
+      }
+    );
+  });
+
+  it('works', async () => {
+    const spy = jest.spyOn(base, 'requestWithOrgID');
+    spy.mockReturnValue(Promise.resolve(Result.ok(mockData)));
+
+    const res = await fetchApps();
+    expect(res.isOk).toBe(true);
+    expect(res.value).toMatchInlineSnapshot(`
+      [
+        {
+          "__profile_type__": "memory:alloc_objects:count::",
+          "name": "simple.golang.app",
+          "pyroscope_app": "simple.golang.app",
+        },
+        {
+          "__profile_type__": "memory:alloc_objects:count::",
+          "name": "simple.golang.app2",
+          "pyroscope_app": "simple.golang.app2",
+        },
+        {
+          "__profile_type__": "memory:alloc_space:bytes::",
+          "name": "simple.golang.app",
+          "pyroscope_app": "simple.golang.app",
+        },
+        {
+          "__profile_type__": "memory:alloc_space:bytes::",
+          "name": "simple.golang.app2",
+          "pyroscope_app": "simple.golang.app2",
+        },
+        {
+          "__profile_type__": "memory:inuse_objects:count::",
+          "name": "simple.golang.app",
+          "pyroscope_app": "simple.golang.app",
+        },
+        {
+          "__profile_type__": "memory:inuse_objects:count::",
+          "name": "simple.golang.app2",
+          "pyroscope_app": "simple.golang.app2",
+        },
+        {
+          "__profile_type__": "memory:inuse_space:bytes::",
+          "name": "simple.golang.app",
+          "pyroscope_app": "simple.golang.app",
+        },
+        {
+          "__profile_type__": "memory:inuse_space:bytes::",
+          "name": "simple.golang.app2",
+          "pyroscope_app": "simple.golang.app2",
+        },
+        {
+          "__profile_type__": "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+          "name": "simple.golang.app",
+          "pyroscope_app": "simple.golang.app",
+        },
+        {
+          "__profile_type__": "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+          "name": "simple.golang.app2",
+          "pyroscope_app": "simple.golang.app2",
+        },
+      ]
+    `);
+  });
+
+  // For example, if a cpu profile contains different tags
+  // The server will return with that level of granularity
+  // Which is not required to build an "App"
+  it('remove duplicates from same _profile_type__/name pair', async () => {
+    const spy = jest.spyOn(base, 'requestWithOrgID');
+    const mockData = {
+      labelsSet: [
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            },
+            { name: 'pyroscope_app', value: 'simple.golang.app' },
+          ],
+        },
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            },
+            { name: 'pyroscope_app', value: 'simple.golang.app2' },
+          ],
+        },
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            },
+            { name: 'pyroscope_app', value: 'simple.golang.app' },
+            { name: 'function', value: 'fast' },
+          ],
+        },
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            },
+            { name: 'pyroscope_app', value: 'simple.golang.app' },
+            { name: 'function', value: 'slow' },
+          ],
+        },
+      ],
+    };
+    spy.mockReturnValue(Promise.resolve(Result.ok(mockData)));
+
+    const res = await fetchApps();
+    expect(res.isOk).toBe(true);
+    expect(res.value).toMatchObject([
+      {
+        __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+        pyroscope_app: 'simple.golang.app',
+      },
+      {
+        __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+        pyroscope_app: 'simple.golang.app2',
+      },
+    ]);
+  });
 });

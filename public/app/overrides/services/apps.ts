@@ -45,7 +45,25 @@ z.string()
 
 const AppsSchema = SeriesResponseSchema.transform((v) => {
   return groupByAppAndProfileId(v);
-}).pipe(z.array(AppSchema));
+})
+  .pipe(z.array(AppSchema))
+  // Remove duplicates
+  .transform((v) => {
+    // Generate an unique id
+    const idFn = (b: (typeof v)[number]) =>
+      `${b.__profile_type__}-${b.pyroscope_app}`;
+
+    const visited = new Set<string>();
+
+    return v.filter((b) => {
+      if (visited.has(idFn(b))) {
+        return false;
+      }
+
+      visited.add(idFn(b));
+      return true;
+    });
+  });
 
 // TODO: change after https://github.com/grafana/phlare/pull/710 is merged
 const appTag = 'pyroscope_app';
