@@ -3,13 +3,14 @@ package pyroscope
 import (
 	"bytes"
 	"fmt"
-	"github.com/bufbuild/connect-go"
-	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bufbuild/connect-go"
+	"github.com/pkg/errors"
 
 	"github.com/pyroscope-io/pyroscope/pkg/convert/speedscope"
 
