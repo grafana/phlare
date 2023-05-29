@@ -9,13 +9,13 @@ export const AppSchema = z.object({
   // TODO: validate using UnitsSchema
   //  __type__: z.string(),
   //  query: z.string(),
-  //  TODO: this field is currently only used for sorting
-  name: z.string().optional(),
+  //  TODO: this field is currently only used as a sortKey in redux
+  name: z.string().optional().default(''),
 });
 
 export type App = z.infer<typeof AppSchema>;
 
-// TODO(eh-am): update to __service_name__
+// TODO(eh-am): update to __service_name__ after https://github.com/grafana/phlare/pull/710 is merged
 export const AppNameLabel = 'pyroscope_app';
 
 // Given a query returns an App
