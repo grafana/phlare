@@ -8,10 +8,15 @@ import { parseResponse, requestWithOrgID } from '@webapp/services/base';
 const SeriesResponseSchema = z.preprocess(
   (arg) => {
     const noop = { labelsSet: [] };
-    // The backend may return an empty object ({})
-    if (!arg || !('labelsSet' in arg)) {
+    if (!arg || typeof arg !== 'object') {
       return noop;
     }
+
+    // The backend may return an empty object ({})
+    if (!('labelsSet' in arg)) {
+      return noop;
+    }
+
     return arg;
   },
   z.object({

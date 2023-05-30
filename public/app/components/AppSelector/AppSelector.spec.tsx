@@ -28,6 +28,8 @@ describe('AppSelector', () => {
           {
             __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
             pyroscope_app: 'myapp',
+            __type__: 'type',
+            __name__: 'name',
           },
         ];
         const query = appToQuery(apps[0]);
@@ -40,19 +42,21 @@ describe('AppSelector', () => {
           />
         );
 
-        expect(screen.getByRole('button')).toHaveTextContent(query);
+        expect(screen.getByRole('button')).toHaveTextContent('myapp:name:type');
       });
     });
   });
 
   describe('when a query exists', () => {
     describe('when an equivalent app DOES NOT exist', () => {
-      it('still shows up', () => {
+      it('shows the default label', () => {
         const apps = [
           {
             __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
             pyroscope_app: 'myapp',
             name: '',
+            __type__: 'type',
+            __name__: 'name',
           },
         ];
 
@@ -68,12 +72,13 @@ describe('AppSelector', () => {
           />
         );
 
-        expect(screen.getByRole('button')).toHaveTextContent(query);
+        expect(screen.getByRole('button')).toHaveTextContent(
+          'Select an application'
+        );
       });
     });
   });
 
   // TODO: test
-  // * filter
   // * interaction
 });
