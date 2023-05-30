@@ -42,6 +42,7 @@ import (
 	"github.com/grafana/phlare/pkg/scheduler"
 	"github.com/grafana/phlare/pkg/scheduler/schedulerpb/schedulerpbconnect"
 	"github.com/grafana/phlare/pkg/storegateway"
+	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/gziphandler"
 	"github.com/grafana/phlare/pkg/validation/exporter"
 )
@@ -58,6 +59,7 @@ type API struct {
 	httpAuthMiddleware middleware.Interface
 	grpcGatewayMux     *grpcgw.ServeMux
 	grpcAuthMiddleware connect.Option
+	grpcLogMiddleware  connect.Option
 
 	cfg       Config
 	logger    log.Logger
@@ -73,6 +75,7 @@ func New(cfg Config, s *server.Server, grpcGatewayMux *grpcgw.ServeMux, logger l
 		indexPage:          NewIndexPageContent(),
 		grpcGatewayMux:     grpcGatewayMux,
 		grpcAuthMiddleware: cfg.GrpcAuthMiddleware,
+		grpcLogMiddleware:  connect.WithInterceptors(util.NewLogInterceptor(logger)),
 	}
 
 	// If no authentication middleware is present in the config, use the default authentication middleware.
@@ -219,7 +222,7 @@ func (a *API) RegisterRing(r http.Handler) {
 // RegisterQuerier registers the endpoints associated with the querier.
 func (a *API) RegisterQuerier(svc querierv1connect.QuerierServiceHandler) {
 	handlers := querier.NewHTTPHandlers(svc)
-	querierv1connect.RegisterQuerierServiceHandler(a.server.HTTP, svc, a.grpcAuthMiddleware)
+	querierv1connect.RegisterQuerierServiceHandler(a.server.HTTP, svc, a.grpcAuthMiddleware, a.grpcLogMiddleware)
 
 	a.RegisterRoute("/pyroscope/render", http.HandlerFunc(handlers.Render), true, true, "GET")
 	a.RegisterRoute("/pyroscope/render-diff", http.HandlerFunc(handlers.RenderDiff), true, true, "GET")
