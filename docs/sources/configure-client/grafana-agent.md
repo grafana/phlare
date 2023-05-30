@@ -64,3 +64,7 @@ To run the Grafana Agent in pull mode, execute the following steps:
 `docker-compose -f examples/your-application-example/docker-compose.yml up -d`
 
 3. Wait for the containers to start successfully. You can check their status using the docker ps command.
+
+## Example
+
+Visit the [Pyroscope examples](https://github.com/grafana/pyroscope/tree/main/examples/grafana-agent) to see an example of how to run Pyroscope with the Grafana Agent.
