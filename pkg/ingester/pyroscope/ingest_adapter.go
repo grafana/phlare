@@ -12,8 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/pyroscope-io/pyroscope/pkg/ingestion"
-	"github.com/pyroscope-io/pyroscope/pkg/server"
-	"github.com/pyroscope-io/pyroscope/pkg/server/httputils"
 	"github.com/pyroscope-io/pyroscope/pkg/storage"
 	"github.com/pyroscope-io/pyroscope/pkg/storage/tree"
 	"google.golang.org/protobuf/proto"
@@ -28,11 +26,9 @@ type PushService interface {
 }
 
 func NewPyroscopeIngestHandler(svc PushService, logger log.Logger) http.Handler {
-	return server.NewIngestHandler(
+	return NewIngestHandler(
 		logger,
 		&pyroscopeIngesterAdapter{svc: svc},
-		func(input *ingestion.IngestInput) {},
-		httputils.NewLogKitErrorUtils(logger),
 	)
 }
 
@@ -99,7 +95,7 @@ func (p *pyroscopeIngesterAdapter) Put(ctx context.Context, pi *storage.PutInput
 		Name:  labels.MetricName,
 		Value: metric,
 	}, &typesv1.LabelPair{
-		Name:  "pyroscope_app",
+		Name:  "service_name",
 		Value: app,
 	}, &typesv1.LabelPair{
 		Name:  phlaremodel.LabelNameDelta,
