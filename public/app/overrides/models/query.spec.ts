@@ -1,5 +1,4 @@
-import { brandQuery } from '@webapp/models/query';
-import { parse } from './query';
+import { brandQuery, parse } from '@webapp/models/query';
 
 const cases: Array<
   [string, { profileId: string; tags?: Record<string, string> } | undefined]

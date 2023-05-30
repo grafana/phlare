@@ -1,4 +1,4 @@
-import { App, AppSchema, AppNameLabel } from '@webapp/models/app';
+import { App, AppSchema } from '@webapp/models/app';
 import { Result } from '@webapp/util/fp';
 import { z, ZodError } from 'zod';
 import type { RequestError } from '@webapp/services/base';

@@ -15,8 +15,7 @@ import LoadingSpinner from '@webapp/ui/LoadingSpinner';
 import DateRangePicker from '@webapp/components/DateRangePicker';
 import RefreshButton from '@webapp/components/RefreshButton';
 import AppSelector from '@phlare/components/AppSelector/AppSelector';
-// TODO
-import styles from '../../../../node_modules/pyroscope-oss/webapp/javascript/components/Toolbar.module.css';
+import styles from '@pyroscope/webapp/javascript/components/Toolbar.module.css';
 
 interface ToolbarProps {
   /** callback to be called when an app is selected via the dropdown */
