@@ -9,13 +9,8 @@ import {
 import { Query } from '@webapp/models/query';
 import cx from 'classnames';
 import { SelectButton } from '@phlare/components/AppSelector/SelectButton';
-// TODO:
-//import SelectButton from '@pyroscope/webapp/javascript/components/AppSelector/SelectButton';
-//import { Label, LabelString } from '@webapp/components/AppSelector/Label';
-//import styles from '@pyroscope/webapp/AppSelector.module.scss';
-// TODO:
-import styles from '../../../../node_modules/pyroscope-oss/webapp/javascript/components/AppSelector/AppSelector.module.scss';
-import styles2 from './AppSelector.module.css';
+import ogStyles from '@pyroscope/webapp/javascript/components/AppSelector/AppSelector.module.scss';
+import styles from '@phlare/components/AppSelector/AppSelector.module.css';
 
 type App = Omit<OgApp, 'name'>;
 
@@ -71,7 +66,7 @@ export function AppSelector({
   const maybeSelectedApp = queryToApp(selectedQuery, apps);
 
   return (
-    <div className={styles.container}>
+    <div className={ogStyles.container}>
       <SelectorModalWithToggler
         apps={apps}
         onSelected={(app) => onSelected(appToQuery(app))}
@@ -131,7 +126,7 @@ export const SelectorModalWithToggler = ({
     <ModalWithToggle
       isModalOpen={isModalOpen}
       setModalOpenStatus={setModalOpenStatus}
-      modalClassName={cx(styles.appSelectorModal, styles2.appSelectorModal)}
+      modalClassName={cx(ogStyles.appSelectorModal, styles.appSelectorModal)}
       customHandleOutsideClick={() => {
         setSelectedLeftSide(undefined);
         setModalOpenStatus(false);
@@ -139,7 +134,7 @@ export const SelectorModalWithToggler = ({
       modalHeight={'auto'}
       noDataEl={
         !leftSideApps?.length ? (
-          <div data-testid="app-selector-no-data" className={styles.noData}>
+          <div data-testid="app-selector-no-data" className={ogStyles.noData}>
             No Data
           </div>
         ) : null
@@ -151,18 +146,7 @@ export const SelectorModalWithToggler = ({
       }
       headerEl={
         <>
-          <div className={styles.headerTitle}>{label}</div>
-          {/*
-            <Input
-              name="application search"
-              type="text"
-              placeholder="Type an app"
-              value={''}
-              onChange={''}
-              className={styles.search}
-              testId="application-search"
-            />
-          */}
+          <div className={ogStyles.headerTitle}>{label}</div>
         </>
       }
       leftSideEl={leftSideApps.map((app) => (

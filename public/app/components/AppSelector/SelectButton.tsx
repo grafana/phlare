@@ -4,8 +4,7 @@ import { faFolderOpen } from '@fortawesome/free-solid-svg-icons/faFolderOpen';
 import { faAngleRight } from '@fortawesome/free-solid-svg-icons/faAngleRight';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import classNames from 'classnames/bind';
-// eslint-disable-next-line css-modules/no-unused-class
-import styles from '../../../../node_modules/pyroscope-oss/webapp/javascript/components/AppSelector/SelectButton.module.scss';
+import styles from '@pyroscope/webapp/javascript/components/AppSelector/SelectButton.module.scss';
 
 const cx = classNames.bind(styles);
 
