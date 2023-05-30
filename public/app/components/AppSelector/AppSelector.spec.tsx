@@ -27,7 +27,9 @@ describe('AppSelector', () => {
         const apps = [
           {
             __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            __name_id__: 'pyroscope_app' as const,
             pyroscope_app: 'myapp',
+            name: 'myapp',
             __type__: 'type',
             __name__: 'name',
           },
