@@ -3,8 +3,8 @@ syntax = "proto3";
 package storegateway.v1;
 
 import "google/v1/profile.proto";
-import "push/v1/push.proto";
 import "ingester/v1/ingester.proto";
+import "push/v1/push.proto";
 import "types/v1/types.proto";
 
 service StoreGatewayService {
