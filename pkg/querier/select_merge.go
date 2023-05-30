@@ -215,7 +215,7 @@ func (s *mergeIterator[R, Req, Res]) Result() (R, error) {
 	if err := s.bidi.CloseResponse(); err != nil {
 		s.err = err
 	}
-	return result, nil
+	return result, s.err
 }
 
 func (s *mergeIterator[R, Req, Res]) Err() error {
@@ -340,7 +340,6 @@ func selectMergeTree(ctx context.Context, responses []responseFromIngesters[clie
 		}
 	}
 
-	span.LogFields(otlog.String("msg", "building tree"))
 	return m.Tree(), nil
 }
 
