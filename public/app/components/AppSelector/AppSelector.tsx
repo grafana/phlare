@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
 import ModalWithToggle from '@webapp/ui/Modals/ModalWithToggle';
-import {
-  AppNameLabel,
-  App as OgApp,
-  appFromQuery,
-  appToQuery,
-} from '@webapp/models/app';
+import { App, appFromQuery, appToQuery } from '@webapp/models/app';
 import { Query } from '@webapp/models/query';
 import cx from 'classnames';
 import { SelectButton } from '@phlare/components/AppSelector/SelectButton';
 import ogStyles from '@pyroscope/webapp/javascript/components/AppSelector/AppSelector.module.scss';
 import styles from '@phlare/components/AppSelector/AppSelector.module.css';
 
-type App = Omit<OgApp, 'name'>;
+//type App = Omit<OgApp, 'name'>;
 
 interface AppSelectorProps {
   /** Triggered when an app is selected */
@@ -26,7 +21,7 @@ interface AppSelectorProps {
 
 // TODO: unify this with public/app/overrides/services/apps.ts
 function uniqueByName(apps: App[]) {
-  const idFn = (b: App) => b[AppNameLabel];
+  const idFn = (b: App) => b.name;
   const visited = new Set<string>();
 
   return apps.filter((b) => {
@@ -41,7 +36,7 @@ function uniqueByName(apps: App[]) {
 
 function findAppsWithName(apps: App[], appName: string) {
   return apps.filter((a) => {
-    return a[AppNameLabel] === appName;
+    return a.name === appName;
   });
 }
 
@@ -54,7 +49,7 @@ function queryToApp(query: Query, apps: App[]) {
   return apps.find(
     (a) =>
       a.__profile_type__ === maybeSelectedApp?.__profile_type__ &&
-      a[AppNameLabel] === maybeSelectedApp?.[AppNameLabel]
+      a.name === maybeSelectedApp?.name
   );
 }
 
@@ -97,7 +92,7 @@ export const SelectorModalWithToggler = ({
   const [selectedLeftSide, setSelectedLeftSide] = useState<string>();
   const matchedApps = findAppsWithName(
     apps,
-    selectedLeftSide || selectedApp?.[AppNameLabel] || ''
+    selectedLeftSide || selectedApp?.name || ''
   );
   const label = 'Select an application';
 
@@ -106,10 +101,10 @@ export const SelectorModalWithToggler = ({
   // * The current "expanded state" (ie. clicked on the left side)
   const isLeftSideSelected = (a: App) => {
     if (selectedLeftSide) {
-      return selectedLeftSide === a[AppNameLabel];
+      return selectedLeftSide === a.name;
     }
 
-    return selectedApp?.[AppNameLabel] === a[AppNameLabel];
+    return selectedApp?.name === a.name;
   };
 
   // For the right side, the only way to be selected is if matches the current query
@@ -141,7 +136,7 @@ export const SelectorModalWithToggler = ({
       }
       toggleText={
         selectedApp
-          ? `${selectedApp?.[AppNameLabel]}:${selectedApp.__name__}:${selectedApp.__type__}`
+          ? `${selectedApp?.name}:${selectedApp.__name__}:${selectedApp.__type__}`
           : label
       }
       headerEl={
@@ -151,13 +146,13 @@ export const SelectorModalWithToggler = ({
       }
       leftSideEl={leftSideApps.map((app) => (
         <SelectButton
-          name={app[AppNameLabel]}
+          name={app.name}
           onClick={() => {
-            setSelectedLeftSide(app[AppNameLabel]);
+            setSelectedLeftSide(app.name);
           }}
           icon="folder"
           isSelected={isLeftSideSelected(app)}
-          key={app[AppNameLabel]}
+          key={app.name}
         />
       ))}
       rightSideEl={matchedApps.map((app) => (

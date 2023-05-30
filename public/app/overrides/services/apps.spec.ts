@@ -667,6 +667,7 @@ describe('appsService', () => {
       [
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:alloc_objects:count::",
           "__type__": "alloc_objects",
           "name": "simple.golang.app",
@@ -674,6 +675,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:alloc_objects:count::",
           "__type__": "alloc_objects",
           "name": "simple.golang.app2",
@@ -681,6 +683,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:alloc_space:bytes::",
           "__type__": "alloc_space",
           "name": "simple.golang.app",
@@ -688,6 +691,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:alloc_space:bytes::",
           "__type__": "alloc_space",
           "name": "simple.golang.app2",
@@ -695,6 +699,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:inuse_objects:count::",
           "__type__": "inuse_objects",
           "name": "simple.golang.app",
@@ -702,6 +707,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:inuse_objects:count::",
           "__type__": "inuse_objects",
           "name": "simple.golang.app2",
@@ -709,6 +715,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:inuse_space:bytes::",
           "__type__": "inuse_space",
           "name": "simple.golang.app",
@@ -716,6 +723,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "memory",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "memory:inuse_space:bytes::",
           "__type__": "inuse_space",
           "name": "simple.golang.app2",
@@ -723,6 +731,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "process_cpu",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
           "__type__": "cpu",
           "name": "simple.golang.app",
@@ -730,6 +739,7 @@ describe('appsService', () => {
         },
         {
           "__name__": "process_cpu",
+          "__name_id__": "pyroscope_app",
           "__profile_type__": "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
           "__type__": "cpu",
           "name": "simple.golang.app2",
@@ -737,6 +747,74 @@ describe('appsService', () => {
         },
       ]
     `);
+  });
+
+  it('works with pyroscope_app or __service_name__', async () => {
+    const spy = jest.spyOn(base, 'requestWithOrgID');
+    const mockData = {
+      labelsSet: [
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            },
+            { name: 'pyroscope_app', value: 'simple.golang.app' },
+            { name: '__type__', value: 'cpu' },
+            { name: '__name__', value: 'process_cpu' },
+          ],
+        },
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'memory:alloc_objects:count::',
+            },
+            { name: '__service_name__', value: 'simple.golang.app' },
+            {
+              name: '__type__',
+              value: 'alloc_objects',
+            },
+            {
+              name: '__name__',
+              value: 'memory',
+            },
+          ],
+        },
+        {
+          labels: [
+            {
+              name: '__profile_type__',
+              value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+            },
+            { name: '__service_name__', value: 'simple.golang.app2' },
+            { name: '__type__', value: 'cpu' },
+            { name: '__name__', value: 'process_cpu' },
+          ],
+        },
+      ],
+    };
+    spy.mockReturnValue(Promise.resolve(Result.ok(mockData)));
+
+    const res = await fetchApps();
+    expect(res.isOk).toBe(true);
+    expect(res.value).toMatchObject([
+      {
+        __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+        pyroscope_app: 'simple.golang.app',
+        name: 'simple.golang.app',
+      },
+      {
+        __profile_type__: 'memory:alloc_objects:count::',
+        __service_name__: 'simple.golang.app',
+        name: 'simple.golang.app',
+      },
+      {
+        __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
+        __service_name__: 'simple.golang.app2',
+        name: 'simple.golang.app2',
+      },
+    ]);
   });
 
   // For example, if a cpu profile contains different tags

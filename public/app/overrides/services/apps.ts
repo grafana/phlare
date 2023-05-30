@@ -35,17 +35,17 @@ type SeriesResponse = z.infer<typeof SeriesResponseSchema>;
 // * remove duplicates
 const ListOfAppsSchema = SeriesResponseSchema.transform(flattenAndMergeLabels)
   .pipe(z.array(AppSchema))
-  .transform(removeDuplicateApps)
-  .transform((v) => {
-    return v.map((a) => {
-      return {
-        ...a,
-        // TODO: Right now this field is only needed due to a redux selector
-        // That expects a .name field
-        name: a[AppNameLabel],
-      };
-    });
-  });
+  .transform(removeDuplicateApps);
+//  .transform((v) => {
+//    return v.map((a) => {
+//      return {
+//        ...a,
+//        // TODO: Right now this field is only needed due to a redux selector
+//        // That expects a .name field
+//        name: a[AppNameLabel],
+//      };
+//    });
+//  });
 
 function flattenAndMergeLabels(s: SeriesResponse) {
   return s.labelsSet.map((v) => {
@@ -57,8 +57,7 @@ function flattenAndMergeLabels(s: SeriesResponse) {
 }
 
 function removeDuplicateApps(app: App[]) {
-  const idFn = (b: (typeof app)[number]) =>
-    `${b.__profile_type__}-${b[AppNameLabel]}`;
+  const idFn = (b: (typeof app)[number]) => `${b.__profile_type__}-${b.name}`;
 
   const visited = new Set<string>();
 
