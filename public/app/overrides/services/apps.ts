@@ -36,16 +36,6 @@ type SeriesResponse = z.infer<typeof SeriesResponseSchema>;
 const ListOfAppsSchema = SeriesResponseSchema.transform(flattenAndMergeLabels)
   .pipe(z.array(AppSchema))
   .transform(removeDuplicateApps);
-//  .transform((v) => {
-//    return v.map((a) => {
-//      return {
-//        ...a,
-//        // TODO: Right now this field is only needed due to a redux selector
-//        // That expects a .name field
-//        name: a[AppNameLabel],
-//      };
-//    });
-//  });
 
 function flattenAndMergeLabels(s: SeriesResponse) {
   return s.labelsSet.map((v) => {
