@@ -11,9 +11,9 @@ const AppWithPyroscopeAppIndex = z.object({
 
 const AppWithServiceNameIndex = z.object({
   __profile_type__: z.string(),
-  __service_name__: z.string(),
+  service_name: z.string(),
   // Fake a discriminated union
-  __name_id__: z.enum(['__service_name__']).default('__service_name__'),
+  __name_id__: z.enum(['service_name']).default('service_name'),
   name: z.string().optional().default(''),
 });
 
@@ -39,16 +39,16 @@ function enhanceWithName<
   T extends
     | { __name_id__: 'pyroscope_app'; pyroscope_app: string; name: string }
     | {
-        __name_id__: '__service_name__';
-        __service_name__: string;
+        __name_id__: 'service_name';
+        service_name: string;
         name: string;
       }
 >(a: T) {
   if (a.__name_id__ === 'pyroscope_app') {
     a.name = a.pyroscope_app;
   }
-  if (a.__name_id__ === '__service_name__') {
-    a.name = a.__service_name__;
+  if (a.__name_id__ === 'service_name') {
+    a.name = a.service_name;
   }
   return a;
 }

@@ -749,7 +749,7 @@ describe('appsService', () => {
     `);
   });
 
-  it('works with pyroscope_app or __service_name__', async () => {
+  it('works with pyroscope_app or service_name', async () => {
     const spy = jest.spyOn(base, 'requestWithOrgID');
     const mockData = {
       labelsSet: [
@@ -770,7 +770,7 @@ describe('appsService', () => {
               name: '__profile_type__',
               value: 'memory:alloc_objects:count::',
             },
-            { name: '__service_name__', value: 'simple.golang.app' },
+            { name: 'service_name', value: 'simple.golang.app' },
             {
               name: '__type__',
               value: 'alloc_objects',
@@ -787,7 +787,7 @@ describe('appsService', () => {
               name: '__profile_type__',
               value: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
             },
-            { name: '__service_name__', value: 'simple.golang.app2' },
+            { name: 'service_name', value: 'simple.golang.app2' },
             { name: '__type__', value: 'cpu' },
             { name: '__name__', value: 'process_cpu' },
           ],
@@ -806,12 +806,12 @@ describe('appsService', () => {
       },
       {
         __profile_type__: 'memory:alloc_objects:count::',
-        __service_name__: 'simple.golang.app',
+        service_name: 'simple.golang.app',
         name: 'simple.golang.app',
       },
       {
         __profile_type__: 'process_cpu:cpu:nanoseconds:cpu:nanoseconds',
-        __service_name__: 'simple.golang.app2',
+        service_name: 'simple.golang.app2',
         name: 'simple.golang.app2',
       },
     ]);
