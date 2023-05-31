@@ -36,7 +36,25 @@ func NewBucket(ctx context.Context, cfg Config, name string) (phlareobj.Bucket, 
 	case COS:
 		backendClient, err = cos.NewBucketClient(cfg.COS, name, logger)
 	case Filesystem:
-		backendClient, err = filesystem.NewBucket(cfg.Filesystem.Directory)
+		// Filesystem is a special case, as it is not a remote storage backend
+		// We want to use a fileReaderAt to read and seek from the filesystem
+		// This means middlewares and instrumentation is not triggered for `ReaderAt` function
+		middlewares := []func(objstore.Bucket) (objstore.Bucket, error){
+			func(b objstore.Bucket) (objstore.Bucket, error) {
+				return objstore.BucketWithMetrics(name, b, reg), nil
+			},
+			func(b objstore.Bucket) (objstore.Bucket, error) {
+				return objstore.NewTracingBucket(b), nil
+			},
+		}
+		fs, err := filesystem.NewBucket(cfg.Filesystem.Directory, append(middlewares, cfg.Middlewares...)...)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.StoragePrefix == "" {
+			return fs, nil
+		}
+		return phlareobj.NewPrefixedBucket(fs, cfg.StoragePrefix), nil
 	default:
 		return nil, ErrUnsupportedStorageBackend
 	}

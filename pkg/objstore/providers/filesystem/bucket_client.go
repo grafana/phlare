@@ -17,10 +17,20 @@ type Bucket struct {
 }
 
 // NewBucket returns a new filesystem.Bucket.
-func NewBucket(rootDir string) (*Bucket, error) {
-	b, err := filesystem.NewBucket(rootDir)
+func NewBucket(rootDir string, middlewares ...func(thanosobjstore.Bucket) (thanosobjstore.Bucket, error)) (*Bucket, error) {
+	var (
+		b   thanosobjstore.Bucket
+		err error
+	)
+	b, err = filesystem.NewBucket(rootDir)
 	if err != nil {
 		return nil, err
+	}
+	for _, wrap := range middlewares {
+		b, err = wrap(b)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Bucket{Bucket: b, rootDir: rootDir}, nil
 }
