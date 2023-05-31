@@ -47,6 +47,8 @@ import (
 	"github.com/grafana/phlare/pkg/util"
 )
 
+const defaultBatchSize = 4096
+
 type tableReader interface {
 	open(ctx context.Context, bucketReader phlareobj.BucketReader) error
 	io.Closer
@@ -529,15 +531,10 @@ func (queriers Queriers) Open(ctx context.Context) error {
 }
 
 func (queriers Queriers) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
-	iters := make([]iter.Iterator[Profile], 0, len(queriers))
-	for _, q := range queriers {
-		it, err := q.SelectMatchingProfiles(ctx, params)
-		if err != nil {
-			return nil, err
-		}
-		iters = append(iters, it)
+	iters, err := SelectMatchingProfiles(ctx, params, queriers)
+	if err != nil {
+		return nil, err
 	}
-
 	return iter.NewMergeIterator(maxBlockProfile, true, iters...), nil
 }
 
@@ -552,6 +549,30 @@ func (queriers Queriers) ForTimeRange(_ context.Context, start, end model.Time) 
 }
 
 type BlockGetter func(ctx context.Context, start, end model.Time) (Queriers, error)
+
+// SelectMatchingProfiles returns a list iterator of profiles matching the given request.
+func SelectMatchingProfiles(ctx context.Context, request *ingestv1.SelectProfilesRequest, queriers Queriers) ([]iter.Iterator[Profile], error) {
+	g, ctx := errgroup.WithContext(ctx)
+	iters := make([]iter.Iterator[Profile], len(queriers))
+
+	for i, querier := range queriers {
+		i := i
+		querier := querier
+		g.Go(util.RecoverPanic(func() error {
+			profiles, err := querier.SelectMatchingProfiles(ctx, request)
+			if err != nil {
+				return err
+			}
+			iters[i] = iter.NewBufferedIterator(profiles, 1024)
+			return nil
+		}))
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return iters, nil
+}
 
 func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse], blockGetter BlockGetter) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesStacktraces")
@@ -581,30 +602,33 @@ func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[in
 		return err
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
-	m := phlaremodel.NewStackTraceMerger()
+	iters, err := SelectMatchingProfiles(ctx, request, queriers)
+	if err != nil {
+		return err
+	}
 
-	// Start streaming profiles from all stores in order.
-	// This allows the client to dedupe in order.
-	for _, q := range queriers {
-		q := q
-		profiles, err := q.SelectMatchingProfiles(ctx, request)
-		if err != nil {
-			return err
-		}
-		// send batches of profiles to client and filter via bidi stream.
-		selectedProfiles, err := filterProfiles[
-			BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest],
-			*ingestv1.MergeProfilesStacktracesResponse,
-			*ingestv1.MergeProfilesStacktracesRequest](ctx, profiles, 2048, stream)
-		if err != nil {
-			return err
+	// send batches of profiles to client and filter via bidi stream.
+	selectedProfiles, err := filterProfiles[
+		BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest],
+		*ingestv1.MergeProfilesStacktracesResponse,
+		*ingestv1.MergeProfilesStacktracesRequest](ctx, iters, defaultBatchSize, stream)
+	if err != nil {
+		return err
+	}
+
+	m := phlaremodel.NewStackTraceMerger()
+	g, ctx := errgroup.WithContext(ctx)
+
+	for i, querier := range queriers {
+		querier := querier
+		i := i
+		if len(selectedProfiles[i]) == 0 {
+			continue
 		}
 		// Sort profiles for better read locality.
-		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
 		g.Go(util.RecoverPanic(func() error {
-			merge, err := q.MergeByStacktraces(ctx, iter.NewSliceIterator(selectedProfiles))
+			merge, err := querier.MergeByStacktraces(ctx, iter.NewSliceIterator(querier.Sort(selectedProfiles[i])))
 			if err != nil {
 				return err
 			}
@@ -672,45 +696,50 @@ func MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv
 	if err != nil {
 		return err
 	}
-	result := make([][]*typesv1.Series, 0, len(queriers))
-	g, ctx := errgroup.WithContext(ctx)
-	s := lo.Synchronize()
-	// Start streaming profiles from all stores in order.
-	// This allows the client to dedupe in order.
-	for _, q := range queriers {
-		q := q
-		profiles, err := q.SelectMatchingProfiles(ctx, request)
-		if err != nil {
-			return err
-		}
-		// send batches of profiles to client and filter via bidi stream.
-		selectedProfiles, err := filterProfiles[
-			BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest],
-			*ingestv1.MergeProfilesLabelsResponse,
-			*ingestv1.MergeProfilesLabelsRequest](ctx, profiles, 2048, stream)
-		if err != nil {
-			return err
-		}
-		// Sort profiles for better read locality.
-		selectedProfiles = q.Sort(selectedProfiles)
-		// Merge async the result so we can continue streaming profiles.
-		g.Go(util.RecoverPanic(func() error {
-			merge, err := q.MergeByLabels(ctx, iter.NewSliceIterator(selectedProfiles), by...)
-			if err != nil {
-				return err
-			}
-			s.Do(func() {
-				result = append(result, merge)
-			})
 
-			return nil
-		}))
+	iters, err := SelectMatchingProfiles(ctx, request, queriers)
+	if err != nil {
+		return err
+	}
+	// send batches of profiles to client and filter via bidi stream.
+	selectedProfiles, err := filterProfiles[
+		BidiServerMerge[*ingestv1.MergeProfilesLabelsResponse, *ingestv1.MergeProfilesLabelsRequest],
+		*ingestv1.MergeProfilesLabelsResponse,
+		*ingestv1.MergeProfilesLabelsRequest](ctx, iters, defaultBatchSize, stream)
+	if err != nil {
+		return err
 	}
 
 	// Signals the end of the profile streaming by sending an empty request.
 	// This allows the client to not block other streaming ingesters.
 	if err := stream.Send(&ingestv1.MergeProfilesLabelsResponse{}); err != nil {
 		return err
+	}
+
+	result := make([][]*typesv1.Series, 0, len(queriers))
+	g, ctx := errgroup.WithContext(ctx)
+	sync := lo.Synchronize()
+	for i, querier := range queriers {
+		i := i
+		querier := querier
+		if len(selectedProfiles[i]) == 0 {
+			continue
+		}
+		// Sort profiles for better read locality.
+		// And merge async the result for each queriers.
+		g.Go(util.RecoverPanic(func() error {
+			merge, err := querier.MergeByLabels(ctx,
+				iter.NewSliceIterator(querier.Sort(selectedProfiles[i])),
+				by...)
+			if err != nil {
+				return err
+			}
+			sync.Do(func() {
+				result = append(result, merge)
+			})
+
+			return nil
+		}))
 	}
 
 	if err := g.Wait(); err != nil {
@@ -759,31 +788,33 @@ func MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1
 		return err
 	}
 
+	iters, err := SelectMatchingProfiles(ctx, request, queriers)
+	if err != nil {
+		return err
+	}
+
+	// send batches of profiles to client and filter via bidi stream.
+	selectedProfiles, err := filterProfiles[
+		BidiServerMerge[*ingestv1.MergeProfilesPprofResponse, *ingestv1.MergeProfilesPprofRequest],
+		*ingestv1.MergeProfilesPprofResponse,
+		*ingestv1.MergeProfilesPprofRequest](ctx, iters, defaultBatchSize, stream)
+	if err != nil {
+		return err
+	}
+
 	result := make([]*profile.Profile, 0, len(queriers))
 	var lock sync.Mutex
 	g, ctx := errgroup.WithContext(ctx)
-
-	// Start streaming profiles from all stores in order.
-	// This allows the client to dedupe in order.
-	for _, q := range queriers {
-		q := q
-		profiles, err := q.SelectMatchingProfiles(ctx, request)
-		if err != nil {
-			return err
-		}
-		// send batches of profiles to client and filter via bidi stream.
-		selectedProfiles, err := filterProfiles[
-			BidiServerMerge[*ingestv1.MergeProfilesPprofResponse, *ingestv1.MergeProfilesPprofRequest],
-			*ingestv1.MergeProfilesPprofResponse,
-			*ingestv1.MergeProfilesPprofRequest](ctx, profiles, 2048, stream)
-		if err != nil {
-			return err
+	for i, querier := range queriers {
+		i := i
+		querier := querier
+		if len(selectedProfiles[i]) == 0 {
+			continue
 		}
 		// Sort profiles for better read locality.
-		selectedProfiles = q.Sort(selectedProfiles)
 		// Merge async the result so we can continue streaming profiles.
 		g.Go(util.RecoverPanic(func() error {
-			merge, err := q.MergePprof(ctx, iter.NewSliceIterator(selectedProfiles))
+			merge, err := querier.MergePprof(ctx, iter.NewSliceIterator(querier.Sort(selectedProfiles[i])))
 			if err != nil {
 				return err
 			}
@@ -1124,7 +1155,7 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.B
 	opts := []parquet.FileOption{
 		parquet.SkipBloomFilters(true), // we don't use bloom filters
 		parquet.FileReadMode(parquet.ReadModeAsync),
-		parquet.ReadBufferSize(1024 * 1024),
+		parquet.ReadBufferSize(4 * 1024 * 1024),
 	}
 	// now open it for real
 	r.file, err = parquet.OpenFile(ra, r.size, opts...)

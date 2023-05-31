@@ -42,7 +42,7 @@ type Config struct {
 // RegisterFlags registers distributor-related flags.
 func (cfg *Config) RegisterFlags(fs *flag.FlagSet) {
 	cfg.PoolConfig.RegisterFlagsWithPrefix("querier", fs)
-	fs.DurationVar(&cfg.QueryStoreAfter, "querier.query-store-after", 2*time.Hour, "The time after which a metric should be queried from storage and not just ingesters. 0 means all queries are sent to store. If this option is enabled, the time range of the query sent to the store-gateway will be manipulated to ensure the query end is not more recent than 'now - query-store-after'.")
+	fs.DurationVar(&cfg.QueryStoreAfter, "querier.query-store-after", 4*time.Hour, "The time after which a metric should be queried from storage and not just ingesters. 0 means all queries are sent to store. If this option is enabled, the time range of the query sent to the store-gateway will be manipulated to ensure the query end is not more recent than 'now - query-store-after'.")
 }
 
 type Querier struct {
@@ -513,12 +513,8 @@ func (q *Querier) SelectSeries(ctx context.Context, req *connect.Request[querier
 		)
 		sp.Finish()
 	}()
-	profileType, err := phlaremodel.ParseProfileTypeSelector(req.Msg.ProfileTypeID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
 
-	_, err = parser.ParseMetricSelector(req.Msg.LabelSelector)
+	_, err := parser.ParseMetricSelector(req.Msg.LabelSelector)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -532,12 +528,53 @@ func (q *Querier) SelectSeries(ctx context.Context, req *connect.Request[querier
 	}
 
 	stepMs := time.Duration(req.Msg.Step * float64(time.Second)).Milliseconds()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	responses, err := q.selectSeries(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	it, err := selectMergeSeries(ctx, responses)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	result := rangeSeries(it, req.Msg.Start, req.Msg.End, stepMs)
+	if it.Err() != nil {
+		return nil, connect.NewError(connect.CodeInternal, it.Err())
+	}
+
+	return connect.NewResponse(&querierv1.SelectSeriesResponse{
+		Series: result,
+	}), nil
+}
+
+func (q *Querier) selectSeries(ctx context.Context, req *connect.Request[querierv1.SelectSeriesRequest]) ([]ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels], error) {
+	stepMs := time.Duration(req.Msg.Step * float64(time.Second)).Milliseconds()
+	sort.Strings(req.Msg.GroupBy)
+
 	// we need to request profile from start - step to end since start is inclusive.
 	// The first step starts at start-step to start.
 	start := req.Msg.Start - stepMs
-	sort.Strings(req.Msg.GroupBy)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+
+	profileType, err := phlaremodel.ParseProfileTypeSelector(req.Msg.ProfileTypeID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	if q.storeGatewayQuerier == nil {
+		return q.selectSeriesFromIngesters(ctx, &ingestv1.MergeProfilesLabelsRequest{
+			Request: &ingestv1.SelectProfilesRequest{
+				LabelSelector: req.Msg.LabelSelector,
+				Start:         start,
+				End:           req.Msg.End,
+				Type:          profileType,
+			},
+			By: req.Msg.GroupBy,
+		})
+	}
 
 	storeQueries := splitQueryToStores(model.Time(start), model.Time(req.Msg.End), model.Now(), q.cfg.QueryStoreAfter)
 
@@ -563,19 +600,7 @@ func (q *Querier) SelectSeries(ctx context.Context, req *connect.Request[querier
 		}
 		responses = append(responses, ir...)
 	}
-
-	it, err := selectMergeSeries(ctx, responses)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	result := rangeSeries(it, req.Msg.Start, req.Msg.End, stepMs)
-	if it.Err() != nil {
-		return nil, connect.NewError(connect.CodeInternal, it.Err())
-	}
-
-	return connect.NewResponse(&querierv1.SelectSeriesResponse{
-		Series: result,
-	}), nil
+	return responses, nil
 }
 
 // rangeSeries aggregates profiles into series.

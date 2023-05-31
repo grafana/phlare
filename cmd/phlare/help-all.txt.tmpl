@@ -394,7 +394,7 @@ Usage of ./phlare:
   -querier.max-query-parallelism int
     	Maximum number of queries that will be scheduled in parallel by the frontend. (default 32)
   -querier.query-store-after duration
-    	The time after which a metric should be queried from storage and not just ingesters. 0 means all queries are sent to store. If this option is enabled, the time range of the query sent to the store-gateway will be manipulated to ensure the query end is not more recent than 'now - query-store-after'. (default 2h0m0s)
+    	The time after which a metric should be queried from storage and not just ingesters. 0 means all queries are sent to store. If this option is enabled, the time range of the query sent to the store-gateway will be manipulated to ensure the query end is not more recent than 'now - query-store-after'. (default 4h0m0s)
   -query-frontend.grpc-client-config.backoff-max-period duration
     	Maximum delay when backing off. (default 10s)
   -query-frontend.grpc-client-config.backoff-min-period duration

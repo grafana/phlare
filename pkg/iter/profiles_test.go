@@ -138,4 +138,46 @@ func TestMergeIterator(t *testing.T) {
 	}
 }
 
+func Test_BufferedIterator(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		size int
+		in   []profile
+	}{
+		{
+			name: "empty",
+			size: 1,
+			in:   nil,
+		},
+		{
+			name: "smaller than buffer",
+			size: 1000,
+			in:   generatesProfiles(t, 100),
+		},
+		{
+			name: "bigger than buffer",
+			size: 10,
+			in:   generatesProfiles(t, 100),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := Slice(
+				NewBufferedIterator(
+					NewSliceIterator(tc.in), tc.size),
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.in, actual)
+		})
+	}
+}
+
+func generatesProfiles(t *testing.T, n int) []profile {
+	t.Helper()
+	profiles := make([]profile, n)
+	for i := range profiles {
+		profiles[i] = profile{labels: aLabels, timestamp: model.Time(i)}
+	}
+	return profiles
+}
+
 // todo test timedRangeIterator

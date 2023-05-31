@@ -429,9 +429,9 @@ func TestFilterProfiles(t *testing.T) {
 	filtered, err := filterProfiles[
 		BidiServerMerge[*ingestv1.MergeProfilesStacktracesResponse, *ingestv1.MergeProfilesStacktracesRequest],
 		*ingestv1.MergeProfilesStacktracesResponse,
-		*ingestv1.MergeProfilesStacktracesRequest](ctx, in, 5, bidi)
+		*ingestv1.MergeProfilesStacktracesRequest](ctx, []iter.Iterator[Profile]{in}, 5, bidi)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(filtered))
+	require.Equal(t, 2, len(filtered[0]))
 	require.Equal(t, 3, len(bidi.profilesSent))
 	testhelper.EqualProto(t, []*ingestv1.ProfileSets{
 		{
@@ -471,5 +471,5 @@ func TestFilterProfiles(t *testing.T) {
 			lbs:     phlaremodel.LabelsFromStrings("foo", "bar", "i", fmt.Sprintf("%d", 10)),
 			fp:      model.Fingerprint(phlaremodel.LabelsFromStrings("foo", "bar", "i", fmt.Sprintf("%d", 10)).Hash()),
 		},
-	}, filtered)
+	}, filtered[0])
 }

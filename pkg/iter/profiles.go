@@ -36,6 +36,9 @@ type MergeIterator[P Profile] struct {
 // The given iterators must be sorted by timestamp and labels themselves.
 // Optionally, the iterator can deduplicate profiles with the same timestamp and labels.
 func NewMergeIterator[P Profile](max P, deduplicate bool, iters ...Iterator[P]) Iterator[P] {
+	if len(iters) == 0 {
+		return NewEmptyIterator[P]()
+	}
 	if len(iters) == 1 {
 		// No need to merge a single iterator.
 		// We should never allow a single iterator to be passed in because
