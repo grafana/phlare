@@ -119,12 +119,15 @@ func encodeRequest[Req any](req *connect.Request[Req]) (*httpgrpc.HTTPRequest, e
 	if req.Spec().Procedure == "" {
 		return nil, errors.New("cannot encode a request with empty procedure")
 	}
+	// The original Content-* headers could be invalidated,
+	// e.g. initial Content-Type could be 'application/json'.
+	h := removeContentHeaders(req.Header().Clone())
+	h.Set("Content-Type", "application/proto")
 	out := &httpgrpc.HTTPRequest{
 		Method:  http.MethodPost,
 		Url:     req.Spec().Procedure,
-		Headers: connectHeaderToHTTPGRPCHeader(req.Header()),
+		Headers: connectHeaderToHTTPGRPCHeader(h),
 	}
-
 	var err error
 	msg := req.Any()
 	out.Body, err = proto.Marshal(msg.(proto.Message))
@@ -132,6 +135,15 @@ func encodeRequest[Req any](req *connect.Request[Req]) (*httpgrpc.HTTPRequest, e
 		return nil, err
 	}
 	return out, nil
+}
+
+func removeContentHeaders(h http.Header) http.Header {
+	for k := range h {
+		if strings.HasPrefix(strings.ToLower(k), "content-") {
+			h.Del(k)
+		}
+	}
+	return h
 }
 
 func decodeResponse[Resp any](r *httpgrpc.HTTPResponse) (*connect.Response[Resp], error) {

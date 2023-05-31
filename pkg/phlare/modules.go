@@ -92,6 +92,8 @@ func (f *Phlare) initQueryFrontend() (services.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	f.API.RegisterPyroscopeHandlers(querier.NewGRPCRoundTripper(frontendSvc))
 	f.API.RegisterQueryFrontend(frontendSvc)
 	f.API.RegisterQuerier(frontendSvc)
 
@@ -185,6 +187,7 @@ func (f *Phlare) initQuerier() (services.Service, error) {
 		return nil, err
 	}
 	if !f.isModuleActive(QueryFrontend) {
+		f.API.RegisterPyroscopeHandlers(querierSvc)
 		f.API.RegisterQuerier(querierSvc)
 	}
 	worker, err := worker.NewQuerierWorker(f.Cfg.Worker, querier.NewGRPCHandler(querierSvc), log.With(f.logger, "component", "querier-worker"), f.reg)
