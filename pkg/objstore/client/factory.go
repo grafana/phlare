@@ -52,10 +52,10 @@ func NewBucket(ctx context.Context, cfg Config, name string) (phlareobj.Bucket, 
 			return nil, err
 		}
 	}
-	bkt := phlareobj.NewBucket(backendClient)
+	bkt := phlareobj.NewBucket(objstore.NewTracingBucket(objstore.BucketWithMetrics(name, backendClient, reg)))
 
 	if cfg.StoragePrefix != "" {
 		bkt = phlareobj.NewPrefixedBucket(bkt, cfg.StoragePrefix)
 	}
-	return phlareobj.NewTracingBucket(phlareobj.BucketWithMetrics(bkt, reg)), nil
+	return bkt, nil
 }
