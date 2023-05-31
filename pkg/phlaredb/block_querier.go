@@ -47,7 +47,10 @@ import (
 	"github.com/grafana/phlare/pkg/util"
 )
 
-const defaultBatchSize = 4096
+const (
+	defaultBatchSize      = 4096
+	parquetReadBufferSize = 2 * 1024 * 1024 // 2MB
+)
 
 type tableReader interface {
 	open(ctx context.Context, bucketReader phlareobj.BucketReader) error
@@ -1155,7 +1158,7 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.B
 	opts := []parquet.FileOption{
 		parquet.SkipBloomFilters(true), // we don't use bloom filters
 		parquet.FileReadMode(parquet.ReadModeAsync),
-		parquet.ReadBufferSize(4 * 1024 * 1024),
+		parquet.ReadBufferSize(parquetReadBufferSize),
 	}
 	// now open it for real
 	r.file, err = parquet.OpenFile(ra, r.size, opts...)
@@ -1251,7 +1254,7 @@ func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phl
 	opts := []parquet.FileOption{
 		parquet.SkipBloomFilters(true), // we don't use bloom filters
 		parquet.FileReadMode(parquet.ReadModeAsync),
-		parquet.ReadBufferSize(1024 * 1024),
+		parquet.ReadBufferSize(parquetReadBufferSize),
 	}
 	// now open it for real
 	r.file, err = parquet.OpenFile(ra, r.size, opts...)
