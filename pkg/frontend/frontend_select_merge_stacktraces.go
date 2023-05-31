@@ -13,7 +13,6 @@ import (
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/grafana/phlare/pkg/util/connectgrpc"
 	"github.com/grafana/phlare/pkg/util/httpgrpc"
-	"github.com/grafana/phlare/pkg/util/math"
 	"github.com/grafana/phlare/pkg/util/validation"
 )
 
@@ -26,10 +25,13 @@ func (f *Frontend) SelectMergeStacktraces(ctx context.Context,
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(math.Max(1, validation.SmallestPositiveNonZeroIntPerTenant(tenantIDs, f.limits.MaxQueryParallelism)))
+	if maxConcurrent := validation.SmallestPositiveNonZeroIntPerTenant(tenantIDs, f.limits.MaxQueryParallelism); maxConcurrent > 0 {
+		g.SetLimit(maxConcurrent)
+	}
+
+	m := phlaremodel.NewFlameGraphMerger()
 	interval := validation.MaxDurationOrZeroPerTenant(tenantIDs, f.limits.QuerySplitDuration)
 	intervals := NewTimeIntervalIterator(time.UnixMilli(c.Msg.Start), time.UnixMilli(c.Msg.End), interval)
-	m := phlaremodel.NewFlameGraphMerger()
 
 	for intervals.Next() {
 		r := intervals.At()

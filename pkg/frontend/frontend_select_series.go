@@ -13,7 +13,6 @@ import (
 	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/grafana/phlare/pkg/util/connectgrpc"
 	"github.com/grafana/phlare/pkg/util/httpgrpc"
-	"github.com/grafana/phlare/pkg/util/math"
 	"github.com/grafana/phlare/pkg/util/validation"
 )
 
@@ -25,9 +24,12 @@ func (f *Frontend) SelectSeries(ctx context.Context,
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
 	}
 
-	m := phlaremodel.NewSeriesMerger(false)
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(math.Max(1, validation.SmallestPositiveNonZeroIntPerTenant(tenantIDs, f.limits.MaxQueryParallelism)))
+	if maxConcurrent := validation.SmallestPositiveNonZeroIntPerTenant(tenantIDs, f.limits.MaxQueryParallelism); maxConcurrent > 0 {
+		g.SetLimit(maxConcurrent)
+	}
+
+	m := phlaremodel.NewSeriesMerger(false)
 	interval := validation.MaxDurationOrZeroPerTenant(tenantIDs, f.limits.QuerySplitDuration)
 	intervals := NewTimeIntervalIterator(time.UnixMilli(c.Msg.Start), time.UnixMilli(c.Msg.End), interval,
 		WithAlignment(time.Second*time.Duration(c.Msg.Step)))

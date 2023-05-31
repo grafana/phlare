@@ -266,8 +266,7 @@ enqueueAgain:
 
 	case resp := <-freq.response:
 		if stats.ShouldTrackHTTPGRPCResponse(resp.HttpResponse) {
-			stats := stats.FromContext(ctx)
-			stats.Merge(resp.Stats) // Safe if stats is nil.
+			stats.FromContext(ctx).Merge(resp.Stats) // Safe if stats is nil.
 		}
 
 		return resp.HttpResponse, nil
