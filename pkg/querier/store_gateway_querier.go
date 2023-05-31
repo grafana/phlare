@@ -217,7 +217,7 @@ func (q *Querier) selectSeriesFromStoreGateway(ctx context.Context, req *ingeste
 	for _, r := range responses {
 		r := r
 		g.Go(util.RecoverPanic(func() error {
-			return r.response.Send(req)
+			return r.response.Send(req.CloneVT())
 		}))
 	}
 	if err := g.Wait(); err != nil {

@@ -1127,7 +1127,7 @@ pool_config:
 # the time range of the query sent to the store-gateway will be manipulated to
 # ensure the query end is not more recent than 'now - query-store-after'.
 # CLI flag: -querier.query-store-after
-[query_store_after: <duration> | default = 2h]
+[query_store_after: <duration> | default = 4h]
 ```
 
 ### query_frontend
