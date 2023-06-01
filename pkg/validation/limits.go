@@ -43,6 +43,9 @@ type Limits struct {
 
 	// Store-gateway.
 	StoreGatewayTenantShardSize int `yaml:"store_gateway_tenant_shard_size" json:"store_gateway_tenant_shard_size"`
+
+	// Query frontend.
+	QuerySplitDuration model.Duration `yaml:"split_queries_by_interval" json:"split_queries_by_interval"`
 }
 
 // LimitError are errors that do not comply with the limits specified.
@@ -71,9 +74,13 @@ func (l *Limits) RegisterFlags(f *flag.FlagSet) {
 
 	_ = l.MaxQueryLookback.Set("0s")
 	f.Var(&l.MaxQueryLookback, "querier.max-query-lookback", "Limit how far back in profiling data can be queried, up until lookback duration ago. This limit is enforced in the query frontend. If the requested time range is outside the allowed range, the request will not fail, but will be modified to only query data within the allowed time range. The default value of 0 does not set a limit.")
-	f.IntVar(&l.MaxQueryParallelism, "querier.max-query-parallelism", 32, "Maximum number of queries that will be scheduled in parallel by the frontend.")
 
 	f.IntVar(&l.StoreGatewayTenantShardSize, "store-gateway.tenant-shard-size", 0, "The tenant's shard size, used when store-gateway sharding is enabled. Value of 0 disables shuffle sharding for the tenant, that is all tenant blocks are sharded across all store-gateway replicas.")
+
+	_ = l.QuerySplitDuration.Set("0s")
+	f.Var(&l.QuerySplitDuration, "querier.split-queries-by-interval", "Split queries by a time interval and execute in parallel. The value 0 disables splitting by time")
+
+	f.IntVar(&l.MaxQueryParallelism, "querier.max-query-parallelism", 0, "Maximum number of queries that will be scheduled in parallel by the frontend.")
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
@@ -206,6 +213,11 @@ func (o *Overrides) MaxQueryLookback(tenantID string) time.Duration {
 // StoreGatewayTenantShardSize returns the store-gateway shard size for a given user.
 func (o *Overrides) StoreGatewayTenantShardSize(userID string) int {
 	return o.getOverridesForTenant(userID).StoreGatewayTenantShardSize
+}
+
+// QuerySplitDuration returns the tenant specific split by interval applied in the query frontend.
+func (o *Overrides) QuerySplitDuration(tenantID string) time.Duration {
+	return time.Duration(o.getOverridesForTenant(tenantID).QuerySplitDuration)
 }
 
 // MaxQueriersPerTenant returns the limit to the number of queriers that can be used

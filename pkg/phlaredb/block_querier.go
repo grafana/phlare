@@ -751,7 +751,7 @@ func MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv
 
 	// sends the final result to the client.
 	err = stream.Send(&ingestv1.MergeProfilesLabelsResponse{
-		Series: phlaremodel.MergeSeries(result...),
+		Series: phlaremodel.SumSeries(result...),
 	})
 	if err != nil {
 		if errors.Is(err, io.EOF) {
