@@ -168,6 +168,9 @@ func NewFrontend(cfg Config, limits Limits, log log.Logger, reg prometheus.Regis
 }
 
 func (f *Frontend) starting(ctx context.Context) error {
+	// Artificial delay
+	time.Sleep(time.Second * 60)
+
 	f.schedulerWorkersWatcher.WatchService(f.schedulerWorkers)
 
 	return errors.Wrap(services.StartAndAwaitRunning(ctx, f.schedulerWorkers), "failed to start frontend scheduler workers")
