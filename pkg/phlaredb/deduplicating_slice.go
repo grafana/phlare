@@ -70,6 +70,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Init(path string, cfg *ParquetConfig, m
 	s.writer = parquet.NewGenericWriter[P](file, s.persister.Schema(),
 		parquet.ColumnPageBuffers(parquet.NewFileBufferPool(os.TempDir(), "phlaredb-parquet-buffers*")),
 		parquet.CreatedBy("github.com/grafana/phlare/", build.Version, build.Revision),
+		parquet.PageBufferSize(5*1024*1024),
 	)
 	s.lookup = make(map[K]int64)
 	return nil
