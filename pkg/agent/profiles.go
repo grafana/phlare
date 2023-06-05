@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log/level"
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/parca-dev/parca/pkg/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -167,7 +168,15 @@ func populateLabels(lset labels.Labels, cfg ScrapeConfig) (res, orig labels.Labe
 		lb.Set(model.InstanceLabel, addr)
 	}
 
+	if serviceName := lset.Get(phlaremodel.LabelNameServiceName); serviceName == "" {
+		if serviceName = lset.Get(phlaremodel.LabelNameServiceNameK8s); serviceName == "" {
+			return nil, nil, errors.New("service_name label is not specified")
+		}
+		lb.Set(phlaremodel.LabelNameServiceName, serviceName)
+	}
+
 	res = lb.Labels()
+
 	for _, l := range res {
 		// Check label values are valid, drop the target if not.
 		if !model.LabelValue(l.Value).IsValid() {

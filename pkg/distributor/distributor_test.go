@@ -21,6 +21,7 @@ import (
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/ring/client"
 	"github.com/grafana/dskit/services"
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
@@ -64,6 +65,7 @@ func Test_ConnectPush(t *testing.T) {
 			{
 				Labels: []*typesv1.LabelPair{
 					{Name: "cluster", Value: "us-central1"},
+					{Name: phlaremodel.LabelNameServiceName, Value: "svc"},
 					{Name: "__name__", Value: "cpu"},
 				},
 				Samples: []*pushv1.RawSample{
@@ -91,6 +93,7 @@ func Test_Replication(t *testing.T) {
 			{
 				Labels: []*typesv1.LabelPair{
 					{Name: "cluster", Value: "us-central1"},
+					{Name: phlaremodel.LabelNameServiceName, Value: "svc"},
 					{Name: "__name__", Value: "cpu"},
 				},
 				Samples: []*pushv1.RawSample{
@@ -206,6 +209,7 @@ func Test_Limits(t *testing.T) {
 				{
 					Labels: []*typesv1.LabelPair{
 						{Name: "cluster", Value: "us-central1"},
+						{Name: phlaremodel.LabelNameServiceName, Value: "svc"},
 						{Name: "__name__", Value: "cpu"},
 					},
 					Samples: []*pushv1.RawSample{
@@ -280,7 +284,7 @@ func newOverrides(t *testing.T) *validation.Overrides {
 		l := validation.MockDefaultLimits()
 		l.IngestionRateMB = 0.0150
 		l.IngestionBurstSizeMB = 0.0015
-		l.MaxLabelNameLength = 10
+		l.MaxLabelNameLength = 12
 		tenantLimits["user-1"] = l
 	})
 }
@@ -358,6 +362,7 @@ func TestPush_ShuffleSharding(t *testing.T) {
 							{Name: "pod", Value: fmt.Sprintf("my-stateful-stuff-%d", j)},
 							{Name: "cluster", Value: "us-central1"},
 							{Name: "tenant", Value: tenantID},
+							{Name: phlaremodel.LabelNameServiceName, Value: "svc"},
 							{Name: "__name__", Value: "cpu"},
 						},
 						Samples: []*pushv1.RawSample{
