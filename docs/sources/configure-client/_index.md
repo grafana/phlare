@@ -54,6 +54,11 @@ To get started choose one of the integrations below:
           <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/java/">Documentation</a><br />
           <a href="https://github.com/grafana/pyroscope/tree/main/examples/java-jfr/rideshare" title="java-examples">Examples</a>
       </td>
+      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/ebpf/"><img src="https://user-images.githubusercontent.com/23323466/178160548-e974c080-808d-4c5d-be9b-c983a319b037.png" width="100px;" alt=""/><br />
+        <b>eBPF</b></a><br />
+          <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/ebpf/" title="Documentation">Documentation</a><br />
+          <a href="https://github.com/grafana/pyroscope/tree/main/examples/ebpf" title="examples">Examples</a>
+      </td>
       <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/python/"><img src="https://user-images.githubusercontent.com/23323466/178160553-c78b8c15-99b4-43f3-a2a0-252b6c4862b1.png" width="100px;" alt=""/><br />
         <b>Python</b></a><br />
           <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/python/" title="Documentation">Documentation</a><br />
@@ -64,32 +69,27 @@ To get started choose one of the integrations below:
           <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/ruby/" title="Documentation">Documentation</a><br />
           <a href="https://github.com/grafana/pyroscope/tree/main/examples/ruby" title="ruby-examples">Examples</a>
       </td>
-      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/rust/"><img src="https://user-images.githubusercontent.com/23323466/178160555-fb6aeee7-5d31-4bcb-9e3e-41e9f2f7d5b4.png" width="100px;" alt=""/><br />
-        <b>Rust</b></a><br />
-          <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/rust/" title="Documentation">Documentation</a><br />
-          <a href="https://github.com/grafana/pyroscope/tree/main/examples/rust/rideshare" title="examples">Examples</a>
-      </td>
    </tr>
    <tr>
-      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/nodejs/"><img src="https://user-images.githubusercontent.com/23323466/178160551-a79ee6ff-a5d6-419e-89e6-39047cb08126.png" width="100px;" alt=""/><br />
-        <b>NodeJS</b></a><br />
-          <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/nodejs/" title="Documentation">Documentation</a><br />
-          <a href="https://github.com/grafana/pyroscope/tree/main/examples/nodejs/express" title="examples">Examples</a>
+      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/grafana-agent/"><img src="https://github.com/grafana/phlare/assets/23323466/1d81f842-5fa0-415d-8d77-aff175a6266f" width="100px;" alt=""/><br />
+        <b>Grafana Agent (Go Pull Mode)</b></a><br />
+          <a href="https://grafana.com/docs/phlare/latest/configure-client/grafana-agent/" title="Documentation">Documentation</a><br />
+          <a href="https://github.com/grafana/pyroscope/tree/main/examples/php" title="examples">Examples</a>
       </td>
       <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/dotnet/"><img src="https://user-images.githubusercontent.com/23323466/178160544-d2e189c6-a521-482c-a7dc-5375c1985e24.png" width="100px;" alt=""/><br />
         <b>Dotnet</b></a><br />
           <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/dotnet/" title="Documentation">Documentation</a><br />
           <a href="https://github.com/grafana/pyroscope/tree/main/examples/dotnet" title="examples">Examples</a>
       </td>
-      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/ebpf/"><img src="https://user-images.githubusercontent.com/23323466/178160548-e974c080-808d-4c5d-be9b-c983a319b037.png" width="100px;" alt=""/><br />
-        <b>eBPF</b></a><br />
-          <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/ebpf/" title="Documentation">Documentation</a><br />
-          <a href="https://github.com/grafana/pyroscope/tree/main/examples/ebpf" title="examples">Examples</a>
+      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/nodejs/"><img src="https://user-images.githubusercontent.com/23323466/178160551-a79ee6ff-a5d6-419e-89e6-39047cb08126.png" width="100px;" alt=""/><br />
+        <b>NodeJS</b></a><br />
+          <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/nodejs/" title="Documentation">Documentation</a><br />
+          <a href="https://github.com/grafana/pyroscope/tree/main/examples/nodejs/express" title="examples">Examples</a>
       </td>
-      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/grafana-agent/"><img src="https://github.com/grafana/phlare/assets/23323466/1d81f842-5fa0-415d-8d77-aff175a6266f" width="100px;" alt=""/><br />
-        <b>Grafana Agent (Go Pull Mode)</b></a><br />
-          <a href="https://grafana.com/docs/phlare/latest/configure-client/grafana-agent/" title="Documentation">Documentation</a><br />
-          <a href="https://github.com/grafana/pyroscope/tree/main/examples/php" title="examples">Examples</a>
+      <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/rust/"><img src="https://user-images.githubusercontent.com/23323466/178160555-fb6aeee7-5d31-4bcb-9e3e-41e9f2f7d5b4.png" width="100px;" alt=""/><br />
+        <b>Rust</b></a><br />
+          <a href="https://grafana.com/docs/phlare/latest/configure-client/language-sdks/rust/" title="Documentation">Documentation</a><br />
+          <a href="https://github.com/grafana/pyroscope/tree/main/examples/rust/rideshare" title="examples">Examples</a>
       </td>
    </tr>
 </table>
