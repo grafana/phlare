@@ -21,9 +21,10 @@ import (
 	"github.com/grafana/dskit/ring"
 	"github.com/grafana/dskit/ring/client"
 	"github.com/grafana/dskit/services"
-	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 
 	pushv1 "github.com/grafana/phlare/api/gen/proto/go/push/v1"
 	"github.com/grafana/phlare/api/gen/proto/go/push/v1/pushv1connect"

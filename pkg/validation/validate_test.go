@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/prometheus/common/model"
 	"github.com/stretchr/testify/require"
+
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 )

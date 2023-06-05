@@ -27,12 +27,13 @@ import (
 	"time"
 
 	"github.com/go-kit/log/level"
-	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/parca-dev/parca/pkg/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 
 	agentv1v1 "github.com/grafana/phlare/api/gen/proto/go/agent/v1"
 	"github.com/grafana/phlare/pkg/agent/scrape"

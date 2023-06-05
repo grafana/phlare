@@ -4,13 +4,14 @@ import (
 	"testing"
 	"time"
 
-	phlaremodel "github.com/grafana/phlare/pkg/model"
 	"github.com/parca-dev/parca/pkg/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/stretchr/testify/require"
+
+	phlaremodel "github.com/grafana/phlare/pkg/model"
 )
 
 func TestPopulateLabels(t *testing.T) {
