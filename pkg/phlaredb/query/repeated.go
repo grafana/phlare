@@ -3,12 +3,14 @@ package query
 import (
 	"context"
 	"io"
+	"sync"
 
 	"github.com/grafana/dskit/multierror"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/grafana/phlare/pkg/iter"
 )
@@ -54,6 +56,17 @@ func NewRepeatedPageIterator[T any](
 	column int,
 	readSize int,
 ) iter.Iterator[*RepeatedRow[T]] {
+	return newRepeatedPageIterator[T](ctx, rows, rgs, column, readSize, 0)
+}
+
+func newRepeatedPageIterator[T any](
+	ctx context.Context,
+	rows iter.Iterator[T],
+	rgs []parquet.RowGroup,
+	column int,
+	readSize int,
+	startRowNum int64,
+) iter.Iterator[*RepeatedRow[T]] {
 	if readSize <= 0 {
 		panic("readSize must be greater than 0")
 	}
@@ -61,18 +74,19 @@ func NewRepeatedPageIterator[T any](
 	done := !rows.Next()
 	span, ctx := opentracing.StartSpanFromContext(ctx, "NewRepeatedPageIterator")
 	return &repeatedPageIterator[T]{
-		ctx:            ctx,
-		span:           span,
-		rows:           rows,
-		rgs:            rgs,
-		column:         column,
-		readSize:       readSize,
-		buffer:         buffer[:0],
-		originalBuffer: buffer,
-		currentValue:   &RepeatedRow[T]{},
-		done:           done,
-		rowFinished:    true,
-		skipping:       false,
+		ctx:                 ctx,
+		span:                span,
+		rows:                rows,
+		rgs:                 rgs,
+		column:              column,
+		readSize:            readSize,
+		buffer:              buffer[:0],
+		originalBuffer:      buffer,
+		currentValue:        &RepeatedRow[T]{},
+		done:                done,
+		rowFinished:         true,
+		skipping:            false,
+		startRowGroupRowNum: startRowNum,
 	}
 }
 
@@ -334,6 +348,106 @@ func (it *multiRepeatedPageIterator[T]) Err() error {
 
 func (it *multiRepeatedPageIterator[T]) Close() error {
 	errs := multierror.New()
+	for _, i := range it.iters {
+		errs.Add(i.Close())
+	}
+	return errs.Err()
+}
+
+type parallelRepeatedPageIterator[T any] struct {
+	iters   []iter.Iterator[*RepeatedRow[T]]
+	ctx     context.Context
+	cancel  context.CancelFunc
+	results chan *RepeatedRow[T]
+	curr    *RepeatedRow[T]
+	err     error
+	mtx     sync.Mutex
+	g       *errgroup.Group
+}
+
+func NewParallelRepeatedPageIterator[T any](
+	ctx context.Context,
+	rows iter.Iterator[T],
+	rgs []parquet.RowGroup,
+	column int,
+	readSize int,
+) (iter.Iterator[*RepeatedRow[T]], error) {
+	// todo we can't clone actually we need to slice into multiple iterators.
+	// within boundaries of each row group.
+	clonedRows, err := iter.CloneN(rows, len(rgs))
+	if err != nil {
+		return nil, err
+	}
+	its := make([]iter.Iterator[*RepeatedRow[T]], len(rgs))
+	var startRowGroupNum int64
+	for i, rg := range rgs {
+		rg := rg
+		its[i] = newRepeatedPageIterator[T](ctx, clonedRows[i], []parquet.RowGroup{rg}, column, readSize, startRowGroupNum)
+		startRowGroupNum += rg.NumRows()
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(16)
+	it := &parallelRepeatedPageIterator[T]{
+		iters:   its,
+		ctx:     ctx,
+		cancel:  cancel,
+		results: make(chan *RepeatedRow[T], 2048),
+		g:       g,
+	}
+	go it.loop()
+	return it, nil
+}
+
+func (it *parallelRepeatedPageIterator[T]) loop() {
+	defer close(it.results)
+
+	for _, i := range it.iters {
+		i := i
+		it.g.Go(func() error {
+			for i.Next() {
+				select {
+				case <-it.ctx.Done():
+					return nil
+				case it.results <- i.At():
+				}
+			}
+			return i.Err()
+		})
+	}
+	if err := it.g.Wait(); err != nil {
+		it.mtx.Lock()
+		it.err = err
+		it.mtx.Unlock()
+	}
+}
+
+func (it *parallelRepeatedPageIterator[T]) Next() bool {
+	var ok bool
+	select {
+	case <-it.ctx.Done():
+		return false
+	case it.curr, ok = <-it.results:
+		return ok
+	}
+}
+
+func (it *parallelRepeatedPageIterator[T]) At() *RepeatedRow[T] {
+	return it.curr
+}
+
+func (it *parallelRepeatedPageIterator[T]) Err() error {
+	it.mtx.Lock()
+	defer it.mtx.Unlock()
+	return it.err
+}
+
+func (it *parallelRepeatedPageIterator[T]) Close() error {
+	it.cancel()
+	errs := multierror.New()
+	if err := it.g.Wait(); err != nil {
+		errs.Add(err)
+	}
 	for _, i := range it.iters {
 		errs.Add(i.Close())
 	}

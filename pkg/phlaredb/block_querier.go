@@ -1212,6 +1212,20 @@ func repeatedColumnIter[T any](ctx context.Context, source Source, columnName st
 	return query.NewRepeatedPageIterator(ctx, rows, source.RowGroups(), column.ColumnIndex, 1e4)
 }
 
+func parallelRepeatedColumnIter[T any](ctx context.Context, source Source, columnName string, rows iter.Iterator[T]) iter.Iterator[*query.RepeatedRow[T]] {
+	column, found := source.Schema().Lookup(strings.Split(columnName, ".")...)
+	if !found {
+		return iter.NewErrIterator[*query.RepeatedRow[T]](fmt.Errorf("column '%s' not found in parquet file", columnName))
+	}
+
+	opentracing.SpanFromContext(ctx).SetTag("columnName", columnName)
+	it, err := query.NewParallelRepeatedPageIterator(ctx, rows, source.RowGroups(), column.ColumnIndex, 1e4)
+	if err != nil {
+		return iter.NewErrIterator[*query.RepeatedRow[T]](err)
+	}
+	return it
+}
+
 type ResultWithRowNum[M any] struct {
 	Result M
 	RowNum int64
