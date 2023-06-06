@@ -16,6 +16,8 @@ const (
 
 type stacktracesKey uint64
 
+type stacktracesShardKey string
+
 type stacktracesHelper struct{}
 
 func (*stacktracesHelper) key(s *schemav1.Stacktrace) stacktracesKey {

@@ -18,6 +18,8 @@ import (
 )
 
 const (
+	SymbolsShardsFilename = "symbols_shards.json"
+
 	IndexFilename        = "index.tsdb"
 	ParquetSuffix        = ".parquet"
 	DeletionMarkFilename = "deletion-mark.json"

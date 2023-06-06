@@ -2,6 +2,7 @@ package phlaredb
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -139,7 +140,7 @@ type Head struct {
 	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
 	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
 	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
-	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
+	stacktraces     deduplicatingSliceSharded[*schemav1.Stacktrace, stacktracesShardKey, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister]
 	profiles        *profileStore
 	totalSamples    *atomic.Uint64
 	tables          []Table
@@ -268,7 +269,7 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(ctx context.Context, ssk stacktracesShardKey, r *rewriter, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -282,12 +283,12 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 		out[idxType] = make([]*schemav1.Sample, len(in))
 	}
 
-	for idxSample := range in {
+	for idxSample, s := range in {
 		// populate samples
-		labels := h.pprofLabelCache.rewriteLabels(r.strings, in[idxSample].Label)
+		labels := h.pprofLabelCache.rewriteLabels(r.strings, s.Label)
 		for idxType := range out {
 			out[idxType][idxSample] = &schemav1.Sample{
-				Value:  in[idxSample].Value[idxType],
+				Value:  s.Value[idxType],
 				Labels: labels,
 			}
 		}
@@ -296,12 +297,12 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 		stacktraces[idxSample] = &schemav1.Stacktrace{
 			// no copySlice necessary at this point,stacktracesHelper.clone
 			// will copy it, if it is required to be retained.
-			LocationIDs: in[idxSample].LocationId,
+			LocationIDs: s.LocationId,
 		}
 	}
 
 	// ingest stacktraces
-	if err := h.stacktraces.ingest(ctx, stacktraces, r); err != nil {
+	if err := h.stacktraces.ingest(ctx, ssk, stacktraces, r); err != nil {
 		return nil, err
 	}
 
@@ -325,6 +326,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	}
 
 	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
+	skk := stacktracesShardKey(phlaremodel.Labels(externalLabels).Get("service_name"))
 
 	// create a rewriter state
 	rewrites := &rewriter{}
@@ -345,7 +347,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		return err
 	}
 
-	samplesPerType, err := h.convertSamples(ctx, rewrites, p.Sample)
+	samplesPerType, err := h.convertSamples(ctx, skk, rewrites, p.Sample)
 	if err != nil {
 		return err
 	}
@@ -587,128 +589,133 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktr
 	names := []string{}
 	functions := map[int64]int{}
 
-	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
 	h.strings.lock.RLock()
 	defer func() {
-		h.stacktraces.lock.RUnlock()
 		h.locations.lock.RUnlock()
 		h.functions.lock.RUnlock()
 		h.strings.lock.RUnlock()
 	}()
 
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
-	for stacktraceID := range stacktraceSamples {
-		locs := h.stacktraces.slice[stacktraceID].LocationIDs
-		fnIds := make([]int32, 0, 2*len(locs))
-		for _, loc := range locs {
-			for _, line := range h.locations.slice[loc].Line {
-				fnNameID := h.functions.slice[line.FunctionId].Name
-				pos, ok := functions[fnNameID]
-				if !ok {
-					functions[fnNameID] = len(names)
-					fnIds = append(fnIds, int32(len(names)))
-					names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
-					continue
+
+	r := new(ingestv1.MergeProfilesStacktracesResult)
+	for k, samples := range stacktraceSamples {
+		sh := h.stacktraces.shard(k)
+		sh.lock.RLock()
+		for stacktraceID := range samples {
+			locs := sh.slice[stacktraceID].LocationIDs
+			fnIds := make([]int32, 0, 2*len(locs))
+			for _, loc := range locs {
+				for _, line := range h.locations.slice[loc].Line {
+					fnNameID := h.functions.slice[line.FunctionId].Name
+					pos, ok := functions[fnNameID]
+					if !ok {
+						functions[fnNameID] = len(names)
+						fnIds = append(fnIds, int32(len(names)))
+						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
+						continue
+					}
+					fnIds = append(fnIds, int32(pos))
 				}
-				fnIds = append(fnIds, int32(pos))
 			}
+			samples[stacktraceID].FunctionIds = fnIds
 		}
-		stacktraceSamples[stacktraceID].FunctionIds = fnIds
+		sh.lock.RUnlock()
+		r.Stacktraces = append(r.Stacktraces, lo.Values(samples)...)
 	}
 
-	return &ingestv1.MergeProfilesStacktracesResult{
-		Stacktraces:   lo.Values(stacktraceSamples),
-		FunctionNames: names,
-	}
+	r.FunctionNames = names
+	return r
 }
 
 func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSampleMap) *profile.Profile {
 	sp, _ := opentracing.StartSpanFromContext(ctx, "resolvePprof - Head")
 	defer sp.Finish()
+	/*
+		locations := map[uint64]*profile.Location{}
+		functions := map[uint64]*profile.Function{}
+		mappings := map[uint64]*profile.Mapping{}
 
-	locations := map[uint64]*profile.Location{}
-	functions := map[uint64]*profile.Function{}
-	mappings := map[uint64]*profile.Mapping{}
+		h.stacktraces.lock.RLock()
+		h.locations.lock.RLock()
+		h.functions.lock.RLock()
+		h.strings.lock.RLock()
+		defer func() {
+			h.stacktraces.lock.RUnlock()
+			h.locations.lock.RUnlock()
+			h.functions.lock.RUnlock()
+			h.strings.lock.RUnlock()
+		}()
 
-	h.stacktraces.lock.RLock()
-	h.locations.lock.RLock()
-	h.functions.lock.RLock()
-	h.strings.lock.RLock()
-	defer func() {
-		h.stacktraces.lock.RUnlock()
-		h.locations.lock.RUnlock()
-		h.functions.lock.RUnlock()
-		h.strings.lock.RUnlock()
-	}()
+		// now add locationIDs and stacktraces
+		for stacktraceID := range stacktraceSamples {
+			locationIds := h.stacktraces.slice[stacktraceID].LocationIDs
+			stacktraceLocations := make([]*profile.Location, len(locationIds))
 
-	// now add locationIDs and stacktraces
-	for stacktraceID := range stacktraceSamples {
-		locationIds := h.stacktraces.slice[stacktraceID].LocationIDs
-		stacktraceLocations := make([]*profile.Location, len(locationIds))
-
-		for i, locId := range locationIds {
-			loc, ok := locations[locId]
-			if !ok {
-				locFound := h.locations.slice[locId]
-				mapping, ok := mappings[locFound.MappingId]
+			for i, locId := range locationIds {
+				loc, ok := locations[locId]
 				if !ok {
-					mappingFound := h.mappings.slice[locFound.MappingId]
-					mapping = &profile.Mapping{
-						ID:              mappingFound.Id,
-						Start:           mappingFound.MemoryStart,
-						Limit:           mappingFound.MemoryLimit,
-						Offset:          mappingFound.FileOffset,
-						File:            h.strings.slice[mappingFound.Filename],
-						BuildID:         h.strings.slice[mappingFound.BuildId],
-						HasFunctions:    mappingFound.HasFunctions,
-						HasFilenames:    mappingFound.HasFilenames,
-						HasLineNumbers:  mappingFound.HasLineNumbers,
-						HasInlineFrames: mappingFound.HasInlineFrames,
-					}
-					mappings[locFound.MappingId] = mapping
-				}
-				loc = &profile.Location{
-					ID:       locFound.Id,
-					Address:  locFound.Address,
-					IsFolded: locFound.IsFolded,
-					Mapping:  mapping,
-					Line:     make([]profile.Line, len(locFound.Line)),
-				}
-				for i, line := range locFound.Line {
-					fn, ok := functions[line.FunctionId]
+					locFound := h.locations.slice[locId]
+					mapping, ok := mappings[locFound.MappingId]
 					if !ok {
-						fnFound := h.functions.slice[line.FunctionId]
-						fn = &profile.Function{
-							ID:         fnFound.Id,
-							Name:       h.strings.slice[fnFound.Name],
-							SystemName: h.strings.slice[fnFound.SystemName],
-							Filename:   h.strings.slice[fnFound.Filename],
-							StartLine:  fnFound.StartLine,
+						mappingFound := h.mappings.slice[locFound.MappingId]
+						mapping = &profile.Mapping{
+							ID:              mappingFound.Id,
+							Start:           mappingFound.MemoryStart,
+							Limit:           mappingFound.MemoryLimit,
+							Offset:          mappingFound.FileOffset,
+							File:            h.strings.slice[mappingFound.Filename],
+							BuildID:         h.strings.slice[mappingFound.BuildId],
+							HasFunctions:    mappingFound.HasFunctions,
+							HasFilenames:    mappingFound.HasFilenames,
+							HasLineNumbers:  mappingFound.HasLineNumbers,
+							HasInlineFrames: mappingFound.HasInlineFrames,
 						}
-						functions[line.FunctionId] = fn
+						mappings[locFound.MappingId] = mapping
 					}
-					loc.Line[i] = profile.Line{
-						Line:     line.Line,
-						Function: fn,
+					loc = &profile.Location{
+						ID:       locFound.Id,
+						Address:  locFound.Address,
+						IsFolded: locFound.IsFolded,
+						Mapping:  mapping,
+						Line:     make([]profile.Line, len(locFound.Line)),
 					}
+					for i, line := range locFound.Line {
+						fn, ok := functions[line.FunctionId]
+						if !ok {
+							fnFound := h.functions.slice[line.FunctionId]
+							fn = &profile.Function{
+								ID:         fnFound.Id,
+								Name:       h.strings.slice[fnFound.Name],
+								SystemName: h.strings.slice[fnFound.SystemName],
+								Filename:   h.strings.slice[fnFound.Filename],
+								StartLine:  fnFound.StartLine,
+							}
+							functions[line.FunctionId] = fn
+						}
+						loc.Line[i] = profile.Line{
+							Line:     line.Line,
+							Function: fn,
+						}
+					}
+					locations[locId] = loc
 				}
-				locations[locId] = loc
+				stacktraceLocations[i] = loc
 			}
-			stacktraceLocations[i] = loc
+			stacktraceSamples[stacktraceID].Location = stacktraceLocations
 		}
-		stacktraceSamples[stacktraceID].Location = stacktraceLocations
-	}
 
-	result := &profile.Profile{
-		Sample:   lo.Values(stacktraceSamples),
-		Location: lo.Values(locations),
-		Function: lo.Values(functions),
-		Mapping:  lo.Values(mappings),
-	}
-	normalizeProfileIds(result)
-	return result
+		result := &profile.Profile{
+			Sample:   lo.Values(stacktraceSamples),
+			Location: lo.Values(locations),
+			Function: lo.Values(functions),
+			Mapping:  lo.Values(mappings),
+		}
+		normalizeProfileIds(result)
+		return result*/
+	return nil
 }
 
 func normalizeProfileIds(p *profile.Profile) {
@@ -928,6 +935,9 @@ func (h *Head) flush(ctx context.Context) error {
 			totalSize += files[idx+1].SizeBytes
 		}
 	}
+	if err := h.writeSymbolsShards(); err != nil {
+		return err
+	}
 	h.metrics.flushedBlockSizeBytes.Observe(float64(totalSize))
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].RelPath < files[j].RelPath
@@ -943,6 +953,23 @@ func (h *Head) flush(ctx context.Context) error {
 	}
 	h.metrics.blockDurationSeconds.Observe(h.meta.MaxTime.Sub(h.meta.MinTime).Seconds())
 	return nil
+}
+
+func (h *Head) writeSymbolsShards() error {
+	m := make(symbolsShards)
+	for k, v := range h.stacktraces.sm {
+		m[k] = symbolsRowRange{
+			RowNum: v.rowNum,
+			Length: v.length,
+		}
+	}
+	p := filepath.Join(h.headPath, block.SymbolsShardsFilename)
+	f, err := os.Create(p)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return json.NewEncoder(f).Encode(m)
 }
 
 // Move moves the head directory to local blocks. The call is not thread-safe:

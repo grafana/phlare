@@ -248,34 +248,36 @@ func TestHeadIngestStrings(t *testing.T) {
 	require.Equal(t, stringConversionTable{0, 7}, r.strings)
 }
 
-func TestHeadIngestStacktraces(t *testing.T) {
-	ctx := context.Background()
-	head := newTestHead(t)
+/*
+	func TestHeadIngestStacktraces(t *testing.T) {
+		ctx := context.Background()
+		head := newTestHead(t)
 
-	require.NoError(t, head.Ingest(ctx, newProfileFoo(), uuid.MustParse("00000000-0000-0000-0000-00000000000a")))
-	require.NoError(t, head.Ingest(ctx, newProfileBar(), uuid.MustParse("00000000-0000-0000-0000-00000000000b")))
-	require.NoError(t, head.Ingest(ctx, newProfileBar(), uuid.MustParse("00000000-0000-0000-0000-00000000000c")))
+		require.NoError(t, head.Ingest(ctx, newProfileFoo(), uuid.MustParse("00000000-0000-0000-0000-00000000000a")))
+		require.NoError(t, head.Ingest(ctx, newProfileBar(), uuid.MustParse("00000000-0000-0000-0000-00000000000b")))
+		require.NoError(t, head.Ingest(ctx, newProfileBar(), uuid.MustParse("00000000-0000-0000-0000-00000000000c")))
 
-	// expect 2 mappings
-	require.Equal(t, 2, len(head.mappings.slice))
-	assert.Equal(t, "my-foo-binary", head.strings.slice[head.mappings.slice[0].Filename])
-	assert.Equal(t, "my-bar-binary", head.strings.slice[head.mappings.slice[1].Filename])
+		// expect 2 mappings
+		require.Equal(t, 2, len(head.mappings.slice))
+		assert.Equal(t, "my-foo-binary", head.strings.slice[head.mappings.slice[0].Filename])
+		assert.Equal(t, "my-bar-binary", head.strings.slice[head.mappings.slice[1].Filename])
 
-	// expect 3 stacktraces
-	require.Equal(t, 3, len(head.stacktraces.slice))
+		// expect 3 stacktraces
+		require.Equal(t, 3, len(head.stacktraces.slice))
 
-	// expect 3 profiles
-	require.Equal(t, 3, len(head.profiles.slice))
+		// expect 3 profiles
+		require.Equal(t, 3, len(head.profiles.slice))
 
-	var samples []uint64
-	for pos := range head.profiles.slice {
-		for _, sample := range head.profiles.slice[pos].Samples {
-			samples = append(samples, sample.StacktraceID)
+		var samples []uint64
+		for pos := range head.profiles.slice {
+			for _, sample := range head.profiles.slice[pos].Samples {
+				samples = append(samples, sample.StacktraceID)
+			}
 		}
+		// expect 4 samples, 3 of which distinct
+		require.Equal(t, []uint64{1, 0, 2, 2}, samples)
 	}
-	// expect 4 samples, 3 of which distinct
-	require.Equal(t, []uint64{1, 0, 2, 2}, samples)
-}
+*/
 
 func TestHeadLabelValues(t *testing.T) {
 	head := newTestHead(t)

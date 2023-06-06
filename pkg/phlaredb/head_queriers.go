@@ -219,21 +219,21 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 
 	stacktraceSamples := stacktraceSampleMap{}
 
-	q.head.stacktraces.lock.RLock()
+	q.head.stacktraces.shardsLock.RLock()
 	for rows.Next() {
 		p, ok := rows.At().(ProfileWithLabels)
 		if !ok {
 			return nil, errors.New("expected ProfileWithLabels")
 		}
-
+		x := stacktraceSamples.shard(stacktracesShardKey(p.lbs.Get("service_name")))
 		for _, s := range p.Samples() {
 			if s.Value == 0 {
 				continue
 			}
-			sample, exists := stacktraceSamples[int64(s.StacktraceID)]
+			sample, exists := x[int64(s.StacktraceID)]
 			if !exists {
 				sample = &ingestv1.StacktraceSample{}
-				stacktraceSamples[int64(s.StacktraceID)] = sample
+				x[int64(s.StacktraceID)] = sample
 			}
 			sample.Value += s.Value
 		}
@@ -241,7 +241,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	q.head.stacktraces.lock.RUnlock()
+	q.head.stacktraces.shardsLock.RUnlock()
 
 	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
@@ -250,27 +250,28 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*profile.Profile, error) {
 	sp, _ := opentracing.StartSpanFromContext(ctx, "MergePprof - HeadInMemory")
 	defer sp.Finish()
+	/*
+		stacktraceSamples := profileSampleMap{}
 
-	stacktraceSamples := profileSampleMap{}
+		for rows.Next() {
+			p, ok := rows.At().(ProfileWithLabels)
+			if !ok {
+				return nil, errors.New("expected ProfileWithLabels")
+			}
 
-	for rows.Next() {
-		p, ok := rows.At().(ProfileWithLabels)
-		if !ok {
-			return nil, errors.New("expected ProfileWithLabels")
+			for _, s := range p.Samples() {
+				if s.Value == 0 {
+					continue
+				}
+				if _, exists := stacktraceSamples[int64(s.StacktraceID)]; !exists {
+					stacktraceSamples[int64(s.StacktraceID)] = &profile.Sample{Value: []int64{0}}
+				}
+				stacktraceSamples[int64(s.StacktraceID)].Value[0] += s.Value
+			}
 		}
 
-		for _, s := range p.Samples() {
-			if s.Value == 0 {
-				continue
-			}
-			if _, exists := stacktraceSamples[int64(s.StacktraceID)]; !exists {
-				stacktraceSamples[int64(s.StacktraceID)] = &profile.Sample{Value: []int64{0}}
-			}
-			stacktraceSamples[int64(s.StacktraceID)].Value[0] += s.Value
-		}
-	}
-
-	return q.head.resolvePprof(ctx, stacktraceSamples), nil
+		return q.head.resolvePprof(ctx, stacktraceSamples), nil*/
+	return nil, nil
 }
 
 func (q *headInMemoryQuerier) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error) {

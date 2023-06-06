@@ -3,6 +3,7 @@ package phlaredb
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -324,15 +325,23 @@ type singleBlockQuerier struct {
 
 	tables []tableReader
 
-	openLock    sync.Mutex
-	opened      bool
-	index       *index.Reader
-	strings     inMemoryparquetReader[*schemav1.StoredString, *schemav1.StringPersister]
-	functions   inMemoryparquetReader[*profilev1.Function, *schemav1.FunctionPersister]
-	locations   inMemoryparquetReader[*profilev1.Location, *schemav1.LocationPersister]
-	mappings    inMemoryparquetReader[*profilev1.Mapping, *schemav1.MappingPersister]
-	stacktraces parquetReader[*schemav1.Stacktrace, *schemav1.StacktracePersister]
-	profiles    parquetReader[*schemav1.Profile, *schemav1.ProfilePersister]
+	openLock      sync.Mutex
+	opened        bool
+	index         *index.Reader
+	strings       inMemoryparquetReader[*schemav1.StoredString, *schemav1.StringPersister]
+	functions     inMemoryparquetReader[*profilev1.Function, *schemav1.FunctionPersister]
+	locations     inMemoryparquetReader[*profilev1.Location, *schemav1.LocationPersister]
+	mappings      inMemoryparquetReader[*profilev1.Mapping, *schemav1.MappingPersister]
+	profiles      parquetReader[*schemav1.Profile, *schemav1.ProfilePersister]
+	stacktraces   parquetReader[*schemav1.Stacktrace, *schemav1.StacktracePersister]
+	symbolsShards symbolsShards
+}
+
+type symbolsShards map[stacktracesShardKey]symbolsRowRange
+
+type symbolsRowRange struct {
+	RowNum int64
+	Length int
 }
 
 func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobj.Bucket, meta *block.Meta) *singleBlockQuerier {
@@ -342,6 +351,8 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 
 		bkt:  phlareobj.NewPrefixedBucket(bucketReader, meta.ULID.String()),
 		meta: meta,
+
+		symbolsShards: make(symbolsShards),
 	}
 	for _, f := range meta.Files {
 		switch f.RelPath {
@@ -1062,7 +1073,7 @@ func newByteSliceFromBucketReader(ctx context.Context, bucketReader objstore.Buc
 		return nil, err
 	}
 
-	return index.RealByteSlice(data), nil
+	return data, nil
 }
 
 func (q *singleBlockQuerier) Open(ctx context.Context) error {
@@ -1116,6 +1127,15 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 			return nil
 		}))
 	}
+
+	g.Go(util.RecoverPanic(func() error {
+		b, err := newByteSliceFromBucketReader(ctx, q.bkt, block.SymbolsShardsFilename)
+		if err != nil {
+			// TODO: Ignore "object not found" only.
+			return nil
+		}
+		return json.Unmarshal(b, &q.symbolsShards)
+	}))
 
 	return g.Wait()
 }
