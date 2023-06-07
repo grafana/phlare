@@ -170,10 +170,7 @@ func populateLabels(lset labels.Labels, cfg ScrapeConfig) (res, orig labels.Labe
 	}
 
 	if serviceName := lset.Get(phlaremodel.LabelNameServiceName); serviceName == "" {
-		if serviceName = lset.Get(phlaremodel.LabelNameServiceNameK8s); serviceName == "" {
-			return nil, nil, errors.New("service_name label is not specified")
-		}
-		lb.Set(phlaremodel.LabelNameServiceName, serviceName)
+		lb.Set(phlaremodel.LabelNameServiceName, inferServiceName(lset))
 	}
 
 	res = lb.Labels()
@@ -317,4 +314,21 @@ func (tg *TargetGroup) TargetsFromGroup(group *targetgroup.Group) ([]*Target, []
 	}
 
 	return targets, droppedTargets, nil
+}
+
+func inferServiceName(lset labels.Labels) string {
+	k8sServiceName := lset.Get(phlaremodel.LabelNameServiceNameK8s)
+	if k8sServiceName != "" {
+		return k8sServiceName
+	}
+	k8sNamespace := lset.Get("__meta_kubernetes_namespace")
+	k8sContainer := lset.Get("__meta_kubernetes_pod_container_name")
+	if k8sNamespace != "" && k8sContainer != "" {
+		return fmt.Sprintf("%s/%s", k8sNamespace, k8sContainer)
+	}
+	dockerContainer := lset.Get("__meta_docker_container_name")
+	if dockerContainer != "" {
+		return dockerContainer
+	}
+	return "unspecified"
 }

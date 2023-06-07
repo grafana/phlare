@@ -276,6 +276,106 @@ func TestPopulateLabels(t *testing.T) {
 			wantOrig: nil,
 			wantErr:  true,
 		},
+		{
+			name: "service name unspecified",
+			labels: labels.FromMap(map[string]string{
+				model.AddressLabel: "1.2.3.4:1000",
+			}),
+			cfg: ScrapeConfig{
+				ScrapeInterval: model.Duration(time.Second),
+				ScrapeTimeout:  2 * model.Duration(time.Second),
+			},
+			wantRes: labels.FromMap(map[string]string{
+				model.AddressLabel:               "1.2.3.4:1000",
+				phlaremodel.LabelNameServiceName: "unspecified",
+				model.InstanceLabel:              "1.2.3.4:1000",
+				model.ScrapeIntervalLabel:        "1s",
+				model.ScrapeTimeoutLabel:         "2s",
+			}),
+			wantOrig: labels.FromMap(map[string]string{
+				model.AddressLabel:        "1.2.3.4:1000",
+				model.ScrapeIntervalLabel: "1s",
+				model.ScrapeTimeoutLabel:  "2s",
+			}),
+			wantErr: false,
+		},
+		{
+			name: "service name inferred from pod annotation",
+			labels: labels.FromMap(map[string]string{
+				model.AddressLabel: "1.2.3.4:1000",
+				"__meta_kubernetes_pod_annotation_pyroscope_io_service_name": "k8s-svc",
+			}),
+			cfg: ScrapeConfig{
+				ScrapeInterval: model.Duration(time.Second),
+				ScrapeTimeout:  2 * model.Duration(time.Second),
+			},
+			wantRes: labels.FromMap(map[string]string{
+				model.AddressLabel:               "1.2.3.4:1000",
+				phlaremodel.LabelNameServiceName: "k8s-svc",
+				model.InstanceLabel:              "1.2.3.4:1000",
+				model.ScrapeIntervalLabel:        "1s",
+				model.ScrapeTimeoutLabel:         "2s",
+			}),
+			wantOrig: labels.FromMap(map[string]string{
+				model.AddressLabel: "1.2.3.4:1000",
+				"__meta_kubernetes_pod_annotation_pyroscope_io_service_name": "k8s-svc",
+				model.ScrapeIntervalLabel:                                    "1s",
+				model.ScrapeTimeoutLabel:                                     "2s",
+			}),
+			wantErr: false,
+		},
+		{
+			name: "service name inferred from k8s",
+			labels: labels.FromMap(map[string]string{
+				model.AddressLabel:                     "1.2.3.4:1000",
+				"__meta_kubernetes_namespace":          "ns",
+				"__meta_kubernetes_pod_container_name": "container",
+			}),
+			cfg: ScrapeConfig{
+				ScrapeInterval: model.Duration(time.Second),
+				ScrapeTimeout:  2 * model.Duration(time.Second),
+			},
+			wantRes: labels.FromMap(map[string]string{
+				model.AddressLabel:               "1.2.3.4:1000",
+				phlaremodel.LabelNameServiceName: "ns/container",
+				model.InstanceLabel:              "1.2.3.4:1000",
+				model.ScrapeIntervalLabel:        "1s",
+				model.ScrapeTimeoutLabel:         "2s",
+			}),
+			wantOrig: labels.FromMap(map[string]string{
+				model.AddressLabel:                     "1.2.3.4:1000",
+				"__meta_kubernetes_namespace":          "ns",
+				"__meta_kubernetes_pod_container_name": "container",
+				model.ScrapeIntervalLabel:              "1s",
+				model.ScrapeTimeoutLabel:               "2s",
+			}),
+			wantErr: false,
+		},
+		{
+			name: "service name inferred from docker",
+			labels: labels.FromMap(map[string]string{
+				model.AddressLabel:             "1.2.3.4:1000",
+				"__meta_docker_container_name": "container",
+			}),
+			cfg: ScrapeConfig{
+				ScrapeInterval: model.Duration(time.Second),
+				ScrapeTimeout:  2 * model.Duration(time.Second),
+			},
+			wantRes: labels.FromMap(map[string]string{
+				model.AddressLabel:               "1.2.3.4:1000",
+				phlaremodel.LabelNameServiceName: "container",
+				model.InstanceLabel:              "1.2.3.4:1000",
+				model.ScrapeIntervalLabel:        "1s",
+				model.ScrapeTimeoutLabel:         "2s",
+			}),
+			wantOrig: labels.FromMap(map[string]string{
+				model.AddressLabel:             "1.2.3.4:1000",
+				"__meta_docker_container_name": "container",
+				model.ScrapeIntervalLabel:      "1s",
+				model.ScrapeTimeoutLabel:       "2s",
+			}),
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -99,7 +99,7 @@ func ValidateLabels(limits LabelValidationLimits, userID string, ls []*typesv1.L
 		return NewErrorf(InvalidLabels, InvalidLabelsErrorMsg, phlaremodel.LabelPairsString(ls), "invalid metric name")
 	}
 	serviceNameValue := phlaremodel.Labels(ls).Get(phlaremodel.LabelNameServiceName)
-	if isValidServiceName(serviceNameValue) {
+	if !isValidServiceName(serviceNameValue) {
 		return NewErrorf(MissingLabels, InvalidLabelsErrorMsg, phlaremodel.LabelPairsString(ls), "service name is not provided")
 	}
 	lastLabelName := ""
@@ -123,7 +123,7 @@ func ValidateLabels(limits LabelValidationLimits, userID string, ls []*typesv1.L
 }
 
 func isValidServiceName(serviceNameValue string) bool {
-	return serviceNameValue == ""
+	return serviceNameValue != ""
 }
 
 type Error struct {
