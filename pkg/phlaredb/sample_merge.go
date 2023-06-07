@@ -227,7 +227,7 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 	})
 
 	locationIDs := newUniqueIDs[struct{}]()
-	stacktraces := repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
+	stacktraces := parallelRepeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", stacktraceIDs)
 	defer stacktraces.Close()
 
 	for stacktraces.Next() {
