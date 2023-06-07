@@ -389,7 +389,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		profile = h.delta.computeDelta(profile, labels[idxType])
 
 		if profile == nil {
-			level.Debug(h.logger).Log("msg", "profile is empty after delta computation", "metricName", metricName)
+			// level.Debug(h.logger).Log("msg", "profile is empty after delta computation", "metricName", metricName)
 			continue
 		}
 

@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -392,7 +393,7 @@ func NewParallelRepeatedPageIterator[T any](
 			continue
 		}
 		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
-		rowSlice = nil
+		rowSlice = make([]T, 0, 0)
 		i++
 		rowSlice = append(rowSlice, row)
 	}
@@ -400,15 +401,14 @@ func NewParallelRepeatedPageIterator[T any](
 		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
 	}
 	for i := range rowsIts {
+		fmt.Println("rowsIts", i, rowsIts[i])
 		if rowsIts[i] == nil {
 			rowsIts[i] = iter.NewSliceIterator[T](nil)
 		}
 	}
 	its := make([]iter.Iterator[*RepeatedRow[T]], len(rgs))
-	for i, rg := range rgs {
-		rg := rg
-		its[i] = newRepeatedPageIterator[T](ctx, rowsIts[i], []parquet.RowGroup{rg}, column, readSize, rowNums[i])
-		startRowGroupNum += rg.NumRows()
+	for i := range rgs {
+		its[i] = newRepeatedPageIterator[T](ctx, rowsIts[i], []parquet.RowGroup{rgs[i]}, column, readSize, rowNums[i])
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	g, ctx := errgroup.WithContext(ctx)
@@ -417,7 +417,7 @@ func NewParallelRepeatedPageIterator[T any](
 		iters:   its,
 		ctx:     ctx,
 		cancel:  cancel,
-		results: make(chan *RepeatedRow[T], 2048),
+		results: make(chan *RepeatedRow[T]),
 		g:       g,
 	}
 	go it.loop()
