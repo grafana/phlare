@@ -387,7 +387,7 @@ func NewParallelRepeatedPageIterator[T any](
 	var rowSlice []T
 	for _, row := range rows {
 		row := row
-		if i == len(rows) || rowNum(row) < rowNums[i+1] {
+		if i+1 == len(rows) || rowNum(row) < rowNums[i+1] {
 			rowSlice = append(rowSlice, row)
 			continue
 		}
@@ -410,7 +410,7 @@ func NewParallelRepeatedPageIterator[T any](
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(16)
+	g.SetLimit(64)
 	it := &parallelRepeatedPageIterator[T]{
 		iters:   its,
 		ctx:     ctx,
