@@ -935,9 +935,13 @@ func (h *Head) flush(ctx context.Context) error {
 			totalSize += files[idx+1].SizeBytes
 		}
 	}
-	if err := h.writeSymbolsShards(); err != nil {
+
+	ssf, err := h.writeSymbolsShards()
+	if err != nil {
 		return err
 	}
+	files = append(files, ssf)
+
 	h.metrics.flushedBlockSizeBytes.Observe(float64(totalSize))
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].RelPath < files[j].RelPath
@@ -955,7 +959,7 @@ func (h *Head) flush(ctx context.Context) error {
 	return nil
 }
 
-func (h *Head) writeSymbolsShards() error {
+func (h *Head) writeSymbolsShards() (bf block.File, err error) {
 	m := make(symbolsShards)
 	for k, v := range h.stacktraces.sm {
 		m[k] = symbolsRowRange{
@@ -963,13 +967,17 @@ func (h *Head) writeSymbolsShards() error {
 			Length: v.length,
 		}
 	}
-	p := filepath.Join(h.headPath, block.SymbolsShardsFilename)
-	f, err := os.Create(p)
+	b, err := json.MarshalIndent(m, "", "\t")
 	if err != nil {
-		return err
+		return bf, err
 	}
-	defer f.Close()
-	return json.NewEncoder(f).Encode(m)
+	p := filepath.Join(h.headPath, block.SymbolsShardsFilename)
+	if err = os.WriteFile(p, b, 0666); err != nil {
+		return bf, err
+	}
+	bf.SizeBytes = uint64(len(b))
+	bf.RelPath = block.SymbolsShardsFilename
+	return bf, nil
 }
 
 // Move moves the head directory to local blocks. The call is not thread-safe:
