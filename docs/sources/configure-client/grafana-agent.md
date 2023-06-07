@@ -13,6 +13,7 @@ to the Grafana Phlare database.
 ## Configuring the agent
 
 To be able to pull profiles from applications, your applications needs to expose [pprof endpoints](https://pkg.go.dev/net/http/pprof).
+** To configure the agent and see configuration options please see the [agent configuration documentation](https://grafana.com/docs/agent/next/flow/reference/components/pyroscope.scrape/). **
 
 ### Prerequisites
 
@@ -40,13 +41,13 @@ Create the following directory structure for the example files:
 └── ...
 ```
 
-Copy the example configuration files provided in the PR to their respective locations in the project directory:
+Copy the example configuration files from the [Pyroscope example](https://github.com/grafana/pyroscope/tree/main/examples/grafana-agent) to their respective locations in the project directory:
 
 - `examples/your-application-example/agent/config/config.river`
 - `examples/your-application-example/docker-compose.yml`
 - `examples/your-application-example/pyroscope/config.yaml`
 
-Open the `examples/your-application-example/agent/config/config.river` file and configure the `phlare.write` section based on your needs. 
+Open the `examples/your-application-example/agent/config/config.river` file and configure the `pyroscope.write` section based on your needs. 
 
 **Ensure that the url property points to the correct Pyroscope instance.**
 
