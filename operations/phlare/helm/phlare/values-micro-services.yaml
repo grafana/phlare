@@ -18,7 +18,7 @@ phlare:
       replicaCount: 2
       resources:
         limits:
-          memory: 1Gi
+          memory: 2Gi
         requests:
           memory: 256Mi
           cpu: 100m
