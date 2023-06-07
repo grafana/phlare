@@ -2,7 +2,6 @@ package query
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 
@@ -401,7 +400,6 @@ func NewParallelRepeatedPageIterator[T any](
 		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
 	}
 	for i := range rowsIts {
-		fmt.Println("rowsIts", i, rowsIts[i])
 		if rowsIts[i] == nil {
 			rowsIts[i] = iter.NewSliceIterator[T](nil)
 		}
@@ -419,6 +417,7 @@ func NewParallelRepeatedPageIterator[T any](
 		cancel:  cancel,
 		results: make(chan *RepeatedRow[T]),
 		g:       g,
+		curr:    &RepeatedRow[T]{},
 	}
 	go it.loop()
 	return it, nil
@@ -448,11 +447,19 @@ func (it *parallelRepeatedPageIterator[T]) loop() {
 }
 
 func (it *parallelRepeatedPageIterator[T]) Next() bool {
-	var ok bool
 	select {
 	case <-it.ctx.Done():
 		return false
-	case it.curr, ok = <-it.results:
+	case curr, ok := <-it.results:
+		if !ok {
+			return false
+		}
+		it.curr.Row = curr.Row
+		if cap(it.curr.Values) < len(curr.Values) {
+			it.curr.Values = make([]parquet.Value, len(curr.Values))
+		}
+		it.curr.Values = it.curr.Values[:len(curr.Values)]
+		copy(it.curr.Values, curr.Values)
 		return ok
 	}
 }
