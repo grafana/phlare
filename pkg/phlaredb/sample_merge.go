@@ -57,7 +57,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktrace
 	})
 
 	locationIDs := newUniqueIDs[struct{}]()
-	stacktraces := parallelRepeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
+	stacktraces := parallelRepeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", stacktraceIDs)
 	defer stacktraces.Close()
 
 	for stacktraces.Next() {

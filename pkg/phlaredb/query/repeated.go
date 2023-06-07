@@ -92,7 +92,11 @@ func newRepeatedPageIterator[T any](
 
 // seekRowNum the row num to seek to.
 func (it *repeatedPageIterator[T]) seekRowNum() int64 {
-	switch i := any(it.rows.At()).(type) {
+	return rowNum(it.rows.At())
+}
+
+func rowNum[T any](t T) int64 {
+	switch i := any(t).(type) {
 	case RowGetter:
 		return i.RowNumber()
 	case int64:
@@ -367,22 +371,43 @@ type parallelRepeatedPageIterator[T any] struct {
 
 func NewParallelRepeatedPageIterator[T any](
 	ctx context.Context,
-	rows iter.Iterator[T],
+	rows []T,
 	rgs []parquet.RowGroup,
 	column int,
 	readSize int,
 ) (iter.Iterator[*RepeatedRow[T]], error) {
-	// todo we can't clone actually we need to slice into multiple iterators.
-	// within boundaries of each row group.
-	clonedRows, err := iter.CloneN(rows, len(rgs))
-	if err != nil {
-		return nil, err
-	}
-	its := make([]iter.Iterator[*RepeatedRow[T]], len(rgs))
+	rowNums := make([]int64, len(rgs))
 	var startRowGroupNum int64
 	for i, rg := range rgs {
+		rowNums[i] = startRowGroupNum
+		startRowGroupNum += rg.NumRows()
+	}
+	rowsIts := make([]iter.Iterator[T], len(rgs))
+	var i int
+	var rowSlice []T
+	for _, row := range rows {
+		row := row
+		if rowNum(row) <= rowNums[i] {
+			rowSlice = append(rowSlice, row)
+			continue
+		}
+		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
+		rowSlice = nil
+		i++
+		rowSlice = append(rowSlice, row)
+	}
+	if i < len(rowsIts) {
+		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
+	}
+	for i := range rowsIts {
+		if rowsIts[i] == nil {
+			rowsIts[i] = iter.NewSliceIterator[T](nil)
+		}
+	}
+	its := make([]iter.Iterator[*RepeatedRow[T]], len(rgs))
+	for i, rg := range rgs {
 		rg := rg
-		its[i] = newRepeatedPageIterator[T](ctx, clonedRows[i], []parquet.RowGroup{rg}, column, readSize, startRowGroupNum)
+		its[i] = newRepeatedPageIterator[T](ctx, rowsIts[i], []parquet.RowGroup{rg}, column, readSize, rowNums[i])
 		startRowGroupNum += rg.NumRows()
 	}
 	ctx, cancel := context.WithCancel(ctx)
