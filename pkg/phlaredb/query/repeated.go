@@ -388,16 +388,16 @@ func NewParallelRepeatedPageIterator[T any](
 	var rowSlice []T
 	for _, row := range rows {
 		row := row
-		if rowNum(row) <= rowNums[i] {
+		if i == len(rows) || rowNum(row) < rowNums[i+1] {
 			rowSlice = append(rowSlice, row)
 			continue
 		}
 		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
-		rowSlice = make([]T, 0, 0)
+		rowSlice = nil
 		i++
 		rowSlice = append(rowSlice, row)
 	}
-	if i < len(rowsIts) {
+	if len(rowSlice) > 0 {
 		rowsIts[i] = iter.NewSliceIterator[T](rowSlice)
 	}
 	for i := range rowsIts {
