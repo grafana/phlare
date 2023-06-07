@@ -14,7 +14,7 @@ to the Grafana Phlare database.
 
 To be able to pull profiles from applications, your applications needs to expose [pprof endpoints](https://pkg.go.dev/net/http/pprof).
 
-**To configure the agent and see configuration options please see the [agent configuration documentation](https://grafana.com/docs/agent/next/flow/reference/components/pyroscope.scrape/).**
+**To configure the agent and see configuration options please see the [agent configuration documentation](/docs/agent/next/flow/reference/components/pyroscope.scrape/).**
 
 ### Prerequisites
 
