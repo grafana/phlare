@@ -387,7 +387,7 @@ func NewParallelRepeatedPageIterator[T any](
 	var rowSlice []T
 	for _, row := range rows {
 		row := row
-		if i+1 == len(rows) || rowNum(row) < rowNums[i+1] {
+		if i+1 >= len(rowNums) || rowNum(row) < rowNums[i+1] {
 			rowSlice = append(rowSlice, row)
 			continue
 		}
