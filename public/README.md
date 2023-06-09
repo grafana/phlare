@@ -10,11 +10,11 @@ yarn dev
 ## Overrides
 
 This repository currently uses [grafana/pyroscope] components, which then are overridden as necessary,
-using typescript's alias and webpack alias configuration. See `tsconfig.json` and `webpack.common.js`
+using typescript's alias and webpack alias configuration. See [tsconfig.json] and [webpack.common.js]
 for more info.
 
-[tsconfig.json](../tsconfig.json)
-[webpack.common.js](../scripts/webpack/webpack.common.js)
+[tsconfig.json]: ../tsconfig.json
+[webpack.common.js]: ../scripts/webpack/webpack.common.js
 
 ### Guidelines for imports
 
