@@ -37,9 +37,11 @@ require (
 	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b
 	github.com/parca-dev/parca v0.17.0
 	github.com/pkg/errors v0.9.1
+	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/prometheus/client_golang v1.15.1
 	github.com/prometheus/common v0.43.0
 	github.com/prometheus/prometheus v1.99.0
+	github.com/purehyperbole/rad v1.3.4
 	github.com/pyroscope-io/pyroscope v0.37.3-0.20230424172735-981d3aa1203f
 	github.com/samber/lo v1.37.0
 	github.com/segmentio/parquet-go v0.0.0-20230309140036-b6d0a6236da6
@@ -95,7 +97,7 @@ require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/aws-sdk-go v1.44.245 // indirect
+	github.com/aws/aws-sdk-go v1.44.278 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.17.3 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.18.6 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.6 // indirect
@@ -121,7 +123,7 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/digitalocean/godo v1.98.0 // indirect
-	github.com/docker/distribution v2.8.1+incompatible // indirect
+	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/docker v23.0.4+incompatible // indirect
 	github.com/docker/go-connections v0.4.1-0.20210727194412-58542c764a11 // indirect
 	github.com/docker/go-units v0.5.0 // indirect

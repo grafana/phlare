@@ -37,6 +37,7 @@ import (
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	schemav2 "github.com/grafana/phlare/pkg/phlaredb/schemas/v2"
 	"github.com/grafana/phlare/pkg/slices"
 )
 
@@ -69,7 +70,7 @@ func (t idConversionTable) rewriteUint64(idx *uint64) {
 }
 
 type Models interface {
-	*schemav1.Profile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
+	*schemav1.Profile | *schemav1.Stacktrace | *schemav2.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
 }
 
 func emptyRewriter() *rewriter {
@@ -139,7 +140,7 @@ type Head struct {
 	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
 	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
 	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
-	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
+	stacktraces     *stacktraceStore
 	profiles        *profileStore
 	totalSamples    *atomic.Uint64
 	tables          []Table
@@ -190,13 +191,14 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 
 	// create profile store
 	h.profiles = newProfileStore(phlarectx)
+	h.stacktraces = newStacktracesStore(16)
 
 	h.tables = []Table{
 		&h.strings,
 		&h.mappings,
 		&h.functions,
 		&h.locations,
-		&h.stacktraces,
+		h.stacktraces,
 		h.profiles,
 	}
 	for _, t := range h.tables {
@@ -268,7 +270,7 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample, locations []*profilev1.Location) ([][]*schemav1.Sample, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -276,7 +278,7 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 	// populate output
 	var (
 		out         = make([][]*schemav1.Sample, len(in[0].Value))
-		stacktraces = make([]*schemav1.Stacktrace, len(in))
+		stacktraces = make([]*Stacktrace, len(in))
 	)
 	for idxType := range out {
 		out[idxType] = make([]*schemav1.Sample, len(in))
@@ -293,7 +295,8 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 		}
 
 		// build full stack traces
-		stacktraces[idxSample] = &schemav1.Stacktrace{
+		stacktraces[idxSample] = &Stacktrace{
+			MappingID: uint64(1234), // TODO: Figure out the mapping id with most locations in this stacktrace
 			// no copySlice necessary at this point,stacktracesHelper.clone
 			// will copy it, if it is required to be retained.
 			LocationIDs: in[idxSample].LocationId,
@@ -345,7 +348,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		return err
 	}
 
-	samplesPerType, err := h.convertSamples(ctx, rewrites, p.Sample)
+	samplesPerType, err := h.convertSamples(ctx, rewrites, p.Sample, p.Location)
 	if err != nil {
 		return err
 	}
@@ -587,12 +590,12 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktr
 	names := []string{}
 	functions := map[int64]int{}
 
-	h.stacktraces.lock.RLock()
+	// TODO	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
 	h.strings.lock.RLock()
 	defer func() {
-		h.stacktraces.lock.RUnlock()
+		// TODO:	h.stacktraces.lock.RUnlock()
 		h.locations.lock.RUnlock()
 		h.functions.lock.RUnlock()
 		h.strings.lock.RUnlock()
@@ -600,7 +603,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktr
 
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
 	for stacktraceID := range stacktraceSamples {
-		locs := h.stacktraces.slice[stacktraceID].LocationIDs
+		locs := h.stacktraces.getLocationIDs(uint64(stacktraceID))
 		fnIds := make([]int32, 0, 2*len(locs))
 		for _, loc := range locs {
 			for _, line := range h.locations.slice[loc].Line {
@@ -632,12 +635,10 @@ func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSample
 	functions := map[uint64]*profile.Function{}
 	mappings := map[uint64]*profile.Mapping{}
 
-	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
 	h.strings.lock.RLock()
 	defer func() {
-		h.stacktraces.lock.RUnlock()
 		h.locations.lock.RUnlock()
 		h.functions.lock.RUnlock()
 		h.strings.lock.RUnlock()
@@ -645,7 +646,7 @@ func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSample
 
 	// now add locationIDs and stacktraces
 	for stacktraceID := range stacktraceSamples {
-		locationIds := h.stacktraces.slice[stacktraceID].LocationIDs
+		locationIds := h.stacktraces.getLocationIDs(uint64(stacktraceID))
 		stacktraceLocations := make([]*profile.Location, len(locationIds))
 
 		for i, locId := range locationIds {

@@ -219,7 +219,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 
 	stacktraceSamples := stacktraceSampleMap{}
 
-	q.head.stacktraces.lock.RLock()
+	//	q.head.stacktraces.lock.RLock()
 	for rows.Next() {
 		p, ok := rows.At().(ProfileWithLabels)
 		if !ok {
@@ -241,7 +241,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	q.head.stacktraces.lock.RUnlock()
+	//	q.head.stacktraces.lock.RUnlock()
 
 	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
