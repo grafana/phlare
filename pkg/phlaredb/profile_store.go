@@ -142,6 +142,9 @@ func (s *profileStore) RowGroups() (rowGroups []parquet.RowGroup) {
 }
 
 func (s *profileStore) sortProfile(slice []*schemav1.Profile) {
+	s.index.mutex.RLock()
+	defer s.index.mutex.RUnlock()
+
 	sort.Slice(slice, func(i, j int) bool {
 		// first compare the labels, if they don't match return
 		var (
