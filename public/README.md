@@ -4,6 +4,7 @@
 
 ```bash
 yarn install
+# Make sure you have the backend running.
 yarn dev
 ```
 
