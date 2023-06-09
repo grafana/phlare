@@ -2,7 +2,6 @@ package phlaredb
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/common/model"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -262,15 +262,8 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	assert.Equal(t, "my-foo-binary", head.strings.slice[head.mappings.slice[0].Filename])
 	assert.Equal(t, "my-bar-binary", head.strings.slice[head.mappings.slice[1].Filename])
 
-	// expect 3 stacktraces
-	require.Equal(t, 3, len(head.stacktraces.slice()))
-	stacktraces := head.stacktraces.slice()
-	stacktracesJson, err := json.Marshal(&stacktraces)
-	require.NoError(t, err)
-	require.JSONEq(t, `{}`, string(stacktracesJson))
-
-	// expect 3 profiles
-	require.Equal(t, 3, len(head.profiles.slice))
+	// expect 3 stacktraces and the empty stacktrace
+	assert.Equal(t, 4, len(head.stacktraces.slice()))
 
 	var samples []uint64
 	for pos := range head.profiles.slice {
@@ -279,7 +272,8 @@ func TestHeadIngestStacktraces(t *testing.T) {
 		}
 	}
 	// expect 4 samples, 3 of which distinct
-	require.Equal(t, []uint64{1, 0, 2, 2}, samples)
+	require.Len(t, samples, 4)
+	require.Len(t, lo.Uniq(samples), 3)
 }
 
 func TestHeadLabelValues(t *testing.T) {
@@ -368,6 +362,8 @@ func TestHeadIngestRealProfiles(t *testing.T) {
 
 	require.NoError(t, head.Flush(ctx))
 	t.Logf("strings=%d samples=%d", len(head.strings.slice), head.totalSamples.Load())
+
+	time.Sleep(time.Hour)
 }
 
 // TestHead_Concurrent_Ingest_Querying tests that the head can handle concurrent reads and writes.

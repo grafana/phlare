@@ -133,11 +133,11 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uin
 			break
 		}
 
-		// cap max row size by bytes
+		// cap max row group size by bytes
 		if rowsToFlush > maxRows {
 			rowsToFlush = maxRows
 		}
-		// cap max row size by buffer
+		// cap max row group size by buffer
 		if rowsToFlush > s.cfg.MaxBufferRowCount {
 			rowsToFlush = s.cfg.MaxBufferRowCount
 		}

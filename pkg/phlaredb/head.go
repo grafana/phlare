@@ -589,6 +589,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktr
 
 	names := []string{}
 	functions := map[int64]int{}
+	locs := []uint64{}
 
 	// TODO	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
@@ -603,7 +604,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktr
 
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
 	for stacktraceID := range stacktraceSamples {
-		locs := h.stacktraces.getLocationIDs(uint64(stacktraceID))
+		locs = h.stacktraces.getLocationIDs(uint64(stacktraceID), locs)
 		fnIds := make([]int32, 0, 2*len(locs))
 		for _, loc := range locs {
 			for _, line := range h.locations.slice[loc].Line {
@@ -634,6 +635,7 @@ func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSample
 	locations := map[uint64]*profile.Location{}
 	functions := map[uint64]*profile.Function{}
 	mappings := map[uint64]*profile.Mapping{}
+	locationIDs := []uint64{}
 
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
@@ -646,10 +648,10 @@ func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSample
 
 	// now add locationIDs and stacktraces
 	for stacktraceID := range stacktraceSamples {
-		locationIds := h.stacktraces.getLocationIDs(uint64(stacktraceID))
-		stacktraceLocations := make([]*profile.Location, len(locationIds))
+		locationIDs = h.stacktraces.getLocationIDs(uint64(stacktraceID), locationIDs)
+		stacktraceLocations := make([]*profile.Location, len(locationIDs))
 
-		for i, locId := range locationIds {
+		for i, locId := range locationIDs {
 			loc, ok := locations[locId]
 			if !ok {
 				locFound := h.locations.slice[locId]

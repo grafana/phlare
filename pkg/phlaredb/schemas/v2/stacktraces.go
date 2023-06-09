@@ -7,18 +7,15 @@ import (
 )
 
 var stacktracesSchema = parquet.NewSchema("Stacktrace", phlareparquet.Group{
-	phlareparquet.NewGroupField("Parent", parquet.Encoded(parquet.Uint(64), &parquet.DeltaBinaryPacked)),
+	phlareparquet.NewGroupField("ID", parquet.Encoded(parquet.Uint(64), &parquet.DeltaBinaryPacked)),
+	phlareparquet.NewGroupField("ParentID", parquet.Encoded(parquet.Uint(64), &parquet.DeltaBinaryPacked)),
 	phlareparquet.NewGroupField("LocationID", parquet.Encoded(parquet.Uint(64), &parquet.DeltaBinaryPacked)),
 })
 
 type Stacktrace struct {
-	Parent     uint64 `parquet:",delta"`
+	ID         uint64 `parquet:",delta"`
+	ParentID   uint64 `parquet:",delta"`
 	LocationID uint64 `parquet:",delta"`
-}
-
-type StoredStacktrace struct {
-	ID          uint64   `parquet:",delta"`
-	LocationIDs []uint64 `parquet:",list"`
 }
 
 type StacktracePersister struct{}
@@ -34,16 +31,21 @@ func (*StacktracePersister) Schema() *parquet.Schema {
 func (*StacktracePersister) SortingColumns() parquet.SortingOption {
 	return parquet.SortingColumns(
 		parquet.Ascending("ID"),
-		parquet.Ascending("LocationIDs", "list", "element"),
 	)
 }
 
 func (*StacktracePersister) Deconstruct(row parquet.Row, id uint64, s *Stacktrace) parquet.Row {
-	panic("TODO")
-	return row
+	return stacktracesSchema.Deconstruct(row, s)
 }
 
 func (*StacktracePersister) Reconstruct(row parquet.Row) (id uint64, s *Stacktrace, err error) {
+	var stored Stacktrace
+	if err := stacktracesSchema.Reconstruct(&stored, row); err != nil {
+		return 0, nil, err
+	}
+
+	return s.ID, &stored, nil
+
 	panic("TODO")
 	return 0, nil, nil
 }
