@@ -92,7 +92,7 @@ To configure nodejs integration to send data to Phlare, replace the <URL> placeh
 
 If you need to send data to grafana.com, you’ll have to configure HTTP Basic authentication. Replace <User> with your grafana.com stack user and <Password> with your grafana.com API key.
 
-If your Phlare server has multi-tenancy enabled, you’ll need to configure a tenant ID. Replace <TenantID> with your Phlare tenant ID.
+If your Phlare server has multi-tenancy enabled, you’ll need to configure a tenant ID. Replace `tenantID` with your Phlare tenant ID.
 
 ## Troubleshooting
 
