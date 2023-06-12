@@ -53,16 +53,26 @@ type profileStore struct {
 	rowsFlushed uint64
 	rowGroups   []*rowGroupOnDisk
 	index       *profilesIndex
+
+	flushing       *atomic.Bool
+	flushQueue     chan int // channel to signal that a flush is needed for slice[:n]
+	closeOnce      sync.Once
+	flushWg        sync.WaitGroup
+	flushBuffer    []*schemav1.Profile
+	flushBufferLbs []phlaremodel.Labels
 }
 
 func newProfileStore(phlarectx context.Context) *profileStore {
 	s := &profileStore{
-		logger:    phlarecontext.Logger(phlarectx),
-		metrics:   contextHeadMetrics(phlarectx),
-		persister: &schemav1.ProfilePersister{},
-		helper:    &profilesHelper{},
+		logger:     phlarecontext.Logger(phlarectx),
+		metrics:    contextHeadMetrics(phlarectx),
+		persister:  &schemav1.ProfilePersister{},
+		helper:     &profilesHelper{},
+		flushing:   atomic.NewBool(false),
+		flushQueue: make(chan int),
 	}
-
+	s.flushWg.Add(1)
+	go s.cutRowGroupLoop()
 	// Initialize writer on /dev/null
 	// TODO: Reuse parquet.Writer beyond life time of the head.
 	s.writer = parquet.NewGenericWriter[*schemav1.Profile](io.Discard, s.persister.Schema(),
@@ -91,6 +101,10 @@ func (s *profileStore) Init(path string, cfg *ParquetConfig, metrics *headMetric
 	if err := s.Close(); err != nil {
 		return err
 	}
+	s.flushQueue = make(chan int)
+	s.closeOnce = sync.Once{}
+	s.flushWg.Add(1)
+	go s.cutRowGroupLoop()
 
 	// create index
 	s.index, err = newProfileIndex(32, s.metrics)
@@ -110,6 +124,13 @@ func (s *profileStore) Init(path string, cfg *ParquetConfig, metrics *headMetric
 }
 
 func (s *profileStore) Close() error {
+	if s.flushQueue != nil {
+		s.closeOnce.Do(func() {
+			close(s.flushQueue)
+		})
+
+		s.flushWg.Wait()
+	}
 	return nil
 }
 
@@ -121,34 +142,14 @@ func (s *profileStore) RowGroups() (rowGroups []parquet.RowGroup) {
 	return rowGroups
 }
 
-func (s *profileStore) profileSort(i, j int) bool {
-	// first compare the labels, if they don't match return
-	var (
-		pI   = s.slice[i]
-		pJ   = s.slice[j]
-		lbsI = s.index.profilesPerFP[pI.SeriesFingerprint].lbs
-		lbsJ = s.index.profilesPerFP[pJ.SeriesFingerprint].lbs
-	)
-	if cmp := phlaremodel.CompareLabelPairs(lbsI, lbsJ); cmp != 0 {
-		return cmp < 0
-	}
-
-	// then compare timenanos, if they don't match return
-	if pI.TimeNanos < pJ.TimeNanos {
-		return true
-	} else if pI.TimeNanos > pJ.TimeNanos {
-		return false
-	}
-
-	// finally use ID as tie breaker
-	return bytes.Compare(pI.ID[:], pJ.ID[:]) < 0
-}
-
 // Flush writes row groups and the index to files on disk.
 // The call is thread-safe for reading but adding new profiles
 // should not be allowed during and after the call.
 func (s *profileStore) Flush(ctx context.Context) (numRows uint64, numRowGroups uint64, err error) {
-	if err = s.cutRowGroup(); err != nil {
+	if err := s.Close(); err != nil {
+		return 0, 0, err
+	}
+	if err = s.cutRowGroup(len(s.slice)); err != nil {
 		return 0, 0, err
 	}
 
@@ -216,7 +217,7 @@ func (s *profileStore) prepareFile(path string) (f *os.File, err error) {
 // See index.cutRowGroup: we could find a way to not flush all the in-memory
 // profiles, including ones added since the start of the call, but only those
 // that were added before certain point (this call). The same for s.slice.
-func (s *profileStore) cutRowGroup() (err error) {
+func (s *profileStore) cutRowGroup(count int) (err error) {
 	// if cutRowGroup fails record it as failed segment
 	defer func() {
 		if err != nil {
@@ -224,9 +225,8 @@ func (s *profileStore) cutRowGroup() (err error) {
 		}
 	}()
 
-	// do nothing with empty buffer
-	bufferRowNums := len(s.slice)
-	if bufferRowNums == 0 {
+	size := s.loadProfilesToFlush(count)
+	if len(s.flushBuffer) == 0 {
 		return nil
 	}
 
@@ -240,11 +240,7 @@ func (s *profileStore) cutRowGroup() (err error) {
 		return err
 	}
 
-	// order profiles properly
-	// The slice is never accessed at reads, therefore we can sort it in-place.
-	sort.Slice(s.slice, s.profileSort)
-
-	n, err := s.writer.Write(s.slice)
+	n, err := s.writer.Write(s.flushBuffer)
 	if err != nil {
 		return errors.Wrap(err, "write row group segments to disk")
 	}
@@ -277,23 +273,88 @@ func (s *profileStore) cutRowGroup() (err error) {
 	s.rowsFlushed += uint64(n)
 	s.rowGroups = append(s.rowGroups, rowGroup)
 	// Cutting the index is relatively quick op (no I/O).
-	err = s.index.cutRowGroup(s.slice)
-	// After the lock is released, rows/profiles should be read from the disk.
-	s.rowsLock.Unlock()
-	for i := range s.slice {
+	err = s.index.cutRowGroup(s.flushBuffer)
+
+	s.profilesLock.Lock()
+	defer s.profilesLock.Unlock()
+	for i := range s.slice[:count] {
 		// don't retain profiles and samples in memory as re-slice.
 		s.slice[i] = nil
 	}
 	// reset slice and metrics
-	s.slice = s.slice[:0]
-	s.size.Store(0)
+	s.slice = s.slice[count:]
+	currentSize := s.size.Sub(size)
 	if err != nil {
 		return err
 	}
 
 	level.Debug(s.logger).Log("msg", "cut row group segment", "path", path, "numProfiles", n)
-	s.metrics.sizeBytes.WithLabelValues(s.Name()).Set(0)
+	s.metrics.sizeBytes.WithLabelValues(s.Name()).Set(float64(currentSize))
+	// After the lock is released, rows/profiles should be read from the disk.
+	s.rowsLock.Unlock()
 	return nil
+}
+
+type byLabels struct {
+	p   []*schemav1.Profile
+	lbs []phlaremodel.Labels
+}
+
+func (b byLabels) Len() int { return len(b.p) }
+func (b byLabels) Swap(i, j int) {
+	b.p[i], b.p[j] = b.p[j], b.p[i]
+	b.lbs[i], b.lbs[j] = b.lbs[j], b.lbs[i]
+}
+
+func (by byLabels) Less(i, j int) bool {
+	// first compare the labels, if they don't match return
+	var (
+		pI   = by.p[i]
+		pJ   = by.p[j]
+		lbsI = by.lbs[i]
+		lbsJ = by.lbs[j]
+	)
+	if cmp := phlaremodel.CompareLabelPairs(lbsI, lbsJ); cmp != 0 {
+		return cmp < 0
+	}
+
+	// then compare timenanos, if they don't match return
+	if pI.TimeNanos < pJ.TimeNanos {
+		return true
+	} else if pI.TimeNanos > pJ.TimeNanos {
+		return false
+	}
+
+	// finally use ID as tie breaker
+	return bytes.Compare(pI.ID[:], pJ.ID[:]) < 0
+}
+
+// loadProfilesToFlush loads and sort profiles to flush into flushBuffer and returns the size of the profiles.
+func (s *profileStore) loadProfilesToFlush(count int) uint64 {
+	if cap(s.flushBuffer) < count {
+		s.flushBuffer = make([]*schemav1.Profile, 0, count)
+	}
+	if cap(s.flushBufferLbs) < count {
+		s.flushBufferLbs = make([]phlaremodel.Labels, 0, count)
+	}
+	s.flushBufferLbs = s.flushBufferLbs[:0]
+	s.flushBuffer = s.flushBuffer[:0]
+	s.profilesLock.Lock()
+	s.index.mutex.RLock()
+	for i := 0; i < count; i++ {
+		profile := s.slice[i]
+		s.flushBuffer = append(s.flushBuffer, profile)
+		s.flushBufferLbs = append(s.flushBufferLbs, s.index.profilesPerFP[profile.SeriesFingerprint].lbs)
+	}
+	s.profilesLock.Unlock()
+	s.index.mutex.RUnlock()
+	// order profiles properly
+	sort.Sort(byLabels{p: s.flushBuffer, lbs: s.flushBufferLbs})
+	var size uint64
+	for _, p := range s.flushBuffer {
+		size += s.helper.size(p)
+	}
+	return size
 }
 
 func (s *profileStore) writeRowGroups(path string, rowGroups []parquet.RowGroup) (n uint64, numRowGroups uint64, err error) {
@@ -340,11 +401,12 @@ func (s *profileStore) ingest(_ context.Context, profiles []*schemav1.Profile, l
 	defer s.profilesLock.Unlock()
 
 	for pos, p := range profiles {
-		// check if row group is full
-		if s.cfg.MaxBufferRowCount > 0 && len(s.slice) >= s.cfg.MaxBufferRowCount ||
-			s.cfg.MaxRowGroupBytes > 0 && s.size.Load() >= s.cfg.MaxRowGroupBytes {
-			if err := s.cutRowGroup(); err != nil {
-				return err
+		if !s.flushing.Load() {
+			// check if row group is full
+			if s.cfg.MaxBufferRowCount > 0 && len(s.slice) >= s.cfg.MaxBufferRowCount ||
+				s.cfg.MaxRowGroupBytes > 0 && s.size.Load() >= s.cfg.MaxRowGroupBytes {
+				s.flushing.Store(true)
+				s.flushQueue <- len(s.slice)
 			}
 		}
 
@@ -362,6 +424,16 @@ func (s *profileStore) ingest(_ context.Context, profiles []*schemav1.Profile, l
 	}
 
 	return nil
+}
+
+func (s *profileStore) cutRowGroupLoop() {
+	defer s.flushWg.Done()
+	for n := range s.flushQueue {
+		if err := s.cutRowGroup(n); err != nil {
+			level.Error(s.logger).Log("msg", "cutting row group", "err", err)
+		}
+		s.flushing.Store(false)
+	}
 }
 
 type rowGroupOnDisk struct {
