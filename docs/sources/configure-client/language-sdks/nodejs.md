@@ -88,7 +88,7 @@ scrape-configs:
 ```
 
 ## Sending data to Phlare with Pyroscope java integration
-To configure nodejs integration to send data to Phlare, replace the <URL> placeholder with the appropriate server URL. This could be the grafana.com Phlare URL or your own custom Phlare server URL.
+To configure NodeJS integration to send data to Phlare, replace the `serverAddress` placeholder with the appropriate server URL. This could be the Grafana Cloud Pyroscope URL or your own custom Phlare server URL.
 
 If you need to send data to Grafana Cloud, you’ll have to configure HTTP Basic authentication. Replace `basicAuthUser` with your Grafana Cloud stack user ID and `basicAuthPassword` with your Grafana Cloud API key.
 
