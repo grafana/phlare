@@ -25,15 +25,15 @@ type mappingsKey struct {
 
 func (*mappingsHelper) key(m *profilev1.Mapping) mappingsKey {
 	return mappingsKey{
-		MemoryStart:     m.MemoryStart,
-		MemoryLimit:     m.MemoryLimit,
-		FileOffset:      m.FileOffset,
-		Filename:        m.Filename,
-		BuildId:         m.BuildId,
-		HasFunctions:    m.HasFunctions,
-		HasFilenames:    m.HasFilenames,
-		HasLineNumbers:  m.HasFunctions,
-		HasInlineFrames: m.HasInlineFrames,
+		// MemoryStart:     m.MemoryStart,
+		// MemoryLimit:     m.MemoryLimit,
+		// FileOffset:      m.FileOffset,
+		Filename: m.Filename,
+		BuildId:  m.BuildId,
+		// HasFunctions:    m.HasFunctions,
+		// HasFilenames:    m.HasFilenames,
+		// HasLineNumbers:  m.HasFunctions,
+		// HasInlineFrames: m.HasInlineFrames,
 	}
 }
 
@@ -59,5 +59,6 @@ func (*mappingsHelper) size(_ *profilev1.Mapping) uint64 {
 }
 
 func (*mappingsHelper) clone(m *profilev1.Mapping) *profilev1.Mapping {
-	return m
+	// return m
+	return m.CloneVT()
 }

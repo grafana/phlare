@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/oklog/ulid"
 )
 
@@ -16,7 +17,7 @@ func ListBlock(path string, ulidMinTime time.Time) (map[ulid.ULID]*Meta, error) 
 		return nil, err
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || !govalidator.IsULID(entry.Name()) {
 			continue
 		}
 		meta, _, err := MetaFromDir(filepath.Join(path, entry.Name()))

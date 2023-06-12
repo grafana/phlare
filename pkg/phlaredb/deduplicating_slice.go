@@ -173,7 +173,9 @@ func (s *deduplicatingSlice[M, K, H, P]) ingest(_ context.Context, elems []M, re
 		rewritingMap = make(map[int64]int64)
 		missing      = int64SlicePool.Get().([]int64)
 	)
-
+	for pos := range elems {
+		elems[pos] = s.helper.clone(elems[pos])
+	}
 	// rewrite elements
 	for pos := range elems {
 		if err := s.helper.rewrite(rewriter, elems[pos]); err != nil {
@@ -206,9 +208,10 @@ func (s *deduplicatingSlice[M, K, H, P]) ingest(_ context.Context, elems []M, re
 			}
 
 			// add element to slice/map
-			s.slice = append(s.slice, s.helper.clone(elems[pos]))
+			new := elems[pos]
+			s.slice = append(s.slice, new)
 			s.lookup[k] = posSlice
-			rewritingMap[int64(s.helper.setID(uint64(pos), uint64(posSlice), elems[pos]))] = posSlice
+			rewritingMap[int64(s.helper.setID(uint64(pos), uint64(posSlice), new))] = posSlice
 			posSlice++
 
 			// increase size of stored data

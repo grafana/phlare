@@ -55,6 +55,7 @@ func (*stacktracesHelper) size(s *schemav1.Stacktrace) uint64 {
 }
 
 func (*stacktracesHelper) clone(s *schemav1.Stacktrace) *schemav1.Stacktrace {
-	s.LocationIDs = copySlice(s.LocationIDs)
-	return s
+	return &schemav1.Stacktrace{
+		LocationIDs: copySlice(s.LocationIDs),
+	}
 }

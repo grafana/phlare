@@ -1144,7 +1144,7 @@ func (r *parquetReader[M, P]) open(ctx context.Context, bucketReader phlareobj.B
 	if err != nil {
 		return errors.Wrapf(err, "create reader '%s'", filePath)
 	}
-	ra = parquetobj.NewOptimizedReader(ra)
+	ra = parquetobj.NewOptimizedReader(ra, r.size)
 	r.reader = ra
 
 	// first try to open file, this is required otherwise OpenFile panics
@@ -1239,7 +1239,7 @@ func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phl
 	if err != nil {
 		return errors.Wrapf(err, "create reader '%s'", filePath)
 	}
-	ra = parquetobj.NewOptimizedReader(ra)
+	ra = parquetobj.NewOptimizedReader(ra, r.size)
 
 	r.reader = ra
 
@@ -1290,6 +1290,10 @@ func (r *inMemoryparquetReader[M, P]) open(ctx context.Context, bucketReader phl
 
 func (r *inMemoryparquetReader[M, P]) NumRows() int64 {
 	return r.file.NumRows()
+}
+
+func (r *inMemoryparquetReader[M, P]) Rows() []M {
+	return r.cache
 }
 
 func (r *inMemoryparquetReader[M, P]) Close() error {

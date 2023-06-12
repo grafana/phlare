@@ -4,16 +4,23 @@ import (
 	phlareobjstore "github.com/grafana/phlare/pkg/objstore"
 )
 
+type ReaderAt interface {
+	phlareobjstore.ReaderAtCloser
+	Size() int64
+}
+
 type optimizedReaderAt struct {
 	phlareobjstore.ReaderAtCloser
 	// todo: cache footer section we currently don't have a way to get the footer size from meta.
 	// Not sure if we need to cache the footer size or not yet. Adding this to the footer size could help.
 	// footerSize uint32
+	size int64
 }
 
-func NewOptimizedReader(r phlareobjstore.ReaderAtCloser) phlareobjstore.ReaderAtCloser {
+func NewOptimizedReader(r phlareobjstore.ReaderAtCloser, size int64) ReaderAt {
 	return &optimizedReaderAt{
 		ReaderAtCloser: r,
+		size:           size,
 	}
 }
 
@@ -31,6 +38,10 @@ func NewOptimizedReader(r phlareobjstore.ReaderAtCloser) phlareobjstore.ReaderAt
 // func (r *optimizedReaderAt) SetOffsetIndexSection(offset, length int64) {
 // 	// todo cache offset index section
 // }
+
+func (r *optimizedReaderAt) Size() int64 {
+	return r.size
+}
 
 func (r *optimizedReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	if len(p) == 4 && off == 0 {

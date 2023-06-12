@@ -20,10 +20,10 @@ const functionSize = uint64(unsafe.Sizeof(profilev1.Function{}))
 
 func (*functionsHelper) key(f *profilev1.Function) functionsKey {
 	return functionsKey{
-		Name:       f.Name,
-		SystemName: f.SystemName,
-		Filename:   f.Filename,
-		StartLine:  f.StartLine,
+		Name: f.Name,
+		// SystemName: f.SystemName,
+		// Filename:   f.Filename,
+		// StartLine:  f.StartLine,
 	}
 }
 
@@ -49,5 +49,6 @@ func (*functionsHelper) size(_ *profilev1.Function) uint64 {
 }
 
 func (*functionsHelper) clone(f *profilev1.Function) *profilev1.Function {
-	return f
+	// return f
+	return f.CloneVT()
 }

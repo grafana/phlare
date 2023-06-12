@@ -35,15 +35,15 @@ func (*locationsHelper) key(l *profilev1.Location) locationsKey {
 			panic("unable to write hash")
 		}
 
-		binary.LittleEndian.PutUint64(b, uint64(l.Line[pos].Line))
-		if _, err := h.Write(b); err != nil {
-			panic("unable to write hash")
-		}
+		// binary.LittleEndian.PutUint64(b, uint64(l.Line[pos].Line))
+		// if _, err := h.Write(b); err != nil {
+		// 	panic("unable to write hash")
+		// }
 
 	}
 
 	return locationsKey{
-		Address:   l.Address,
+		// Address:   l.Address,
 		MappingId: l.MappingId,
 		LinesHash: h.Sum64(),
 	}
@@ -55,9 +55,9 @@ func (*locationsHelper) addToRewriter(r *rewriter, elemRewriter idConversionTabl
 
 func (*locationsHelper) rewrite(r *rewriter, l *profilev1.Location) error {
 	// when mapping id is not 0, rewrite it
-	if l.MappingId != 0 {
-		r.mappings.rewriteUint64(&l.MappingId)
-	}
+	// if l.MappingId != 0 {
+	r.mappings.rewriteUint64(&l.MappingId)
+	// }
 
 	for pos := range l.Line {
 		r.functions.rewriteUint64(&l.Line[pos].FunctionId)
@@ -76,5 +76,6 @@ func (*locationsHelper) size(l *profilev1.Location) uint64 {
 }
 
 func (*locationsHelper) clone(l *profilev1.Location) *profilev1.Location {
-	return l
+	// return l
+	return l.CloneVT()
 }
