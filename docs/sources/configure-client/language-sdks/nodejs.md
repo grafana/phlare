@@ -40,7 +40,11 @@ Pyroscope.init({
   appName: 'myNodeService',
   tags: {
     region: ENV['region']
-  }
+  },
+  // authToken: ENV['PYROSCOPE_AUTH_TOKEN'],
+  // basicAuthUser: ENV['PYROSCOPE_BASIC_AUTH_USER'],
+  // basicAuthPassword: ENV['PYROSCOPE_BASIC_AUTH_PASSWORD'],
+  // tenantID: ENV['PYROSCOPE_TENANT_ID'],
 });
 
 Pyroscope.start()
@@ -57,7 +61,7 @@ Pyroscope.init({...})
 app.use(expressMiddleware())
 ```
 
-Note: you don't need to `.start()` but you'll need to `.init()`
+Note: For __pull mode__, you don't need to `.start()` but you'll need to `.init()` 
 
 ### Scrape configuration
 
