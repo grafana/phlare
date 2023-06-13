@@ -68,7 +68,7 @@ Pyroscope.configure do |config|
 end
 ```
 
-## Sending data to Grafana Cloud or Phlare with Pyroscope Ruby integration
+## Sending data to Grafana Cloud or Phlare with Pyroscope Ruby SDK
 
 Starting with [weekly-f8](https://hub.docker.com/r/grafana/phlare/tags) you can ingest pyroscope profiles directly to phlare.
 

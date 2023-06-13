@@ -59,7 +59,7 @@ with pyroscope.tag_wrapper({ "controller": "slow_controller_i_want_to_profile" }
   slow_code()
 ```
 
-## Sending data to Grafana Cloud or Phlare with Pyroscope Python integration
+## Sending data to Grafana Cloud or Phlare with Pyroscope Python SDK
 
 Starting with [weekly-f8](https://hub.docker.com/r/grafana/phlare/tags) you can ingest pyroscope profiles directly to phlare.
 
