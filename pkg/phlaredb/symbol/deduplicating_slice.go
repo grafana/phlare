@@ -1,4 +1,4 @@
-package phlaredb
+package symbol
 
 import (
 	"context"

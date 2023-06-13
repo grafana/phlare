@@ -1,5 +1,5 @@
 // nolint unused
-package phlaredb
+package symbol
 
 import (
 	"unsafe"
