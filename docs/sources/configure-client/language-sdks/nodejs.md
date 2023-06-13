@@ -87,7 +87,7 @@ scrape-configs:
           env: dev
 ```
 
-## Sending data to Phlare with Pyroscope NodeJS integration
+## Sending data to Grafana Cloud or Phlare with Pyroscope NodeJS integration
 
 To configure NodeJS integration to send data to Phlare, replace the `serverAddress` placeholder with the appropriate server URL. This could be the Grafana Cloud Pyroscope URL or your own custom Phlare server URL.
 
