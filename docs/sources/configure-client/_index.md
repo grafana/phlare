@@ -72,7 +72,7 @@ To get started choose one of the integrations below:
    </tr>
    <tr>
       <td align="center"><a href="https://grafana.com/docs/phlare/latest/configure-client/grafana-agent/"><img src="https://github.com/grafana/phlare/assets/23323466/1d81f842-5fa0-415d-8d77-aff175a6266f" width="100px;" alt=""/><br />
-        <b>Grafana Agent (Go Pull Mode)</b></a><br />
+        <b>Grafana Agent<br />(Go Pull Mode)</b></a><br />
           <a href="https://grafana.com/docs/phlare/latest/configure-client/grafana-agent/" title="Documentation">Documentation</a><br />
           <a href="https://github.com/grafana/pyroscope/tree/main/examples/php" title="examples">Examples</a>
       </td>
