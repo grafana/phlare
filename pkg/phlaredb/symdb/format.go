@@ -133,7 +133,6 @@ func (h *TOCEntry) unmarshal(b []byte) {
 
 const (
 	chunkHeaderSize       = int(unsafe.Sizeof(ChunkHeader{}))
-	chunkHeaderAlignment  = 64
 	chunkHeadersAlignment = 32
 )
 
@@ -180,7 +179,7 @@ type ChunkHeader struct {
 	StacktraceNodes    uint32 // Number of nodes in the stacktrace tree.
 	StacktraceMaxDepth uint32
 
-	_ [chunkHeaderAlignment - (chunkHeaderSize % chunkHeaderAlignment)]byte // Padding. 64 bytes per chunk.
+	_ [28]byte // Padding. 64 bytes per chunk.
 }
 
 func (h *ChunkHeader) marshal(b []byte) {
