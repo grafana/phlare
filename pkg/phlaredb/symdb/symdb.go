@@ -5,33 +5,33 @@ import "sync"
 type SymDB struct {
 	m sync.RWMutex
 
-	partitions map[uint64]*inMemoryIndex
+	mappings map[uint64]*inMemoryMapping
 }
 
 type Stats struct {
 	MemorySize uint64
-	Partitions uint32
+	Mappings   uint32
 }
 
 func NewSymDB() *SymDB {
-	return &SymDB{partitions: make(map[uint64]*inMemoryIndex)}
+	return &SymDB{mappings: make(map[uint64]*inMemoryMapping)}
 }
 
 func (s *SymDB) Stats() Stats {
 	return Stats{}
 }
 
-func (s *SymDB) IndexWriter(partitionID uint64) IndexWriter {
-	return s.partition(partitionID)
+func (s *SymDB) MappingWriter(mappingName uint64) MappingWriter {
+	return s.mapping(mappingName)
 }
 
-func (s *SymDB) IndexReader(partitionID uint64) IndexReader {
-	return s.partition(partitionID)
+func (s *SymDB) MappingReader(mappingName uint64) MappingReader {
+	return s.mapping(mappingName)
 }
 
-func (s *SymDB) lookupPartition(partitionID uint64) (*inMemoryIndex, bool) {
+func (s *SymDB) lookupMapping(mappingName uint64) (*inMemoryMapping, bool) {
 	s.m.RLock()
-	p, ok := s.partitions[partitionID]
+	p, ok := s.mappings[mappingName]
 	if ok {
 		s.m.RUnlock()
 		return p, true
@@ -40,22 +40,22 @@ func (s *SymDB) lookupPartition(partitionID uint64) (*inMemoryIndex, bool) {
 	return nil, false
 }
 
-func (s *SymDB) partition(partitionID uint64) *inMemoryIndex {
-	p, ok := s.lookupPartition(partitionID)
+func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
+	p, ok := s.lookupMapping(mappingName)
 	if ok {
 		return p
 	}
 	s.m.Lock()
-	if p, ok = s.partitions[partitionID]; ok {
+	if p, ok = s.mappings[mappingName]; ok {
 		s.m.Unlock()
 		return p
 	}
-	p = &inMemoryIndex{
+	p = &inMemoryMapping{
 		stacktraceChunks: []*stacktraceChunk{{
 			tree: newStacktraceTree(defaultStacktraceTreeSize),
 		}},
 	}
-	s.partitions[partitionID] = p
+	s.mappings[mappingName] = p
 	s.m.Unlock()
 	return p
 }

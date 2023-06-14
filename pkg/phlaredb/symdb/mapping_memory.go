@@ -8,23 +8,25 @@ import (
 )
 
 var (
-	_ IndexReader = (*inMemoryIndex)(nil)
-	_ IndexWriter = (*inMemoryIndex)(nil)
+	_ MappingReader = (*inMemoryMapping)(nil)
+	_ MappingWriter = (*inMemoryMapping)(nil)
 
 	_ StacktraceAppender = (*stacktraceAppender)(nil)
 	_ StacktraceResolver = (*stacktraceResolverMemory)(nil)
 )
 
-type inMemoryIndex struct {
+type inMemoryMapping struct {
 	m sync.RWMutex
 
 	maxStacksPerChunk int32
 	// maxStackDepth int32
 
+	// Stack traces originating from the mapping (binary):
+	// their bottom frames (roots) refer to this mapping.
 	stacktraceChunks []*stacktraceChunk
 }
 
-func (b *inMemoryIndex) StacktraceAppender() StacktraceAppender {
+func (b *inMemoryMapping) StacktraceAppender() StacktraceAppender {
 	b.m.RLock()
 	// Assuming there is at least one chunk.
 	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
@@ -40,11 +42,11 @@ func (b *inMemoryIndex) StacktraceAppender() StacktraceAppender {
 	return &a
 }
 
-func (b *inMemoryIndex) StacktraceResolver() StacktraceResolver {
+func (b *inMemoryMapping) StacktraceResolver() StacktraceResolver {
 	return new(stacktraceResolverMemory)
 }
 
-func (b *inMemoryIndex) newStacktraceChunk(stid int32) *stacktraceChunk {
+func (b *inMemoryMapping) newStacktraceChunk(stid int32) *stacktraceChunk {
 	t := newStacktraceTree(defaultStacktraceTreeSize)
 	b.m.Lock()
 	s := &stacktraceChunk{
@@ -68,7 +70,7 @@ func (s *stacktraceChunk) LookupStacktrace(locations []int32, id int32) []int32 
 }
 
 type stacktraceAppender struct {
-	index       *inMemoryIndex
+	index       *inMemoryMapping
 	chunk       *stacktraceChunk
 	stid        int32
 	stacks      int32
@@ -111,7 +113,7 @@ func (s *stacktraceChunk) WriteTo(dst io.Writer) (int64, error) {
 }
 
 type stacktraceResolverMemory struct {
-	index       *inMemoryIndex
+	mapping     *inMemoryMapping
 	releaseOnce sync.Once
 }
 

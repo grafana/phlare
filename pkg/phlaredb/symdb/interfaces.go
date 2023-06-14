@@ -2,9 +2,13 @@ package symdb
 
 import "github.com/grafana/phlare/pkg/iter"
 
-type IndexWriter interface {
+// Mapping is a binary that is part of the program during the profile
+// collection. https://github.com/google/pprof/blob/main/proto/README.md
+// Currently, we maintain a Mapping for all the version of a binary.
+
+type MappingWriter interface {
 	// StacktraceAppender provides exclusive write access
-	// to the stack traces of the index.
+	// to the stack traces of the mapping.
 	//
 	// StacktraceAppender.Release must be called in order
 	// to dispose the object and release the lock.
@@ -12,9 +16,9 @@ type IndexWriter interface {
 	StacktraceAppender() StacktraceAppender
 }
 
-type IndexReader interface {
+type MappingReader interface {
 	// StacktraceResolver provides non-exclusive read
-	// access to the stack traces of the index.
+	// access to the stack traces of the mapping.
 	//
 	// StacktraceResolver.Release must be called in order
 	// to dispose the object and release the lock.
@@ -28,7 +32,7 @@ type StacktraceAppender interface {
 }
 
 type StacktraceResolver interface {
-	// ResolveStacktraces resolves location for each stack trace
+	// ResolveStacktraces resolves locations for each stack trace
 	// and inserts it to the StacktraceInserter provided.
 	// The iterator implementation must ensure ascending order.
 	ResolveStacktraces(dst StacktraceInserter, stacktraces iter.Iterator[int32])

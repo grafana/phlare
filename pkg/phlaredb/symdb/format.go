@@ -122,28 +122,22 @@ func (h *TOCEntry) unmarshal(b []byte) {
 // Types below define the Data section structure.
 // Currently, the data section is as follows:
 //
-//   ChunkHeaders   // Each of the chunk headers refers to a partition
-//                  // data chunk: it contains statistics on the contents
-//                  // and information needed to locate it in the block.
-//                  // ChunkHeaders is supposed to be pre-fetched when
-//                  // the file is open.
-//
-//   []ChunkData    // Chunk data is a serialized stack trace tree.
-//                  // TODO: Make it extendable.
+//   []StacaktraceChunkHeader
+//   []StacaktraceChunkData
 
 const (
-	chunkHeaderSize       = int(unsafe.Sizeof(ChunkHeader{}))
+	chunkHeaderSize       = int(unsafe.Sizeof(StacktraceChunkHeader{}))
 	chunkHeadersAlignment = 32
 )
 
-type ChunkHeaders struct {
+type StacaktraceChunkHeaders struct {
 	CRC uint32
 	_   [28]byte // Reserved. Aligned to 32.
 
-	Entries []ChunkHeader
+	Entries []StacktraceChunkHeader
 }
 
-func (h *ChunkHeaders) MarshalBinary() ([]byte, error) {
+func (h *StacaktraceChunkHeaders) MarshalBinary() ([]byte, error) {
 	b := make([]byte, len(h.Entries)*chunkHeaderSize+chunkHeadersAlignment)
 	for i := range h.Entries {
 		off := i * chunkHeaderSize
@@ -154,7 +148,7 @@ func (h *ChunkHeaders) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (h *ChunkHeaders) UnmarshalBinary(b []byte) error {
+func (h *StacaktraceChunkHeaders) UnmarshalBinary(b []byte) error {
 	if s := len(b); s < chunkHeadersAlignment || s%chunkHeaderSize > 0 {
 		return ErrInvalidSize
 	}
@@ -162,7 +156,7 @@ func (h *ChunkHeaders) UnmarshalBinary(b []byte) error {
 	if crc32.Checksum(b[chunkHeaderSize-4:], castagnoli) != h.CRC {
 		return ErrInvalidCRC
 	}
-	h.Entries = make([]ChunkHeader, (len(b)-chunkHeadersAlignment)/chunkHeaderSize)
+	h.Entries = make([]StacktraceChunkHeader, (len(b)-chunkHeadersAlignment)/chunkHeaderSize)
 	for i := range h.Entries {
 		off := i * chunkHeaderSize
 		h.Entries[i].unmarshal(b[off : off+chunkHeaderSize])
@@ -170,11 +164,11 @@ func (h *ChunkHeaders) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-type ChunkHeader struct {
-	Offset int64 // Relative to the partition offset.
+type StacktraceChunkHeader struct {
+	Offset int64 // Relative to the mapping offset.
 	Size   int64
 
-	PartitionID        uint64 // PartitionID the chunk refers to.
+	MappingName        uint64 // MappingName the chunk refers to.
 	Stacktraces        uint32 // Number of unique stack traces in the chunk.
 	StacktraceNodes    uint32 // Number of nodes in the stacktrace tree.
 	StacktraceMaxDepth uint32
@@ -182,19 +176,19 @@ type ChunkHeader struct {
 	_ [28]byte // Padding. 64 bytes per chunk.
 }
 
-func (h *ChunkHeader) marshal(b []byte) {
+func (h *StacktraceChunkHeader) marshal(b []byte) {
 	binary.LittleEndian.PutUint64(b[0:8], uint64(h.Offset))
 	binary.LittleEndian.PutUint64(b[8:16], uint64(h.Size))
-	binary.LittleEndian.PutUint64(b[16:24], h.PartitionID)
+	binary.LittleEndian.PutUint64(b[16:24], h.MappingName)
 	binary.LittleEndian.PutUint32(b[24:28], h.Stacktraces)
 	binary.LittleEndian.PutUint32(b[28:32], h.StacktraceNodes)
 	binary.LittleEndian.PutUint32(b[32:36], h.StacktraceMaxDepth)
 }
 
-func (h *ChunkHeader) unmarshal(b []byte) {
+func (h *StacktraceChunkHeader) unmarshal(b []byte) {
 	h.Offset = int64(binary.LittleEndian.Uint64(b[0:8]))
 	h.Size = int64(binary.LittleEndian.Uint64(b[8:16]))
-	h.PartitionID = binary.LittleEndian.Uint64(b[16:24])
+	h.MappingName = binary.LittleEndian.Uint64(b[16:24])
 	h.Stacktraces = binary.LittleEndian.Uint32(b[24:28])
 	h.StacktraceNodes = binary.LittleEndian.Uint32(b[28:32])
 	h.StacktraceMaxDepth = binary.LittleEndian.Uint32(b[32:36])

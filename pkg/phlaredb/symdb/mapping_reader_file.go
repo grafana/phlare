@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	_ IndexReader        = (*indexFileReader)(nil)
+	_ MappingReader      = (*mappingFileReader)(nil)
 	_ StacktraceResolver = (*stacktraceResolverFile)(nil)
 )
 
@@ -26,13 +26,13 @@ func OpenFile(f File) (*Reader, error) {
 	return new(Reader), nil
 }
 
-func (r *Reader) IndexReader(partitionID uint64) IndexReader {
-	return new(indexFileReader)
+func (r *Reader) MappingReader(mappingName uint64) MappingReader {
+	return new(mappingFileReader)
 }
 
-type indexFileReader struct{}
+type mappingFileReader struct{}
 
-func (r *indexFileReader) StacktraceResolver() StacktraceResolver {
+func (r *mappingFileReader) StacktraceResolver() StacktraceResolver {
 	return new(stacktraceResolverFile)
 }
 
