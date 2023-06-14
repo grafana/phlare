@@ -110,13 +110,11 @@ func (toc *TOC) UnmarshalBinary(b []byte) error {
 func (h *TOCEntry) marshal(b []byte) {
 	binary.LittleEndian.PutUint64(b[0:8], uint64(h.Size))
 	binary.LittleEndian.PutUint64(b[8:16], uint64(h.Offset))
-	return
 }
 
 func (h *TOCEntry) unmarshal(b []byte) {
 	h.Size = int64(binary.LittleEndian.Uint64(b[0:8]))
 	h.Offset = int64(binary.LittleEndian.Uint64(b[8:16]))
-	return
 }
 
 // Types below define the Data section structure.

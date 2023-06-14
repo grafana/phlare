@@ -3,9 +3,14 @@ package symdb
 import "sync"
 
 type SymDB struct {
-	m sync.RWMutex
+	config Config
 
+	m        sync.RWMutex
 	mappings map[uint64]*inMemoryMapping
+}
+
+type Config struct {
+	MaxStacksPerChunk int32
 }
 
 type Stats struct {
@@ -51,6 +56,8 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 		return p
 	}
 	p = &inMemoryMapping{
+		maxStacksPerChunk:  s.config.MaxStacksPerChunk,
+		stacktraceHashToID: make(map[uint64]int32, defaultStacktraceTreeSize/2),
 		stacktraceChunks: []*stacktraceChunk{{
 			tree: newStacktraceTree(defaultStacktraceTreeSize),
 		}},

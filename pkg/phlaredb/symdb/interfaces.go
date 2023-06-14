@@ -1,6 +1,9 @@
 package symdb
 
-import "github.com/grafana/phlare/pkg/iter"
+import (
+	"github.com/grafana/phlare/pkg/iter"
+	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+)
 
 // Mapping is a binary that is part of the program during the profile
 // collection. https://github.com/google/pprof/blob/main/proto/README.md
@@ -27,7 +30,10 @@ type MappingReader interface {
 }
 
 type StacktraceAppender interface {
-	AppendStacktrace(locations []int32) int32
+	// AppendStacktrace appends the stack traces into the mapping,
+	// and writes the allocated identifiers into dst. len(dst) must be >= len(s),
+	// The leaf is at locations[0].
+	AppendStacktrace(dst []int32, s []*schemav1.Stacktrace)
 	Release()
 }
 
@@ -40,7 +46,8 @@ type StacktraceResolver interface {
 }
 
 // StacktraceInserter accepts resolved locations for a given stack trace.
-// The top stack trace frame is at locations[0].
+// The leaf is at locations[0].
+//
 // Locations slice must not be retained by implementation.
 type StacktraceInserter interface {
 	InsertStacktrace(stacktraceID int32, locations []int32)

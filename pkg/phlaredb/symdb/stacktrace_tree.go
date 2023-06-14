@@ -25,33 +25,36 @@ type node struct {
 
 func newStacktraceTree(size int) *stacktraceTree {
 	t := stacktraceTree{nodes: make([]node, 0, size)}
-	t.newNode(-1, 0)
+	t.newNode(sentinel, 0)
 	return &t
 }
+
+const sentinel = -1
 
 func (t *stacktraceTree) newNode(parent int32, ref int32) node {
 	n := node{
 		ref: ref,
 		i:   int32(len(t.nodes)),
 		p:   parent,
-		fc:  -1,
-		ns:  -1,
+		fc:  sentinel,
+		ns:  sentinel,
 	}
 	t.nodes = append(t.nodes, n)
 	return n
 }
 
-func (t *stacktraceTree) insert(refs []int32) (id int32, ok bool) {
+func (t *stacktraceTree) insert(refs []uint64) (id int32) {
 	var (
 		i int32
-		j int
 		n node
 	)
 
-	// TODO(kolesnikovae): Optimize – avoid copying of nodes.
-	for j < len(refs) {
-		r := refs[j]
-		if i < 0 {
+	// TODO(kolesnikovae):
+	//   Optimize – avoid copying of nodes.
+	//   Location ID should be int32.
+	for j := len(refs) - 1; j >= 0; {
+		r := int32(refs[j])
+		if i == sentinel {
 			x := t.newNode(n.i, r)
 			n.fc = x.i
 			t.nodes[n.i] = n
@@ -64,12 +67,12 @@ func (t *stacktraceTree) insert(refs []int32) (id int32, ok bool) {
 		case n.ref == r:
 			t.nodes[n.i] = n
 			i = n.fc
-			j++
+			j--
 			continue
-		case n.i == 0:
+		case n.p == sentinel: // case n.i == 0:
 			i = n.fc
 			continue
-		case n.ns < 0:
+		case n.ns == sentinel:
 			x := t.newNode(n.p, r)
 			n.ns = x.i
 			t.nodes[n.i] = n
@@ -78,7 +81,7 @@ func (t *stacktraceTree) insert(refs []int32) (id int32, ok bool) {
 		i = n.ns
 	}
 
-	return n.i, ok
+	return n.i
 }
 
 func (t *stacktraceTree) resolve(dst []int32, id int32) []int32 {
