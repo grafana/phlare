@@ -2,8 +2,6 @@ package symdb
 
 import (
 	"io"
-
-	"github.com/grafana/phlare/pkg/iter"
 )
 
 var (
@@ -38,7 +36,7 @@ func (r *mappingFileReader) StacktraceResolver() StacktraceResolver {
 
 type stacktraceResolverFile struct{}
 
-func (r *stacktraceResolverFile) ResolveStacktraces(StacktraceInserter, iter.Iterator[int32]) {
+func (r *stacktraceResolverFile) ResolveStacktraces(StacktraceInserter, []uint32) {
 
 }
 

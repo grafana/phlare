@@ -7,7 +7,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/grafana/phlare/pkg/iter"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
@@ -20,13 +19,13 @@ var (
 )
 
 type inMemoryMapping struct {
-	maxNodesPerChunk int32
-	// maxStackDepth int32
+	maxNodesPerChunk uint32
+	// maxStackDepth uint32
 
 	// Stack traces originating from the mapping (binary):
 	// their bottom frames (roots) refer to this mapping.
 	stacktraceMutex    sync.RWMutex
-	stacktraceHashToID map[uint64]int32
+	stacktraceHashToID map[uint64]uint32
 	stacktraceChunks   []*stacktraceChunk
 }
 
@@ -62,7 +61,7 @@ func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
 
 type stacktraceChunk struct {
 	m    sync.Mutex // It is a write-intensive lock.
-	stid int32      // Initial stack trace ID.
+	stid uint32     // Initial stack trace ID.
 	tree *stacktraceTree
 }
 
@@ -76,13 +75,13 @@ type stacktraceAppender struct {
 	releaseOnce sync.Once
 }
 
-func (a *stacktraceAppender) AppendStacktrace(dst []int32, s []*schemav1.Stacktrace) {
+func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*schemav1.Stacktrace) {
 	if len(s) == 0 {
 		return
 	}
 
 	var (
-		id     int32
+		id     uint32
 		found  bool
 		misses int32
 	)
@@ -132,7 +131,9 @@ type stacktraceResolverMemory struct {
 	releaseOnce sync.Once
 }
 
-func (r *stacktraceResolverMemory) ResolveStacktraces(StacktraceInserter, iter.Iterator[int32]) {
+func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32) {
+	// We assume stacktraces is sorted in the ascending order.
+	// First, we split it into parts corresponding to the chunks.
 
 }
 
