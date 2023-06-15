@@ -41,7 +41,9 @@ func (b *inMemoryMapping) StacktraceAppender() StacktraceAppender {
 }
 
 func (b *inMemoryMapping) StacktraceResolver() StacktraceResolver {
-	return new(stacktraceResolverMemory)
+	return &stacktraceResolverMemory{
+		mapping: b,
+	}
 }
 
 // stacktraceChunkForInsert returns a chunk for insertion:
@@ -83,7 +85,7 @@ func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*schemav1.Stackt
 	var (
 		id     uint32
 		found  bool
-		misses int32
+		misses int
 	)
 
 	a.mapping.stacktraceMutex.RLock()
@@ -131,10 +133,79 @@ type stacktraceResolverMemory struct {
 	releaseOnce sync.Once
 }
 
+const defaultStacktraceDepth = 64
+
 func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32) {
 	// We assume stacktraces is sorted in the ascending order.
-	// First, we split it into parts corresponding to the chunks.
+	// First, we split it into ranges corresponding to the chunks.
+	m := r.mapping.maxNodesPerChunk
+	for _, x := range splitStacktracesByChunkMaxNodes(stacktraces, m) {
+		// Each chunk should be resolved independently with
+		// a limit on concurrency and memory consumption.
+		c := r.mapping.stacktraceChunks[x.chunk]
+		s := make([]int32, 0, defaultStacktraceDepth)
+		// Restore the original stacktrace ID.
+		off := x.chunk * m
+		for _, sid := range x.ids {
+			s = c.tree.resolve(s, sid)
+			dst.InsertStacktrace(off+sid, s)
+		}
+	}
+}
 
+type stacktraceIDRange struct {
+	chunk uint32
+	ids   []uint32
+}
+
+// splitStacktracesByChunkMaxNodes splits the range of stack trace IDs
+// by limit n into sub-ranges matching to the corresponding chunks and
+// shift the values accordingly. Note that the input s is modified in place.
+//
+// stack trace ID 0 is reserved and not expected at the input.
+// stack trace ID % max_nodes == 0 is not expected as well.
+func splitStacktracesByChunkMaxNodes(s []uint32, n uint32) []stacktraceIDRange {
+	if s[len(s)-1] < n || n == 0 {
+		// Fast path, just one chunk: the highest stack trace ID
+		// is less than the chunk size, or the size is not limited.
+		// It's expected that in most cases we'll end up here.
+		return []stacktraceIDRange{{ids: s}}
+	}
+
+	var (
+		m   = s[0] / n
+		lov = m * n   // Lowest possible value for the current chunk.
+		hiv = lov + n // Highest possible value for the current chunk.
+		loi int
+		// 16 chunks should be more than enough in most cases.
+		cs = make([]stacktraceIDRange, 0, 16)
+	)
+
+	for i, v := range s {
+		if v < hiv {
+			// The stack belongs to the current chunk.
+			s[i] -= lov
+			continue
+		}
+		m = v / n
+		lov = m * n
+		hiv = lov + n
+		s[i] -= lov
+		cs = append(cs, stacktraceIDRange{
+			chunk: m - 1,
+			ids:   s[loi:i],
+		})
+		loi = i
+	}
+
+	if t := s[loi:]; len(t) > 0 {
+		cs = append(cs, stacktraceIDRange{
+			chunk: m,
+			ids:   t,
+		})
+	}
+
+	return cs
 }
 
 func (r *stacktraceResolverMemory) Release() {
