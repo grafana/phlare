@@ -660,6 +660,7 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 		h.strings.lock.RUnlock()
 	}()
 
+	// now add locationIDs and stacktraces
 	stacktracesByMapping.ForEach(
 		func(mapping uint64, stacktraceSamples profileSampleMap) {
 			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
@@ -727,8 +728,6 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 			)
 		},
 	)
-
-	// now add locationIDs and stacktraces
 
 	result := &profile.Profile{
 		Sample:   stacktracesByMapping.StacktraceSamples(),
