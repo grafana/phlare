@@ -607,113 +607,131 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 	}()
 
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
-	for mappingId := range stacktracesByMapping {
-		stacktraces := stacktracesByMapping[mappingId]
-		for _, stacktraceID := range stacktraces {
-			locs := h.stacktraces.slice[stacktraceID].LocationIDs
-			fnIds := make([]int32, 0, 2*len(locs))
-			for _, loc := range locs {
-				for _, line := range h.locations.slice[loc].Line {
-					fnNameID := h.functions.slice[line.FunctionId].Name
-					pos, ok := functions[fnNameID]
-					if !ok {
-						functions[fnNameID] = len(names)
-						fnIds = append(fnIds, int32(len(names)))
-						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
-						continue
-					}
-					fnIds = append(fnIds, int32(pos))
-				}
-			}
-			stacktraces[stacktraceID].FunctionIds = fnIds
-		}
-	}
+	stacktracesByMapping.ForEach(
+		func(mapping uint64, stacktraceSamples stacktraceSampleMap) {
+			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
+			defer resolver.Release()
+
+			resolver.ResolveStacktraces(
+				symdb.StacktraceInserterFn(
+					func(stacktraceID int32, locs []int32) {
+						fnIds := make([]int32, 0, 2*len(locs))
+						for _, loc := range locs {
+							for _, line := range h.locations.slice[loc].Line {
+								fnNameID := h.functions.slice[line.FunctionId].Name
+								pos, ok := functions[fnNameID]
+								if !ok {
+									functions[fnNameID] = len(names)
+									fnIds = append(fnIds, int32(len(names)))
+									names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
+									continue
+								}
+								fnIds = append(fnIds, int32(pos))
+							}
+						}
+						stacktraceSamples[stacktraceID].FunctionIds = fnIds
+					},
+				),
+				stacktraceSamples.Ids(),
+			)
+		},
+	)
 
 	return &ingestv1.MergeProfilesStacktracesResult{
-		Stacktraces:   lo.Values(stacktraceSamples),
+		Stacktraces:   stacktracesByMapping.StacktraceSamples(),
 		FunctionNames: names,
 	}
 }
 
-func (h *Head) resolvePprof(ctx context.Context, stacktraceSamples profileSampleMap) *profile.Profile {
+func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSampleByMapping) *profile.Profile {
 	sp, _ := opentracing.StartSpanFromContext(ctx, "resolvePprof - Head")
 	defer sp.Finish()
 
-	locations := map[uint64]*profile.Location{}
+	locations := map[int32]*profile.Location{}
 	functions := map[uint64]*profile.Function{}
 	mappings := map[uint64]*profile.Mapping{}
 
-	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
 	h.strings.lock.RLock()
 	defer func() {
-		h.stacktraces.lock.RUnlock()
 		h.locations.lock.RUnlock()
 		h.functions.lock.RUnlock()
 		h.strings.lock.RUnlock()
 	}()
 
-	// now add locationIDs and stacktraces
-	for stacktraceID := range stacktraceSamples {
-		locationIds := h.stacktraces.slice[stacktraceID].LocationIDs
-		stacktraceLocations := make([]*profile.Location, len(locationIds))
+	stacktracesByMapping.ForEach(
+		func(mapping uint64, stacktraceSamples profileSampleMap) {
+			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
+			defer resolver.Release()
 
-		for i, locId := range locationIds {
-			loc, ok := locations[locId]
-			if !ok {
-				locFound := h.locations.slice[locId]
-				mapping, ok := mappings[locFound.MappingId]
-				if !ok {
-					mappingFound := h.mappings.slice[locFound.MappingId]
-					mapping = &profile.Mapping{
-						ID:              mappingFound.Id,
-						Start:           mappingFound.MemoryStart,
-						Limit:           mappingFound.MemoryLimit,
-						Offset:          mappingFound.FileOffset,
-						File:            h.strings.slice[mappingFound.Filename],
-						BuildID:         h.strings.slice[mappingFound.BuildId],
-						HasFunctions:    mappingFound.HasFunctions,
-						HasFilenames:    mappingFound.HasFilenames,
-						HasLineNumbers:  mappingFound.HasLineNumbers,
-						HasInlineFrames: mappingFound.HasInlineFrames,
-					}
-					mappings[locFound.MappingId] = mapping
-				}
-				loc = &profile.Location{
-					ID:       locFound.Id,
-					Address:  locFound.Address,
-					IsFolded: locFound.IsFolded,
-					Mapping:  mapping,
-					Line:     make([]profile.Line, len(locFound.Line)),
-				}
-				for i, line := range locFound.Line {
-					fn, ok := functions[line.FunctionId]
-					if !ok {
-						fnFound := h.functions.slice[line.FunctionId]
-						fn = &profile.Function{
-							ID:         fnFound.Id,
-							Name:       h.strings.slice[fnFound.Name],
-							SystemName: h.strings.slice[fnFound.SystemName],
-							Filename:   h.strings.slice[fnFound.Filename],
-							StartLine:  fnFound.StartLine,
+			resolver.ResolveStacktraces(
+				symdb.StacktraceInserterFn(
+					func(stacktraceID int32, locationIds []int32) {
+						stacktraceLocations := make([]*profile.Location, len(locationIds))
+
+						for i, locId := range locationIds {
+							loc, ok := locations[locId]
+							if !ok {
+								locFound := h.locations.slice[locId]
+								mapping, ok := mappings[locFound.MappingId]
+								if !ok {
+									mappingFound := h.mappings.slice[locFound.MappingId]
+									mapping = &profile.Mapping{
+										ID:              mappingFound.Id,
+										Start:           mappingFound.MemoryStart,
+										Limit:           mappingFound.MemoryLimit,
+										Offset:          mappingFound.FileOffset,
+										File:            h.strings.slice[mappingFound.Filename],
+										BuildID:         h.strings.slice[mappingFound.BuildId],
+										HasFunctions:    mappingFound.HasFunctions,
+										HasFilenames:    mappingFound.HasFilenames,
+										HasLineNumbers:  mappingFound.HasLineNumbers,
+										HasInlineFrames: mappingFound.HasInlineFrames,
+									}
+									mappings[locFound.MappingId] = mapping
+								}
+								loc = &profile.Location{
+									ID:       locFound.Id,
+									Address:  locFound.Address,
+									IsFolded: locFound.IsFolded,
+									Mapping:  mapping,
+									Line:     make([]profile.Line, len(locFound.Line)),
+								}
+								for i, line := range locFound.Line {
+									fn, ok := functions[line.FunctionId]
+									if !ok {
+										fnFound := h.functions.slice[line.FunctionId]
+										fn = &profile.Function{
+											ID:         fnFound.Id,
+											Name:       h.strings.slice[fnFound.Name],
+											SystemName: h.strings.slice[fnFound.SystemName],
+											Filename:   h.strings.slice[fnFound.Filename],
+											StartLine:  fnFound.StartLine,
+										}
+										functions[line.FunctionId] = fn
+									}
+									loc.Line[i] = profile.Line{
+										Line:     line.Line,
+										Function: fn,
+									}
+								}
+								locations[locId] = loc
+							}
+							stacktraceLocations[i] = loc
 						}
-						functions[line.FunctionId] = fn
-					}
-					loc.Line[i] = profile.Line{
-						Line:     line.Line,
-						Function: fn,
-					}
-				}
-				locations[locId] = loc
-			}
-			stacktraceLocations[i] = loc
-		}
-		stacktraceSamples[stacktraceID].Location = stacktraceLocations
-	}
+						stacktraceSamples[stacktraceID].Location = stacktraceLocations
+					},
+				),
+				stacktraceSamples.Ids(),
+			)
+		},
+	)
+
+	// now add locationIDs and stacktraces
 
 	result := &profile.Profile{
-		Sample:   lo.Values(stacktraceSamples),
+		Sample:   stacktracesByMapping.StacktraceSamples(),
 		Location: lo.Values(locations),
 		Function: lo.Values(functions),
 		Mapping:  lo.Values(mappings),

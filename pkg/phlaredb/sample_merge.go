@@ -44,7 +44,7 @@ func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[
 	return b.resolvePprofSymbols(ctx, stacktraceAggrValues)
 }
 
-func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktraceAggrByID map[int64]*profile.Sample) (*profile.Profile, error) {
+func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktraceAggrByID map[int32]*profile.Sample) (*profile.Profile, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolvePprofSymbols - Block")
 	defer sp.Finish()
 
@@ -62,11 +62,11 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktrace
 
 	for stacktraces.Next() {
 		s := stacktraces.At()
-		locationsIdsByStacktraceID[s.Row] = make([]uint64, len(s.Values))
+		locationsIdsByStacktraceID[int64(s.Row)] = make([]uint64, len(s.Values))
 		for i, locationID := range s.Values {
 			locID := locationID.Uint64()
 			locationIDs[int64(locID)] = struct{}{}
-			locationsIdsByStacktraceID[s.Row][i] = locID
+			locationsIdsByStacktraceID[int64(s.Row)][i] = locID
 		}
 
 	}
@@ -188,7 +188,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktrace
 	}
 
 	for id, model := range stacktraceAggrByID {
-		locsId := locationsIdsByStacktraceID[id]
+		locsId := locationsIdsByStacktraceID[int64(id)]
 		model.Location = make([]*profile.Location, len(locsId))
 		for i, locId := range locsId {
 			model.Location[i] = locationModelsByIds[locId]
@@ -214,7 +214,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, stacktrace
 	return result, nil
 }
 
-func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrByID map[int64]*ingestv1.StacktraceSample) (*ingestv1.MergeProfilesStacktracesResult, error) {
+func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrByID map[int32]*ingestv1.StacktraceSample) (*ingestv1.MergeProfilesStacktracesResult, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolveSymbols - Block")
 	defer sp.Finish()
 	locationsByStacktraceID := map[int64][]uint64{}
@@ -233,20 +233,20 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 	for stacktraces.Next() {
 		s := stacktraces.At()
 
-		_, ok := locationsByStacktraceID[s.Row]
+		_, ok := locationsByStacktraceID[int64(s.Row)]
 		if !ok {
-			locationsByStacktraceID[s.Row] = make([]uint64, len(s.Values))
+			locationsByStacktraceID[int64(s.Row)] = make([]uint64, len(s.Values))
 			for i, locationID := range s.Values {
 				locID := locationID.Uint64()
 				locationIDs[int64(locID)] = struct{}{}
-				locationsByStacktraceID[s.Row][i] = locID
+				locationsByStacktraceID[int64(s.Row)][i] = locID
 			}
 			continue
 		}
 		for _, locationID := range s.Values {
 			locID := locationID.Uint64()
 			locationIDs[int64(locID)] = struct{}{}
-			locationsByStacktraceID[s.Row] = append(locationsByStacktraceID[s.Row], locID)
+			locationsByStacktraceID[int64(s.Row)] = append(locationsByStacktraceID[int64(s.Row)], locID)
 		}
 	}
 	if err := stacktraces.Err(); err != nil {
@@ -334,7 +334,7 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktraceAggrB
 
 	// write correct string ID into each sample
 	for stacktraceID, samples := range stacktraceAggrByID {
-		locationIDs := locationsByStacktraceID[stacktraceID]
+		locationIDs := locationsByStacktraceID[int64(stacktraceID)]
 
 		functionIDs := make([]int32, len(locationIDs))
 		for idx := range functionIDs {
@@ -365,9 +365,32 @@ type Source interface {
 	RowGroups() []parquet.RowGroup
 }
 
-type profileSampleMap map[int64]*profile.Sample
+type profileSampleByMapping map[uint64]profileSampleMap
 
-func (m profileSampleMap) add(key, value int64) {
+func (m profileSampleByMapping) add(mapping uint64, key int32, value int64) {
+	if _, ok := m[mapping]; !ok {
+		m[mapping] = make(profileSampleMap)
+	}
+	m[mapping].add(key, value)
+}
+
+func (m profileSampleByMapping) ForEach(f func(mapping uint64, samples profileSampleMap)) {
+	for mapping, samples := range m {
+		f(mapping, samples)
+	}
+}
+
+func (m profileSampleByMapping) StacktraceSamples() []*profile.Sample {
+	var result []*profile.Sample
+	for _, samples := range m {
+		result = append(result, lo.Values(samples)...)
+	}
+	return result
+}
+
+type profileSampleMap map[int32]*profile.Sample
+
+func (m profileSampleMap) add(key int32, value int64) {
 	if _, ok := m[key]; ok {
 		m[key].Value[0] += value
 		return
@@ -377,18 +400,36 @@ func (m profileSampleMap) add(key, value int64) {
 	}
 }
 
+func (m profileSampleMap) Ids() iter.Iterator[int32] {
+	return iter.NewSliceIterator(lo.Keys(m))
+}
+
 type stacktracesByMapping map[uint64]stacktraceSampleMap
 
-func (m stacktracesByMapping) add(mapping uint64, key, value int64) {
+func (m stacktracesByMapping) add(mapping uint64, key int32, value int64) {
 	if _, ok := m[mapping]; !ok {
 		m[mapping] = make(stacktraceSampleMap)
 	}
 	m[mapping].add(key, value)
 }
 
-type stacktraceSampleMap map[int64]*ingestv1.StacktraceSample
+func (m stacktracesByMapping) ForEach(f func(mapping uint64, samples stacktraceSampleMap)) {
+	for mapping, samples := range m {
+		f(mapping, samples)
+	}
+}
 
-func (m stacktraceSampleMap) add(key, value int64) {
+func (m stacktracesByMapping) StacktraceSamples() []*ingestv1.StacktraceSample {
+	var result []*ingestv1.StacktraceSample
+	for _, samples := range m {
+		result = append(result, lo.Values(samples)...)
+	}
+	return result
+}
+
+type stacktraceSampleMap map[int32]*ingestv1.StacktraceSample
+
+func (m stacktraceSampleMap) add(key int32, value int64) {
 	if _, ok := m[key]; ok {
 		m[key].Value += value
 		return
@@ -398,8 +439,12 @@ func (m stacktraceSampleMap) add(key, value int64) {
 	}
 }
 
+func (m stacktraceSampleMap) Ids() iter.Iterator[int32] {
+	return iter.NewSliceIterator(lo.Keys(m))
+}
+
 type mapAdder interface {
-	add(key, value int64)
+	add(key int32, value int64)
 }
 
 func mergeByStacktraces(ctx context.Context, profileSource Source, rows iter.Iterator[Profile], m mapAdder) error {
@@ -419,7 +464,7 @@ func mergeByStacktraces(ctx context.Context, profileSource Source, rows iter.Ite
 	for it.Next() {
 		values := it.At().Values
 		for i := 0; i < len(values[0]); i++ {
-			m.add(values[0][i].Int64(), values[1][i].Int64())
+			m.add(int32(values[0][i].Int64()), values[1][i].Int64())
 		}
 	}
 	return nil
