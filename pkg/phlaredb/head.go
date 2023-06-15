@@ -607,8 +607,8 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 	}()
 
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
-	stacktracesByMapping.ForEach(
-		func(mapping uint64, stacktraceSamples stacktraceSampleMap) {
+	_ = stacktracesByMapping.ForEach(
+		func(mapping uint64, stacktraceSamples stacktraceSampleMap) error {
 			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
 			defer resolver.Release()
 
@@ -632,8 +632,9 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 						stacktraceSamples[stacktraceID].FunctionIds = fnIds
 					},
 				),
-				stacktraceSamples.Ids(),
+				stacktraceSamples.IdsIterator(),
 			)
+			return nil
 		},
 	)
 
@@ -661,8 +662,8 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 	}()
 
 	// now add locationIDs and stacktraces
-	stacktracesByMapping.ForEach(
-		func(mapping uint64, stacktraceSamples profileSampleMap) {
+	_ = stacktracesByMapping.ForEach(
+		func(mapping uint64, stacktraceSamples profileSampleMap) error {
 			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
 			defer resolver.Release()
 
@@ -724,8 +725,9 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 						stacktraceSamples[stacktraceID].Location = stacktraceLocations
 					},
 				),
-				stacktraceSamples.Ids(),
+				stacktraceSamples.IdsIterator(),
 			)
+			return nil
 		},
 	)
 

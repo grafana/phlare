@@ -108,7 +108,7 @@ func (q *headOnDiskQuerier) MergeByStacktraces(ctx context.Context, rows iter.It
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - HeadOnDisk")
 	defer sp.Finish()
 
-	stacktraceSamples := stacktraceSampleMap{}
+	stacktraceSamples := stacktracesByMapping{}
 
 	if err := mergeByStacktraces(ctx, q.rowGroup(), rows, stacktraceSamples); err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func (q *headOnDiskQuerier) MergePprof(ctx context.Context, rows iter.Iterator[P
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByPprof - HeadOnDisk")
 	defer sp.Finish()
 
-	stacktraceSamples := profileSampleMap{}
+	stacktraceSamples := profileSampleByMapping{}
 
 	if err := mergeByStacktraces(ctx, q.rowGroup(), rows, stacktraceSamples); err != nil {
 		return nil, err
@@ -230,7 +230,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 				continue
 			}
 			// todo(christian): pass the correct mapping_name/partition here.
-			stacktraceSamples.add(1, int64(s.StacktraceID), s.Value)
+			stacktraceSamples.add(1, int32(s.StacktraceID), s.Value)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -245,7 +245,7 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 	sp, _ := opentracing.StartSpanFromContext(ctx, "MergePprof - HeadInMemory")
 	defer sp.Finish()
 
-	stacktraceSamples := profileSampleMap{}
+	stacktraceSamples := profileSampleByMapping{}
 
 	for rows.Next() {
 		p, ok := rows.At().(ProfileWithLabels)
@@ -257,10 +257,7 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 			if s.Value == 0 {
 				continue
 			}
-			if _, exists := stacktraceSamples[int64(s.StacktraceID)]; !exists {
-				stacktraceSamples[int64(s.StacktraceID)] = &profile.Sample{Value: []int64{0}}
-			}
-			stacktraceSamples[int64(s.StacktraceID)].Value[0] += s.Value
+			stacktraceSamples.add(1, int32(s.StacktraceID), s.Value)
 		}
 	}
 
