@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	"github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
 var (
@@ -19,6 +19,8 @@ var (
 )
 
 type inMemoryMapping struct {
+	name uint64
+
 	maxNodesPerChunk uint32
 	// maxStackDepth uint32
 
@@ -27,6 +29,8 @@ type inMemoryMapping struct {
 	stacktraceMutex    sync.RWMutex
 	stacktraceHashToID map[uint64]uint32
 	stacktraceChunks   []*stacktraceChunk
+	// Headers of already written stack trace chunks.
+	stacktraceChunkHeaders []StacktraceChunkHeader
 }
 
 func (b *inMemoryMapping) StacktraceAppender() StacktraceAppender {
@@ -53,8 +57,9 @@ func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
 	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
 	if n := c.tree.len(); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
 		c = &stacktraceChunk{
-			tree: newStacktraceTree(defaultStacktraceTreeSize),
-			stid: c.stid + b.maxNodesPerChunk,
+			mapping: b,
+			tree:    newStacktraceTree(defaultStacktraceTreeSize),
+			stid:    c.stid + b.maxNodesPerChunk,
 		}
 		b.stacktraceChunks = append(b.stacktraceChunks, c)
 	}
@@ -62,9 +67,10 @@ func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
 }
 
 type stacktraceChunk struct {
-	m    sync.Mutex // It is a write-intensive lock.
-	stid uint32     // Initial stack trace ID.
-	tree *stacktraceTree
+	mapping *inMemoryMapping
+	m       sync.Mutex // It is a write-intensive lock.
+	stid    uint32     // Initial stack trace ID.
+	tree    *stacktraceTree
 }
 
 func (s *stacktraceChunk) WriteTo(dst io.Writer) (int64, error) {
@@ -77,7 +83,7 @@ type stacktraceAppender struct {
 	releaseOnce sync.Once
 }
 
-func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*schemav1.Stacktrace) {
+func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*v1.Stacktrace) {
 	if len(s) == 0 {
 		return
 	}

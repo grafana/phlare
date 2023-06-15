@@ -1,15 +1,21 @@
 package symdb
 
-import "sync"
+import (
+	"io"
+	"sync"
+)
 
 type SymDB struct {
 	config Config
+	writer *Writer
 
 	m        sync.RWMutex
 	mappings map[uint64]*inMemoryMapping
 }
 
 type Config struct {
+	Dir string
+
 	MaxStacktraceTreeNodesPerChunk uint32
 }
 
@@ -18,8 +24,12 @@ type Stats struct {
 	Mappings   uint32
 }
 
-func NewSymDB() *SymDB {
-	return &SymDB{mappings: make(map[uint64]*inMemoryMapping)}
+func NewSymDB(c Config) *SymDB {
+	return &SymDB{
+		config:   c,
+		writer:   NewWriter(c.Dir),
+		mappings: make(map[uint64]*inMemoryMapping),
+	}
 }
 
 func (s *SymDB) Stats() Stats {
@@ -56,6 +66,7 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 		return p
 	}
 	p = &inMemoryMapping{
+		name:               mappingName,
 		maxNodesPerChunk:   s.config.MaxStacktraceTreeNodesPerChunk,
 		stacktraceHashToID: make(map[uint64]uint32, defaultStacktraceTreeSize/2),
 		stacktraceChunks: []*stacktraceChunk{{
@@ -65,4 +76,12 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 	s.mappings[mappingName] = p
 	s.m.Unlock()
 	return p
+}
+
+func (s *SymDB) WriteTo(dst io.Writer) (int64, error) {
+	return s.writer.WriteTo(dst)
+}
+
+func (s *SymDB) Flush() error {
+	return nil // TODO: write to the default file
 }
