@@ -14,8 +14,10 @@ type stacktraceTree struct {
 }
 
 type node struct {
+	// TODO: Get rid of the self-reference.
+	i int // Index of the node in the stacktraces.
+
 	// Auxiliary members only needed for insertion.
-	i  int32 // Index of the node in the stacktraces.	// TODO: Get rid of the self-reference.
 	fc int32 // First child index.
 	ns int32 // Next sibling index.
 
@@ -31,10 +33,12 @@ func newStacktraceTree(size int) *stacktraceTree {
 
 const sentinel = -1
 
+func (t *stacktraceTree) len() uint32 { return uint32(len(t.nodes)) }
+
 func (t *stacktraceTree) newNode(parent int32, ref int32) node {
 	n := node{
 		ref: ref,
-		i:   int32(len(t.nodes)),
+		i:   len(t.nodes),
 		p:   parent,
 		fc:  sentinel,
 		ns:  sentinel,
@@ -43,20 +47,21 @@ func (t *stacktraceTree) newNode(parent int32, ref int32) node {
 	return n
 }
 
-func (t *stacktraceTree) insert(refs []uint64) (id int32) {
+func (t *stacktraceTree) insert(refs []uint64) (id uint32) {
 	var (
 		i int32
 		n node
 	)
 
-	// TODO(kolesnikovae):
-	//   Optimize – avoid copying of nodes.
-	//   Location ID should be int32.
+	// TODO(kolesnikovae): Optimize:
+	//   Avoid copying of nodes.
+	//   Avoid type conversions.
+	//   Avoid redundant accesses to the node slice.
 	for j := len(refs) - 1; j >= 0; {
 		r := int32(refs[j])
 		if i == sentinel {
-			x := t.newNode(n.i, r)
-			n.fc = x.i
+			x := t.newNode(int32(n.i), r)
+			n.fc = int32(x.i)
 			t.nodes[n.i] = n
 			n = x
 		} else {
@@ -74,14 +79,14 @@ func (t *stacktraceTree) insert(refs []uint64) (id int32) {
 			continue
 		case n.ns == sentinel:
 			x := t.newNode(n.p, r)
-			n.ns = x.i
+			n.ns = int32(x.i)
 			t.nodes[n.i] = n
 		}
 
 		i = n.ns
 	}
 
-	return n.i
+	return uint32(n.i)
 }
 
 func (t *stacktraceTree) resolve(dst []int32, id int32) []int32 {

@@ -171,7 +171,10 @@ type StacktraceChunkHeader struct {
 	StacktraceNodes    uint32 // Number of nodes in the stacktrace tree.
 	StacktraceMaxDepth uint32
 
-	_ [28]byte // Padding. 64 bytes per chunk.
+	// Configuration at the time of chunk creation.
+	MaxNodes uint32
+
+	_ [24]byte // Padding. 64 bytes per chunk.
 }
 
 func (h *StacktraceChunkHeader) marshal(b []byte) {
@@ -190,4 +193,5 @@ func (h *StacktraceChunkHeader) unmarshal(b []byte) {
 	h.Stacktraces = binary.LittleEndian.Uint32(b[24:28])
 	h.StacktraceNodes = binary.LittleEndian.Uint32(b[28:32])
 	h.StacktraceMaxDepth = binary.LittleEndian.Uint32(b[32:36])
+	h.StacktraceMaxDepth = binary.LittleEndian.Uint32(b[36:40])
 }

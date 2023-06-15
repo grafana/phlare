@@ -1,7 +1,6 @@
 package symdb
 
 import (
-	"github.com/grafana/phlare/pkg/iter"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
@@ -33,15 +32,15 @@ type StacktraceAppender interface {
 	// AppendStacktrace appends the stack traces into the mapping,
 	// and writes the allocated identifiers into dst. len(dst) must be >= len(s),
 	// The leaf is at locations[0].
-	AppendStacktrace(dst []int32, s []*schemav1.Stacktrace)
+	AppendStacktrace(dst []uint32, s []*schemav1.Stacktrace)
 	Release()
 }
 
 type StacktraceResolver interface {
 	// ResolveStacktraces resolves locations for each stack trace
 	// and inserts it to the StacktraceInserter provided.
-	// The iterator implementation must ensure ascending order.
-	ResolveStacktraces(dst StacktraceInserter, stacktraces iter.Iterator[int32])
+	// The stacktraces must be ordered in the ascending order.
+	ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32)
 	Release()
 }
 
@@ -50,7 +49,7 @@ type StacktraceResolver interface {
 //
 // Locations slice must not be retained by implementation.
 type StacktraceInserter interface {
-	InsertStacktrace(stacktraceID int32, locations []int32)
+	InsertStacktrace(stacktraceID uint32, locations []int32)
 }
 
 type StacktraceInserterFn func(stacktraceID int32, locations []int32)

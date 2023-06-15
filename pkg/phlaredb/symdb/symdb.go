@@ -10,7 +10,7 @@ type SymDB struct {
 }
 
 type Config struct {
-	MaxStacksPerChunk int32
+	MaxStacktraceTreeNodesPerChunk uint32
 }
 
 type Stats struct {
@@ -56,8 +56,8 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 		return p
 	}
 	p = &inMemoryMapping{
-		maxStacksPerChunk:  s.config.MaxStacksPerChunk,
-		stacktraceHashToID: make(map[uint64]int32, defaultStacktraceTreeSize/2),
+		maxNodesPerChunk:   s.config.MaxStacktraceTreeNodesPerChunk,
+		stacktraceHashToID: make(map[uint64]uint32, defaultStacktraceTreeSize/2),
 		stacktraceChunks: []*stacktraceChunk{{
 			tree: newStacktraceTree(defaultStacktraceTreeSize),
 		}},
