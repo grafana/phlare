@@ -377,6 +377,15 @@ func (m profileSampleMap) add(key, value int64) {
 	}
 }
 
+type stacktracesByMapping map[uint64]stacktraceSampleMap
+
+func (m stacktracesByMapping) add(mapping uint64, key, value int64) {
+	if _, ok := m[mapping]; !ok {
+		m[mapping] = make(stacktraceSampleMap)
+	}
+	m[mapping].add(key, value)
+}
+
 type stacktraceSampleMap map[int64]*ingestv1.StacktraceSample
 
 func (m stacktraceSampleMap) add(key, value int64) {

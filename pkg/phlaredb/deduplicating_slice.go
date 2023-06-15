@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/util/zeropool"
 	"github.com/segmentio/parquet-go"
 	"go.uber.org/atomic"
 
@@ -16,17 +17,17 @@ import (
 	"github.com/grafana/phlare/pkg/util/build"
 )
 
-var int64SlicePool = &sync.Pool{
-	New: func() interface{} {
-		return make([]int64, 0)
-	},
-}
+var (
+	int64SlicePool zeropool.Pool[[]int64]
 
-var defaultParquetConfig = &ParquetConfig{
-	MaxBufferRowCount: 100_000,
-	MaxRowGroupBytes:  10 * 128 * 1024 * 1024,
-	MaxBlockBytes:     10 * 10 * 128 * 1024 * 1024,
-}
+	int32SlicePool zeropool.Pool[[]int32]
+
+	defaultParquetConfig = &ParquetConfig{
+		MaxBufferRowCount: 100_000,
+		MaxRowGroupBytes:  10 * 128 * 1024 * 1024,
+		MaxBlockBytes:     10 * 10 * 128 * 1024 * 1024,
+	}
+)
 
 type deduplicatingSlice[M Models, K comparable, H Helper[M, K], P schemav1.Persister[M]] struct {
 	slice  []M
@@ -171,7 +172,7 @@ func (s *deduplicatingSlice[M, K, H, P]) Flush(ctx context.Context) (numRows uin
 func (s *deduplicatingSlice[M, K, H, P]) ingest(_ context.Context, elems []M, rewriter *rewriter) error {
 	var (
 		rewritingMap = make(map[int64]int64)
-		missing      = int64SlicePool.Get().([]int64)
+		missing      = int64SlicePool.Get()
 	)
 
 	// rewrite elements
@@ -218,7 +219,7 @@ func (s *deduplicatingSlice[M, K, H, P]) ingest(_ context.Context, elems []M, re
 	}
 
 	// nolint staticcheck
-	int64SlicePool.Put(missing[:0])
+	int64SlicePool.Put(missing)
 
 	// add rewrite information to struct
 	s.helper.addToRewriter(rewriter, rewritingMap)

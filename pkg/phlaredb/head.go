@@ -37,6 +37,7 @@ import (
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	"github.com/grafana/phlare/pkg/phlaredb/symdb"
 	"github.com/grafana/phlare/pkg/slices"
 )
 
@@ -134,12 +135,13 @@ type Head struct {
 	metaLock sync.RWMutex
 	meta     *block.Meta
 
-	parquetConfig   *ParquetConfig
-	strings         deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
-	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
-	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
-	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
-	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
+	parquetConfig *ParquetConfig
+	strings       deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
+	mappings      deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
+	functions     deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
+	locations     deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
+	symbolDB      *symdb.SymDB
+
 	profiles        *profileStore
 	totalSamples    *atomic.Uint64
 	tables          []Table
@@ -172,6 +174,7 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 
 		parquetConfig: &parquetConfig,
 		limiter:       limiter,
+		symbolDB:      symdb.NewSymDB(),
 	}
 	h.headPath = filepath.Join(cfg.DataPath, pathHead, h.meta.ULID.String())
 	h.localPath = filepath.Join(cfg.DataPath, pathLocal, h.meta.ULID.String())
@@ -196,7 +199,6 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 		&h.mappings,
 		&h.functions,
 		&h.locations,
-		&h.stacktraces,
 		h.profiles,
 	}
 	for _, t := range h.tables {
@@ -275,9 +277,11 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 
 	// populate output
 	var (
-		out         = make([][]*schemav1.Sample, len(in[0].Value))
-		stacktraces = make([]*schemav1.Stacktrace, len(in))
+		out            = make([][]*schemav1.Sample, len(in[0].Value))
+		stacktraces    = make([]*schemav1.Stacktrace, len(in))
+		stacktracesIds = int32SlicePool.Get()
 	)
+
 	for idxType := range out {
 		out[idxType] = make([]*schemav1.Sample, len(in))
 	}
@@ -299,16 +303,22 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 			LocationIDs: in[idxSample].LocationId,
 		}
 	}
+	// todo(christian): pass the correct mapping/partition ID.
+	appender := h.symbolDB.MappingWriter(1).StacktraceAppender()
+	defer appender.Release()
 
-	// ingest stacktraces
-	if err := h.stacktraces.ingest(ctx, stacktraces, r); err != nil {
-		return nil, err
+	if cap(stacktracesIds) < len(stacktraces) {
+		stacktracesIds = make([]int32, len(stacktraces))
 	}
+	stacktracesIds = stacktracesIds[:len(stacktraces)]
+	defer int32SlicePool.Put(stacktracesIds)
+
+	appender.AppendStacktrace(stacktracesIds, stacktraces)
 
 	// reference stacktraces
 	for idxType := range out {
 		for idxSample := range out[idxType] {
-			out[idxType][idxSample].StacktraceID = uint64(r.stacktraces[int64(idxSample)])
+			out[idxType][idxSample].StacktraceID = uint64(stacktracesIds[int64(idxSample)])
 		}
 	}
 
@@ -580,42 +590,43 @@ func (h *Head) Queriers() Queriers {
 }
 
 // add the location IDs to the stacktraces
-func (h *Head) resolveStacktraces(ctx context.Context, stacktraceSamples stacktraceSampleMap) *ingestv1.MergeProfilesStacktracesResult {
+func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stacktracesByMapping) *ingestv1.MergeProfilesStacktracesResult {
 	sp, _ := opentracing.StartSpanFromContext(ctx, "resolveStacktraces - Head")
 	defer sp.Finish()
 
 	names := []string{}
 	functions := map[int64]int{}
 
-	h.stacktraces.lock.RLock()
 	h.locations.lock.RLock()
 	h.functions.lock.RLock()
 	h.strings.lock.RLock()
 	defer func() {
-		h.stacktraces.lock.RUnlock()
 		h.locations.lock.RUnlock()
 		h.functions.lock.RUnlock()
 		h.strings.lock.RUnlock()
 	}()
 
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
-	for stacktraceID := range stacktraceSamples {
-		locs := h.stacktraces.slice[stacktraceID].LocationIDs
-		fnIds := make([]int32, 0, 2*len(locs))
-		for _, loc := range locs {
-			for _, line := range h.locations.slice[loc].Line {
-				fnNameID := h.functions.slice[line.FunctionId].Name
-				pos, ok := functions[fnNameID]
-				if !ok {
-					functions[fnNameID] = len(names)
-					fnIds = append(fnIds, int32(len(names)))
-					names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
-					continue
+	for mappingId := range stacktracesByMapping {
+		stacktraces := stacktracesByMapping[mappingId]
+		for _, stacktraceID := range stacktraces {
+			locs := h.stacktraces.slice[stacktraceID].LocationIDs
+			fnIds := make([]int32, 0, 2*len(locs))
+			for _, loc := range locs {
+				for _, line := range h.locations.slice[loc].Line {
+					fnNameID := h.functions.slice[line.FunctionId].Name
+					pos, ok := functions[fnNameID]
+					if !ok {
+						functions[fnNameID] = len(names)
+						fnIds = append(fnIds, int32(len(names)))
+						names = append(names, h.strings.slice[h.functions.slice[line.FunctionId].Name])
+						continue
+					}
+					fnIds = append(fnIds, int32(pos))
 				}
-				fnIds = append(fnIds, int32(pos))
 			}
+			stacktraces[stacktraceID].FunctionIds = fnIds
 		}
-		stacktraceSamples[stacktraceID].FunctionIds = fnIds
 	}
 
 	return &ingestv1.MergeProfilesStacktracesResult{

@@ -217,9 +217,8 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 	sp, _ := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - HeadInMemory")
 	defer sp.Finish()
 
-	stacktraceSamples := stacktraceSampleMap{}
+	stacktraceSamples := stacktracesByMapping{}
 
-	q.head.stacktraces.lock.RLock()
 	for rows.Next() {
 		p, ok := rows.At().(ProfileWithLabels)
 		if !ok {
@@ -230,18 +229,13 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 			if s.Value == 0 {
 				continue
 			}
-			sample, exists := stacktraceSamples[int64(s.StacktraceID)]
-			if !exists {
-				sample = &ingestv1.StacktraceSample{}
-				stacktraceSamples[int64(s.StacktraceID)] = sample
-			}
-			sample.Value += s.Value
+			// todo(christian): pass the correct mapping_name/partition here.
+			stacktraceSamples.add(1, int64(s.StacktraceID), s.Value)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	q.head.stacktraces.lock.RUnlock()
 
 	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
