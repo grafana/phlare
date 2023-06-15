@@ -20,7 +20,7 @@ var (
 )
 
 type inMemoryMapping struct {
-	maxStacksPerChunk int32
+	maxNodesPerChunk int32
 	// maxStackDepth int32
 
 	// Stack traces originating from the mapping (binary):
@@ -36,9 +36,8 @@ func (b *inMemoryMapping) StacktraceAppender() StacktraceAppender {
 	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
 	b.stacktraceMutex.RUnlock()
 	return &stacktraceAppender{
-		maxStacks: b.maxStacksPerChunk,
-		mapping:   b,
-		chunk:     c,
+		mapping: b,
+		chunk:   c,
 	}
 }
 
@@ -46,20 +45,25 @@ func (b *inMemoryMapping) StacktraceResolver() StacktraceResolver {
 	return new(stacktraceResolverMemory)
 }
 
-func (b *inMemoryMapping) newStacktraceChunk(stid int32) *stacktraceChunk {
-	s := &stacktraceChunk{
-		tree: newStacktraceTree(defaultStacktraceTreeSize),
-		stid: stid,
+// stacktraceChunkForInsert returns a chunk for insertion:
+// if the existing one has capacity, or a new one, if the former is full.
+// Must be called with the stracktraces mutex write lock held.
+func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
+	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
+	if n := c.tree.len(); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
+		c = &stacktraceChunk{
+			tree: newStacktraceTree(defaultStacktraceTreeSize),
+			stid: c.stid + b.maxNodesPerChunk,
+		}
+		b.stacktraceChunks = append(b.stacktraceChunks, c)
 	}
-	b.stacktraceChunks = append(b.stacktraceChunks, s)
-	return s
+	return c
 }
 
 type stacktraceChunk struct {
-	m      sync.Mutex // Write-intensive lock.
-	stid   int32      // Initial stack trace ID.
-	stacks int32      // Number of stacks in the tree.
-	tree   *stacktraceTree
+	m    sync.Mutex // It is a write-intensive lock.
+	stid int32      // Initial stack trace ID.
+	tree *stacktraceTree
 }
 
 func (s *stacktraceChunk) WriteTo(dst io.Writer) (int64, error) {
@@ -69,7 +73,6 @@ func (s *stacktraceChunk) WriteTo(dst io.Writer) (int64, error) {
 type stacktraceAppender struct {
 	mapping     *inMemoryMapping
 	chunk       *stacktraceChunk
-	maxStacks   int32
 	releaseOnce sync.Once
 }
 
@@ -97,23 +100,28 @@ func (a *stacktraceAppender) AppendStacktrace(dst []int32, s []*schemav1.Stacktr
 
 	a.mapping.stacktraceMutex.Lock()
 	defer a.mapping.stacktraceMutex.Unlock()
+	m := int(a.mapping.maxNodesPerChunk)
+	t, j := a.chunk.tree, a.chunk.stid
 	for i, v := range dst {
 		if v != 0 {
 			// Already resolved. ID 0 is reserved
 			// as it is the tree root.
 			continue
 		}
-		if a.chunk.stacks == a.maxStacks {
-			a.chunk = a.mapping.newStacktraceChunk(a.chunk.stid + a.chunk.stacks)
-		}
-		// tree insertion is idempotent,
-		// we don't need to check the map.
 		x := s[i].LocationIDs
-		h := hashLocations(x)
-		id = a.chunk.tree.insert(x) + a.chunk.stid
-		dst[i] = id
+		if m > 0 && len(t.nodes)+len(x) >= m {
+			// If we're close to the max nodes limit and can
+			// potentially exceed it, we take the next chunk,
+			// even if there are some space.
+			a.chunk = a.mapping.stacktraceChunkForInsert()
+			t, j = a.chunk.tree, a.chunk.stid
+		}
+		// Tree insertion is idempotent,
+		// we don't need to check the map.
+		id = t.insert(x) + j
+		h := hashLocations(x) // TODO(kolesnikovae): Avoid rehashing.
 		a.mapping.stacktraceHashToID[h] = id
-		a.chunk.stacks++
+		dst[i] = id
 	}
 }
 

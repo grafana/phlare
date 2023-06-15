@@ -31,6 +31,8 @@ func newStacktraceTree(size int) *stacktraceTree {
 
 const sentinel = -1
 
+func (t *stacktraceTree) len() int32 { return int32(len(t.nodes)) }
+
 func (t *stacktraceTree) newNode(parent int32, ref int32) node {
 	n := node{
 		ref: ref,

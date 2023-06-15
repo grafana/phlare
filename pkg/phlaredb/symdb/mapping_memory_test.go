@@ -4,14 +4,15 @@ import (
 	"sync"
 	"testing"
 
-	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
 func Test_StacktraceAppender_shards(t *testing.T) {
 	db := NewSymDB()
-	db.config = Config{MaxStacksPerChunk: 2}
+	db.config = Config{MaxStacktraceTreeNodesPerChunk: 5}
 
 	w := db.MappingWriter(0)
 	a := w.StacktraceAppender()
@@ -24,7 +25,7 @@ func Test_StacktraceAppender_shards(t *testing.T) {
 		{LocationIDs: []uint64{4, 3, 2, 1}},
 		{LocationIDs: []uint64{3, 1}},
 	})
-	assert.Equal(t, []int32{3, 2, 6, 7}, sids)
+	assert.Equal(t, []int32{3, 2, 4, 7}, sids)
 
 	a.AppendStacktrace(sids, []*schemav1.Stacktrace{
 		{LocationIDs: []uint64{3, 2, 1}},
@@ -32,28 +33,24 @@ func Test_StacktraceAppender_shards(t *testing.T) {
 		{LocationIDs: []uint64{4, 3, 2, 1}},
 	})
 	// Same input. Note that len(sids) > len(schemav1.Stacktrace)
-	assert.Equal(t, []int32{3, 2, 6, 7}, sids)
+	assert.Equal(t, []int32{3, 2, 4, 7}, sids)
 
 	a.AppendStacktrace(sids, []*schemav1.Stacktrace{
 		{LocationIDs: []uint64{5, 2, 1}},
 	})
-	assert.Equal(t, []int32{7, 2, 6, 7}, sids)
+	assert.Equal(t, []int32{9, 2, 4, 7}, sids)
 
 	require.Len(t, db.mappings, 1)
 	m := db.mappings[0]
-	require.Len(t, m.stacktraceChunks, 3)
+	require.Len(t, m.stacktraceChunks, 2)
 
 	c1 := m.stacktraceChunks[0]
 	assert.Equal(t, int32(0), c1.stid)
-	assert.Equal(t, int32(2), c1.stacks)
+	assert.Equal(t, int32(5), c1.tree.len())
 
 	c2 := m.stacktraceChunks[1]
-	assert.Equal(t, int32(2), c2.stid)
-	assert.Equal(t, int32(2), c2.stacks)
-
-	c3 := m.stacktraceChunks[2]
-	assert.Equal(t, int32(4), c3.stid)
-	assert.Equal(t, int32(1), c3.stacks)
+	assert.Equal(t, int32(5), c2.stid)
+	assert.Equal(t, int32(5), c2.tree.len())
 }
 
 func Test_hashLocations(t *testing.T) {
