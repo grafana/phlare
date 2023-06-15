@@ -230,7 +230,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 				continue
 			}
 			// todo(christian): pass the correct mapping_name/partition here.
-			stacktraceSamples.add(1, int32(s.StacktraceID), s.Value)
+			stacktraceSamples.add(1, uint32(s.StacktraceID), s.Value)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -257,7 +257,7 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 			if s.Value == 0 {
 				continue
 			}
-			stacktraceSamples.add(1, int32(s.StacktraceID), s.Value)
+			stacktraceSamples.add(1, uint32(s.StacktraceID), s.Value)
 		}
 	}
 

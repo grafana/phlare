@@ -20,7 +20,7 @@ import (
 var (
 	int64SlicePool zeropool.Pool[[]int64]
 
-	int32SlicePool zeropool.Pool[[]int32]
+	uint32SlicePool zeropool.Pool[[]uint32]
 
 	defaultParquetConfig = &ParquetConfig{
 		MaxBufferRowCount: 100_000,

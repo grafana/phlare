@@ -279,7 +279,7 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 	var (
 		out            = make([][]*schemav1.Sample, len(in[0].Value))
 		stacktraces    = make([]*schemav1.Stacktrace, len(in))
-		stacktracesIds = int32SlicePool.Get()
+		stacktracesIds = uint32SlicePool.Get()
 	)
 
 	for idxType := range out {
@@ -308,10 +308,10 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 	defer appender.Release()
 
 	if cap(stacktracesIds) < len(stacktraces) {
-		stacktracesIds = make([]int32, len(stacktraces))
+		stacktracesIds = make([]uint32, len(stacktraces))
 	}
 	stacktracesIds = stacktracesIds[:len(stacktraces)]
-	defer int32SlicePool.Put(stacktracesIds)
+	defer uint32SlicePool.Put(stacktracesIds)
 
 	appender.AppendStacktrace(stacktracesIds, stacktraces)
 
@@ -614,7 +614,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 
 			resolver.ResolveStacktraces(
 				symdb.StacktraceInserterFn(
-					func(stacktraceID int32, locs []int32) {
+					func(stacktraceID uint32, locs []int32) {
 						fnIds := make([]int32, 0, 2*len(locs))
 						for _, loc := range locs {
 							for _, line := range h.locations.slice[loc].Line {
@@ -632,7 +632,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 						stacktraceSamples[stacktraceID].FunctionIds = fnIds
 					},
 				),
-				stacktraceSamples.IdsIterator(),
+				stacktraceSamples.Ids(),
 			)
 			return nil
 		},
@@ -669,7 +669,7 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 
 			resolver.ResolveStacktraces(
 				symdb.StacktraceInserterFn(
-					func(stacktraceID int32, locationIds []int32) {
+					func(stacktraceID uint32, locationIds []int32) {
 						stacktraceLocations := make([]*profile.Location, len(locationIds))
 
 						for i, locId := range locationIds {
@@ -725,7 +725,7 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 						stacktraceSamples[stacktraceID].Location = stacktraceLocations
 					},
 				),
-				stacktraceSamples.IdsIterator(),
+				stacktraceSamples.Ids(),
 			)
 			return nil
 		},

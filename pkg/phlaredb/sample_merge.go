@@ -62,7 +62,7 @@ func (l locationsIdsByStacktraceID) locationIds() uniqueIDs[struct{}] {
 	return l.ids
 }
 
-func (b *singleBlockQuerier) resolveLocations(ctx context.Context, mapping uint64, locs locationsIdsByStacktraceID, stacktraceIDs []int32) error {
+func (b *singleBlockQuerier) resolveLocations(ctx context.Context, mapping uint64, locs locationsIdsByStacktraceID, stacktraceIDs []uint32) error {
 	sort.Slice(stacktraceIDs, func(i, j int) bool {
 		return stacktraceIDs[i] < stacktraceIDs[j]
 	})
@@ -70,12 +70,12 @@ func (b *singleBlockQuerier) resolveLocations(ctx context.Context, mapping uint6
 	return b.resolveLocationsV1(ctx, locs, stacktraceIDs)
 }
 
-func (b *singleBlockQuerier) resolveLocationsV2(ctx context.Context, mapping uint64, locs locationsIdsByStacktraceID, stacktraceIDs []int32) error {
+func (b *singleBlockQuerier) resolveLocationsV2(ctx context.Context, mapping uint64, locs locationsIdsByStacktraceID, stacktraceIDs []uint32) error {
 	// todo v2
 	return nil
 }
 
-func (b *singleBlockQuerier) resolveLocationsV1(ctx context.Context, locs locationsIdsByStacktraceID, stacktraceIDs []int32) error {
+func (b *singleBlockQuerier) resolveLocationsV1(ctx context.Context, locs locationsIdsByStacktraceID, stacktraceIDs []uint32) error {
 	stacktraces := repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
 	defer stacktraces.Close()
 
@@ -381,7 +381,7 @@ type Source interface {
 
 type profileSampleByMapping map[uint64]profileSampleMap
 
-func (m profileSampleByMapping) add(mapping uint64, key int32, value int64) {
+func (m profileSampleByMapping) add(mapping uint64, key uint32, value int64) {
 	if _, ok := m[mapping]; !ok {
 		m[mapping] = make(profileSampleMap)
 	}
@@ -405,9 +405,9 @@ func (m profileSampleByMapping) StacktraceSamples() []*profile.Sample {
 	return result
 }
 
-type profileSampleMap map[int32]*profile.Sample
+type profileSampleMap map[uint32]*profile.Sample
 
-func (m profileSampleMap) add(key int32, value int64) {
+func (m profileSampleMap) add(key uint32, value int64) {
 	if _, ok := m[key]; ok {
 		m[key].Value[0] += value
 		return
@@ -417,17 +417,13 @@ func (m profileSampleMap) add(key int32, value int64) {
 	}
 }
 
-func (m profileSampleMap) IdsIterator() iter.Iterator[int32] {
-	return iter.NewSliceIterator(lo.Keys(m))
-}
-
-func (m profileSampleMap) Ids() []int32 {
+func (m profileSampleMap) Ids() []uint32 {
 	return lo.Keys(m)
 }
 
 type stacktracesByMapping map[uint64]stacktraceSampleMap
 
-func (m stacktracesByMapping) add(mapping uint64, key int32, value int64) {
+func (m stacktracesByMapping) add(mapping uint64, key uint32, value int64) {
 	if _, ok := m[mapping]; !ok {
 		m[mapping] = make(stacktraceSampleMap)
 	}
@@ -451,9 +447,9 @@ func (m stacktracesByMapping) StacktraceSamples() []*ingestv1.StacktraceSample {
 	return result
 }
 
-type stacktraceSampleMap map[int32]*ingestv1.StacktraceSample
+type stacktraceSampleMap map[uint32]*ingestv1.StacktraceSample
 
-func (m stacktraceSampleMap) add(key int32, value int64) {
+func (m stacktraceSampleMap) add(key uint32, value int64) {
 	if _, ok := m[key]; ok {
 		m[key].Value += value
 		return
@@ -463,16 +459,12 @@ func (m stacktraceSampleMap) add(key int32, value int64) {
 	}
 }
 
-func (m stacktraceSampleMap) Ids() []int32 {
+func (m stacktraceSampleMap) Ids() []uint32 {
 	return lo.Keys(m)
 }
 
-func (m stacktraceSampleMap) IdsIterator() iter.Iterator[int32] {
-	return iter.NewSliceIterator(lo.Keys(m))
-}
-
 type mapAdder interface {
-	add(mapping uint64, key int32, value int64)
+	add(mapping uint64, key uint32, value int64)
 }
 
 func mergeByStacktraces(ctx context.Context, profileSource Source, rows iter.Iterator[Profile], m mapAdder) error {
@@ -494,7 +486,7 @@ func mergeByStacktraces(ctx context.Context, profileSource Source, rows iter.Ite
 		for i := 0; i < len(values[0]); i++ {
 			// todo(christian): add the correct mapping/partition key from the profile
 			// Add default mapping if none found may be 0.
-			m.add(1, int32(values[0][i].Int64()), values[1][i].Int64())
+			m.add(1, uint32(values[0][i].Int64()), values[1][i].Int64())
 		}
 	}
 	return nil
