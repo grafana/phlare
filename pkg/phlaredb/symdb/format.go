@@ -197,8 +197,8 @@ type StacktraceChunkHeader struct {
 	StacktraceMaxDepth uint32 // Max stack trace depth in the tree.
 	StacktraceMaxNodes uint32 // Max number of nodes at the time of the chunk creation.
 
-	_   [20]byte // Padding. 64 bytes per chunk.
-	CRC uint32
+	_   [20]byte // Padding. 64 bytes per chunk header.
+	CRC uint32   // Checksum of the chunk data.
 }
 
 func (h *StacktraceChunkHeader) marshal(b []byte) {

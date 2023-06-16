@@ -220,13 +220,11 @@ func (r *stacktraceResolverMemory) Release() {
 
 var seed = maphash.MakeSeed()
 
-func hash(b []byte) uint64 { return maphash.Bytes(seed, b) }
-
 func hashLocations(s []uint64) uint64 {
 	var b []byte
 	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	hdr.Len = len(s) * 8
 	hdr.Cap = hdr.Len
 	hdr.Data = uintptr(unsafe.Pointer(&s[0]))
-	return hash(b)
+	return maphash.Bytes(seed, b)
 }
