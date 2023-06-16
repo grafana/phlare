@@ -145,8 +145,7 @@ func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, st
 	// We assume stacktraces is sorted in the ascending order.
 	// First, we split it into ranges corresponding to the chunks.
 	m := r.mapping.maxNodesPerChunk
-	d := splitStacktraces(stacktraces, m)
-	for _, x := range d {
+	for _, x := range splitStacktraces(stacktraces, m) {
 		// TODO(kolesnikovae):
 		// Each chunk should be resolved independently with
 		// a limit on concurrency and memory consumption.

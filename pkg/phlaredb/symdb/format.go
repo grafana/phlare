@@ -28,8 +28,7 @@ const FormatV1 = 1
 const (
 	// TOC entries are version-specific.
 	tocEntryStacktraceChunkHeaders = iota
-	tocEntryStacktraceChunkData
-	tocEntries
+	tocEntries                     = 1
 )
 
 // https://en.wikipedia.org/wiki/List_of_file_signatures

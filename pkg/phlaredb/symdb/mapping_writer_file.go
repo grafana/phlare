@@ -3,16 +3,15 @@ package symdb
 import (
 	"bufio"
 	"fmt"
-	"hash"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
 )
 
 const (
-	DefaultFileName = "symbols.symdb" // "index.symdb"
-	// TODO(kolesnikovae): Should we maybe store stacktraces file separately?
-	tmpStacktracesFileName = "stacktraces.symdb.tmp"
+	IndexFileName       = "index.symdb" // "index.symdb"
+	StacktracesFileName = "stacktraces.symdb"
 )
 
 type Writer struct {
@@ -21,9 +20,8 @@ type Writer struct {
 	header Header
 	toc    TOC
 	sch    StacktraceChunkHeaders
-	scd    *fileWriter
 
-	crc hash.Hash32
+	scd *fileWriter
 }
 
 func NewWriter(dir string) *Writer {
@@ -41,7 +39,7 @@ func NewWriter(dir string) *Writer {
 
 func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 	if w.scd == nil {
-		p := filepath.Join(w.dir, tmpStacktracesFileName)
+		p := filepath.Join(w.dir, StacktracesFileName)
 		if w.scd, err = newFileWriter(p); err != nil {
 			return err
 		}
@@ -56,11 +54,11 @@ func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 		StacktraceMaxNodes: c.mapping.maxNodesPerChunk,
 		CRC:                0, // Set later.
 	}
-	w.crc.Reset()
-	if h.Size, err = c.WriteTo(io.MultiWriter(w.crc, w.scd)); err != nil {
+	crc := crc32.New(castagnoli)
+	if h.Size, err = c.WriteTo(io.MultiWriter(crc, w.scd)); err != nil {
 		return fmt.Errorf("writing stacktrace chunk data: %w", err)
 	}
-	h.CRC = w.crc.Sum32()
+	h.CRC = crc.Sum32()
 	w.sch.Entries = append(w.sch.Entries, h)
 	return nil
 }
@@ -71,28 +69,19 @@ func (w *Writer) WriteTo(dst io.Writer) (n int64, err error) {
 	if m, err = dst.Write(header); err != nil {
 		return n + int64(m), fmt.Errorf("header write: %w", err)
 	}
-
 	// Make sure all the entries have proper offsets.
 	w.toc.Entries[tocEntryStacktraceChunkHeaders] = TOCEntry{
 		Offset: w.dataOffset(),
 		Size:   w.sch.Size(),
 	}
-	w.toc.Entries[tocEntryStacktraceChunkData] = TOCEntry{
-		Offset: w.stacktraceChunkHeaderOffset(),
-		Size:   w.scd.off,
-	}
-	w.shiftStacktraceChunkHeaderOffsets()
 	toc, _ := w.toc.MarshalBinary()
 	if m, err = dst.Write(toc); err != nil {
 		return n + int64(m), fmt.Errorf("toc write: %w", err)
 	}
-
 	sch, _ := w.sch.MarshalBinary()
 	if m, err = dst.Write(sch); err != nil {
 		return n + int64(m), fmt.Errorf("stacktrace chunk headers: %w", err)
 	}
-
-	err = w.rewriteStacktraceChunks(dst)
 	return n, err
 }
 
@@ -102,23 +91,6 @@ func (w *Writer) dataOffset() int64 {
 
 func (w *Writer) stacktraceChunkHeaderOffset() int64 {
 	return w.dataOffset() + w.scd.off
-}
-
-func (w *Writer) shiftStacktraceChunkHeaderOffsets() {
-	offset := w.stacktraceChunkHeaderOffset()
-	for i := range w.sch.Entries {
-		w.sch.Entries[i].Offset += offset
-	}
-}
-
-func (w *Writer) rewriteStacktraceChunks(dst io.Writer) (err error) {
-	if _, err = w.scd.WriteTo(dst); err != nil {
-		return fmt.Errorf("flushing stacktrace chunk data: %w", err)
-	}
-	if err = w.scd.remove(); err != nil {
-		return fmt.Errorf("removing flushing stacktrace chunk data: %w", err)
-	}
-	return nil
 }
 
 type fileWriter struct {
