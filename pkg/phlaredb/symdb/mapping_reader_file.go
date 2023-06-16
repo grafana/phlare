@@ -1,26 +1,22 @@
 package symdb
 
-import "io"
+import "github.com/grafana/phlare/pkg/objstore"
 
 var (
 	_ MappingReader      = (*mappingFileReader)(nil)
 	_ StacktraceResolver = (*stacktraceResolverFile)(nil)
 )
 
-type FileReader interface {
-	RangeReader(offset, size int64) (io.ReadCloser, error)
-}
+type Reader struct{}
 
-type Reader struct {
-	f FileReader
-
-	header Header
-	toc    TOC
-}
-
-func OpenFile(f FileReader) (*Reader, error) {
+func Open(objstore.BucketReader) (*Reader, error) {
+	// NOTE(kolesnikovae): We could accept fs.FS and implement it with
+	//  the BucketReader, but it brings no actual value other than a
+	//  cleaner signature.
 	return new(Reader), nil
 }
+
+func (r *Reader) Close() error { return nil }
 
 func (r *Reader) MappingReader(mappingName uint64) MappingReader {
 	return new(mappingFileReader)
@@ -34,10 +30,6 @@ func (r *mappingFileReader) StacktraceResolver() StacktraceResolver {
 
 type stacktraceResolverFile struct{}
 
-func (r *stacktraceResolverFile) ResolveStacktraces(StacktraceInserter, []uint32) {
+func (r *stacktraceResolverFile) ResolveStacktraces(StacktraceInserter, []uint32) {}
 
-}
-
-func (r *stacktraceResolverFile) Release() {
-
-}
+func (r *stacktraceResolverFile) Release() {}

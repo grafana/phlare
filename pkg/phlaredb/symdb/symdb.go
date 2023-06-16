@@ -1,8 +1,6 @@
 package symdb
 
 import (
-	"io"
-	"os"
 	"sync"
 )
 
@@ -23,9 +21,11 @@ type StacktracesConfig struct {
 	MaxNodesPerChunk uint32
 }
 
+const defaultDirName = "symbols"
+
 func DefaultConfig() *Config {
 	return &Config{
-		Dir: os.TempDir(),
+		Dir: defaultDirName,
 		Stacktraces: StacktracesConfig{
 			// A million of nodes ensures predictable
 			// memory consumption, although causes a
@@ -35,14 +35,9 @@ func DefaultConfig() *Config {
 	}
 }
 
-func (c *Config) WithDirectory(dir string) Config {
+func (c *Config) WithDirectory(dir string) *Config {
 	c.Dir = dir
-	return *c
-}
-
-type Stats struct {
-	MemorySize uint64
-	Mappings   uint32
+	return c
 }
 
 func NewSymDB(c *Config) *SymDB {
@@ -54,10 +49,6 @@ func NewSymDB(c *Config) *SymDB {
 		writer:   NewWriter(c.Dir),
 		mappings: make(map[uint64]*inMemoryMapping),
 	}
-}
-
-func (s *SymDB) Stats() Stats {
-	return Stats{}
 }
 
 func (s *SymDB) MappingWriter(mappingName uint64) MappingWriter {
@@ -102,10 +93,26 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 	return p
 }
 
-func (s *SymDB) WriteTo(dst io.Writer) (int64, error) {
-	return s.writer.WriteTo(dst)
+// TODO(kolesnikovae): Implement:
+
+type Stats struct {
+	MemorySize uint64
+	Mappings   uint32
 }
 
+func (s *SymDB) Stats() Stats {
+	return Stats{}
+}
+
+// TODO(kolesnikovae): Follow Table interface (but Init method).
+
+func (s *SymDB) Name() string { return s.config.Dir }
+
+func (s *SymDB) Size() uint64 { return 0 }
+
+func (s *SymDB) MemorySize() uint64 { return 0 }
+
 func (s *SymDB) Flush() error {
-	return nil // TODO: write to the default file
+	// TODO(kolesnikovae): Write all the files to the directory and dispose allocated resources.
+	return nil
 }
