@@ -79,21 +79,6 @@ func NewBlockQuerier(phlarectx context.Context, bucketReader phlareobj.Bucket) *
 	}
 }
 
-// generates meta.json by opening block
-func (b *BlockQuerier) reconstructMetaFromBlock(ctx context.Context, ulid ulid.ULID) (metas *block.Meta, err error) {
-	fakeMeta := block.NewMeta()
-	fakeMeta.ULID = ulid
-
-	q := NewSingleBlockQuerierFromMeta(b.phlarectx, b.bkt, fakeMeta)
-	defer q.Close()
-
-	meta, err := q.reconstructMeta(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return meta, nil
-}
-
 func (b *BlockQuerier) Queriers() Queriers {
 	b.queriersLock.RLock()
 	defer b.queriersLock.RUnlock()
@@ -127,19 +112,6 @@ func (b *BlockQuerier) BlockMetas(ctx context.Context) (metas []*block.Meta, _ e
 				path := filepath.Join(names[pos].String(), block.MetaFilename)
 				metaReader, err := b.bkt.Get(ctx, path)
 				if err != nil {
-					if b.bkt.IsObjNotFoundErr(err) {
-						level.Warn(b.logger).Log("msg", block.MetaFilename+" not found in block try to generate it", "block", names[pos].String())
-
-						meta, err := b.reconstructMetaFromBlock(ctx, names[pos])
-						if err != nil {
-							level.Error(b.logger).Log("msg", "error generating meta for block", "block", names[pos].String(), "err", err)
-							return nil
-						}
-
-						metas[pos] = meta
-						return nil
-					}
-
 					level.Error(b.logger).Log("msg", "error reading block meta", "block", path, "err", err)
 					return nil
 				}
@@ -394,41 +366,6 @@ func (b *singleBlockQuerier) Close() error {
 
 func (b *singleBlockQuerier) Bounds() (model.Time, model.Time) {
 	return b.meta.MinTime, b.meta.MaxTime
-}
-
-// reconstructMeta can regenerate a missing metadata file from the parquet structures
-func (b *singleBlockQuerier) reconstructMeta(ctx context.Context) (*block.Meta, error) {
-	tsBoundary, _, err := b.readTSBoundaries(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	profilesInfo := b.profiles.info()
-	indexInfo := b.index.FileInfo()
-
-	files := []block.File{
-		indexInfo,
-		profilesInfo,
-		b.stacktraces.info(),
-		b.locations.info(),
-		b.mappings.info(),
-		b.functions.info(),
-		b.strings.info(),
-	}
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].RelPath < files[j].RelPath
-	})
-
-	return &block.Meta{
-		ULID:    b.meta.ULID,
-		MinTime: tsBoundary.min,
-		MaxTime: tsBoundary.max,
-		Version: block.MetaVersion1,
-		Stats: block.BlockStats{
-			NumProfiles: profilesInfo.Parquet.NumRows,
-		},
-		Files: files,
-	}, nil
 }
 
 type mapPredicate[K constraints.Integer, V any] struct {
@@ -908,7 +845,6 @@ func retrieveStacktracePartition(buf [][]parquet.Value, pos int) uint64 {
 
 	// return 0 stacktrace partition
 	return uint64(0)
-
 }
 
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {

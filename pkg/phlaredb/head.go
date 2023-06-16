@@ -3,6 +3,7 @@ package phlaredb
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -175,7 +176,6 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 
 		parquetConfig: &parquetConfig,
 		limiter:       limiter,
-		symbolDB:      symdb.NewSymDB(),
 	}
 	h.headPath = filepath.Join(cfg.DataPath, pathHead, h.meta.ULID.String())
 	h.localPath = filepath.Join(cfg.DataPath, pathLocal, h.meta.ULID.String())
@@ -207,6 +207,10 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 			return nil, err
 		}
 	}
+	h.symbolDB = symdb.NewSymDB(
+		symdb.DefaultConfig().
+			WithDirectory(filepath.Join(h.headPath, block.SymDBFolder)),
+	)
 
 	h.delta = newDeltaProfiles()
 
@@ -224,7 +228,7 @@ func (h *Head) MemorySize() uint64 {
 	for _, t := range h.tables {
 		size += t.MemorySize()
 	}
-
+	size += h.symbolDB.MemorySize()
 	return size
 }
 
@@ -234,6 +238,7 @@ func (h *Head) Size() uint64 {
 	for _, t := range h.tables {
 		size += t.Size()
 	}
+	size += h.symbolDB.Size()
 
 	return size
 }
@@ -330,7 +335,6 @@ func StacktracePartitionFromProfile(lbls phlaremodel.Labels, p *profilev1.Profil
 }
 
 func stacktracePartitionKeyFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) string {
-
 	// take the first mapping (which is the main binary's file basename)
 	if len(p.Mapping) > 0 {
 		if filenameID := p.Mapping[0].Filename; filenameID > 0 {
@@ -963,6 +967,10 @@ func (h *Head) flush(ctx context.Context) error {
 		}
 	}
 
+	if err := h.symbolDB.Flush(); err != nil {
+		return errors.Wrap(err, "flushing symbol database")
+	}
+
 	// get stats of index
 	indexPath := filepath.Join(h.headPath, block.IndexFilename)
 	files[0].RelPath = block.IndexFilename
@@ -991,6 +999,19 @@ func (h *Head) flush(ctx context.Context) error {
 			totalSize += files[idx+1].SizeBytes
 		}
 	}
+
+	// add total size symdb
+	symbDBFiles, error := h.SymDBFiles()
+	if error != nil {
+		return error
+	}
+
+	for _, file := range symbDBFiles {
+		files = append(files, file)
+		h.metrics.flushedFileSizeBytes.WithLabelValues(file.RelPath).Observe(float64(file.SizeBytes))
+		totalSize += file.SizeBytes
+	}
+
 	h.metrics.flushedBlockSizeBytes.Observe(float64(totalSize))
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].RelPath < files[j].RelPath
@@ -1006,6 +1027,23 @@ func (h *Head) flush(ctx context.Context) error {
 	}
 	h.metrics.blockDurationSeconds.Observe(h.meta.MaxTime.Sub(h.meta.MinTime).Seconds())
 	return nil
+}
+
+// list files in symdb folder
+func (h *Head) SymDBFiles() ([]block.File, error) {
+	files, err := ioutil.ReadDir(filepath.Join(h.headPath, block.SymDBFolder))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]block.File, len(files))
+	for idx, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		result[idx].RelPath = f.Name()
+		result[idx].SizeBytes = uint64(f.Size())
+	}
+	return result, nil
 }
 
 // Move moves the head directory to local blocks. The call is not thread-safe:
