@@ -53,6 +53,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 		[]query.Iterator{
 			rowIter,
 			q.rowGroup().columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(start.UnixNano(), end.UnixNano()), "TimeNanos"),
+			q.rowGroup().columnIter(ctx, "StacktracePartition", nil, "StacktracePartition"),
 		},
 		nil,
 	)
@@ -60,7 +61,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 
 	var (
 		profiles []Profile
-		buf      = make([][]parquet.Value, 1)
+		buf      = make([][]parquet.Value, 2)
 	)
 	for pIt.Next() {
 		res := pIt.At()
@@ -75,16 +76,17 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 			panic("no profile series labels with matching fingerprint found")
 		}
 
-		buf = res.Columns(buf, "TimeNanos")
-		if len(buf) != 1 || len(buf[0]) != 1 {
+		buf = res.Columns(buf, "TimeNanos", "StacktracePartition")
+		if len(buf) < 1 || len(buf[0]) != 1 {
 			level.Error(q.head.logger).Log("msg", "unable to read timeNanos from profiles", "row", res.RowNumber[0], "rowGroup", q.rowGroupIdx)
 			continue
 		}
 		profiles = append(profiles, BlockProfile{
-			labels: lbls,
-			fp:     v.fp,
-			ts:     model.TimeFromUnixNano(buf[0][0].Int64()),
-			RowNum: res.RowNumber[0],
+			labels:              lbls,
+			fp:                  v.fp,
+			ts:                  model.TimeFromUnixNano(buf[0][0].Int64()),
+			stacktracePartition: retrieveStacktracePartition(buf, 1),
+			RowNum:              res.RowNumber[0],
 		})
 	}
 	if err := pIt.Err(); err != nil {
@@ -229,8 +231,7 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 			if s.Value == 0 {
 				continue
 			}
-			// todo(christian): pass the correct mapping_name/partition here.
-			stacktraceSamples.add(1, uint32(s.StacktraceID), s.Value)
+			stacktraceSamples.add(p.StacktracePartition(), uint32(s.StacktraceID), s.Value)
 		}
 	}
 	if err := rows.Err(); err != nil {

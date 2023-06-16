@@ -489,6 +489,7 @@ type labelsInfo struct {
 }
 
 type Profile interface {
+	StacktracePartition() uint64
 	Timestamp() model.Time
 	Fingerprint() model.Fingerprint
 	Labels() phlaremodel.Labels
@@ -873,10 +874,15 @@ var maxBlockProfile Profile = BlockProfile{
 }
 
 type BlockProfile struct {
-	labels phlaremodel.Labels
-	fp     model.Fingerprint
-	ts     model.Time
-	RowNum int64
+	labels              phlaremodel.Labels
+	fp                  model.Fingerprint
+	ts                  model.Time
+	stacktracePartition uint64
+	RowNum              int64
+}
+
+func (p BlockProfile) StacktracePartition() uint64 {
+	return p.stacktracePartition
 }
 
 func (p BlockProfile) RowNumber() int64 {
@@ -893,6 +899,16 @@ func (p BlockProfile) Timestamp() model.Time {
 
 func (p BlockProfile) Fingerprint() model.Fingerprint {
 	return p.fp
+}
+
+func retrieveStacktracePartition(buf [][]parquet.Value, pos int) uint64 {
+	if len(buf) > pos && len(buf[pos]) == 1 {
+		return buf[pos][0].Uint64()
+	}
+
+	// return 0 stacktrace partition
+	return uint64(0)
+
 }
 
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
@@ -942,6 +958,7 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		[]query.Iterator{
 			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
 			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
+			b.profiles.columnIter(ctx, "StacktracePartition", nil, "StacktracePartition"),
 		},
 		nil,
 	)
@@ -953,7 +970,7 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 	var currentSeriesSlice []Profile
 	for pIt.Next() {
 		res := pIt.At()
-		buf = res.Columns(buf, "SeriesIndex", "TimeNanos")
+		buf = res.Columns(buf, "SeriesIndex", "TimeNanos", "StacktracePartition")
 		seriesIndex := buf[0][0].Int64()
 		if seriesIndex != currSeriesIndex {
 			currSeriesIndex++
@@ -962,11 +979,13 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 			}
 			currentSeriesSlice = make([]Profile, 0, 100)
 		}
+
 		currentSeriesSlice = append(currentSeriesSlice, BlockProfile{
-			labels: lblsPerRef[seriesIndex].lbs,
-			fp:     lblsPerRef[seriesIndex].fp,
-			ts:     model.TimeFromUnixNano(buf[1][0].Int64()),
-			RowNum: res.RowNumber[0],
+			labels:              lblsPerRef[seriesIndex].lbs,
+			fp:                  lblsPerRef[seriesIndex].fp,
+			ts:                  model.TimeFromUnixNano(buf[1][0].Int64()),
+			stacktracePartition: retrieveStacktracePartition(buf, 2),
+			RowNum:              res.RowNumber[0],
 		})
 	}
 	if len(currentSeriesSlice) > 0 {
