@@ -33,6 +33,9 @@ type StacktraceAppender interface {
 	// The leaf is at locations[0].
 	AppendStacktrace(dst []uint32, s []*v1.Stacktrace)
 	Release()
+	// Stats reports various statistics such as number of stack
+	// traces and nodes added.
+	// Stats() StacktraceAppenderStats
 }
 
 type StacktraceResolver interface {
@@ -52,6 +55,8 @@ type StacktraceResolver interface {
 // The leaf is at locations[0].
 //
 // Locations slice must not be retained by implementation.
+// It is guaranteed, that for a given stacktrace ID
+// InsertStacktrace is called not more than once.
 type StacktraceInserter interface {
 	InsertStacktrace(stacktraceID uint32, locations []int32)
 }

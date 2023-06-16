@@ -255,9 +255,9 @@ func OpenIndexFile(b []byte) (f IndexFile, err error) {
 		panic("bug: invalid version")
 	case FormatV1:
 		sch := f.TOC.Entries[tocEntryStacktraceChunkHeaders]
-		d := b[sch.Offset:sch.Size]
+		d := b[sch.Offset : sch.Offset+sch.Size]
 		if err = f.StacktraceChunkHeaders.UnmarshalBinary(d); err != nil {
-			return f, fmt.Errorf("unmarshal header: %w", err)
+			return f, fmt.Errorf("unmarshal chunk header: %w", err)
 		}
 	}
 
@@ -265,7 +265,7 @@ func OpenIndexFile(b []byte) (f IndexFile, err error) {
 }
 
 func (f *IndexFile) assertSizeIsValid(b []byte) bool {
-	return len(b) < HeaderSize+f.TOC.Size()+checksumSize
+	return len(b) >= HeaderSize+f.TOC.Size()+checksumSize
 }
 
 func (f *IndexFile) dataOffset() int {

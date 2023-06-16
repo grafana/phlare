@@ -31,8 +31,7 @@ func NewWriter(dir string) *Writer {
 
 func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 	if w.scd == nil {
-		p := filepath.Join(w.dir, StacktracesFileName)
-		if w.scd, err = newFileWriter(p); err != nil {
+		if err = w.createStacktracesFile(); err != nil {
 			return err
 		}
 	}
@@ -56,12 +55,18 @@ func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 }
 
 func (w *Writer) Flush() (err error) {
-	if err = w.scd.Close(); err != nil {
-		return fmt.Errorf("flushing stacktraces: %w", err)
+	if err = w.createDir(); err != nil {
+		return err
 	}
-	f, err := newFileWriter(IndexFileName)
+	if w.scd != nil {
+		if err = w.scd.Close(); err != nil {
+			return fmt.Errorf("flushing stacktraces: %w", err)
+		}
+	}
+	// Write the index file only after all the files were flushed.
+	f, err := w.newFile(IndexFileName)
 	if err != nil {
-		return fmt.Errorf("failed to create index file: %w", err)
+		return err
 	}
 	defer func() {
 		err = multierror.New(err, f.Close()).Err()
@@ -70,6 +75,29 @@ func (w *Writer) Flush() (err error) {
 		return fmt.Errorf("failed to write index file: %w", err)
 	}
 	return nil
+}
+
+func (w *Writer) createDir() error {
+	if err := os.MkdirAll(w.dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create directory %q: %w", w.dir, err)
+	}
+	return nil
+}
+
+func (w *Writer) createStacktracesFile() (err error) {
+	if err = w.createDir(); err != nil {
+		return err
+	}
+	w.scd, err = w.newFile(StacktracesFileName)
+	return err
+}
+
+func (w *Writer) newFile(name string) (f *fileWriter, err error) {
+	name = filepath.Join(w.dir, name)
+	if f, err = newFileWriter(name); err != nil {
+		return nil, fmt.Errorf("failed to create %q: %w", name, err)
+	}
+	return f, err
 }
 
 type fileWriter struct {
