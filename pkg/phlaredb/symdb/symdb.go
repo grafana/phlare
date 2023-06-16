@@ -113,12 +113,14 @@ func (s *SymDB) Size() uint64 { return 0 }
 func (s *SymDB) MemorySize() uint64 { return 0 }
 
 func (s *SymDB) Flush() error {
+	s.m.RLock()
 	m := make([]*inMemoryMapping, len(s.mappings))
 	var i int
 	for _, v := range s.mappings {
 		m[i] = v
 		i++
 	}
+	s.m.RUnlock()
 	sort.Slice(m, func(i, j int) bool {
 		return m[i].name < m[j].name
 	})

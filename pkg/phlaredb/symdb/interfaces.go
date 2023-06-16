@@ -29,7 +29,8 @@ type MappingReader interface {
 
 type StacktraceAppender interface {
 	// AppendStacktrace appends the stack traces into the mapping,
-	// and writes the allocated identifiers into dst. len(dst) must be >= len(s),
+	// and writes the allocated identifiers into dst:
+	// len(dst) must be equal to len(s).
 	// The leaf is at locations[0].
 	AppendStacktrace(dst []uint32, s []*v1.Stacktrace)
 	Release()

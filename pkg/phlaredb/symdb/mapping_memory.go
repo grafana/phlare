@@ -167,6 +167,9 @@ func (r *stacktraceResolverMemory) Release() {
 var seed = maphash.MakeSeed()
 
 func hashLocations(s []uint64) uint64 {
+	if len(s) == 0 {
+		return 0
+	}
 	var b []byte
 	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	hdr.Len = len(s) * 8

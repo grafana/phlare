@@ -86,7 +86,7 @@ type IndexFile struct {
 type Header struct {
 	Magic    [4]byte
 	Version  uint32
-	Reserved [24]byte // Reserved for future use; padding to 32.
+	Reserved [8]byte // Reserved for future use.
 }
 
 func (h *Header) MarshalBinary() ([]byte, error) {
