@@ -126,7 +126,7 @@ func newFileWriter(name string) (*fileWriter, error) {
 }
 
 func (f *fileWriter) Write(p []byte) (n int, err error) {
-	return f.buf.Write(p)
+	return f.w.Write(p)
 }
 
 func (f *fileWriter) sync() (err error) {

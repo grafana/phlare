@@ -53,9 +53,9 @@ func (b *inMemoryMapping) StacktraceResolver() StacktraceResolver {
 // stacktraceChunkForInsert returns a chunk for insertion:
 // if the existing one has capacity, or a new one, if the former is full.
 // Must be called with the stracktraces mutex write lock held.
-func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
+func (b *inMemoryMapping) stacktraceChunkForInsert(x int) *stacktraceChunk {
 	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
-	if n := c.tree.len(); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
+	if n := c.tree.len() + uint32(x); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
 		c = &stacktraceChunk{
 			mapping: b,
 			tree:    newStacktraceTree(defaultStacktraceTreeSize),
@@ -145,7 +145,7 @@ func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*v1.Stacktrace) 
 			// If we're close to the max nodes limit and can
 			// potentially exceed it, we take the next chunk,
 			// even if there are some space.
-			a.chunk = a.mapping.stacktraceChunkForInsert()
+			a.chunk = a.mapping.stacktraceChunkForInsert(len(x))
 			t, j = a.chunk.tree, a.chunk.stid
 		}
 

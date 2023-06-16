@@ -219,6 +219,7 @@ func (h *StacktraceChunkHeader) marshal(b []byte) {
 	binary.BigEndian.PutUint32(b[28:32], h.StacktraceNodes)
 	binary.BigEndian.PutUint32(b[32:36], h.StacktraceMaxDepth)
 	binary.BigEndian.PutUint32(b[36:40], h.StacktraceMaxNodes)
+	binary.BigEndian.PutUint32(b[60:64], h.CRC)
 }
 
 func (h *StacktraceChunkHeader) unmarshal(b []byte) {
@@ -229,6 +230,7 @@ func (h *StacktraceChunkHeader) unmarshal(b []byte) {
 	h.StacktraceNodes = binary.BigEndian.Uint32(b[28:32])
 	h.StacktraceMaxDepth = binary.BigEndian.Uint32(b[32:36])
 	h.StacktraceMaxNodes = binary.BigEndian.Uint32(b[36:40])
+	h.CRC = binary.BigEndian.Uint32(b[60:64])
 }
 
 func OpenIndexFile(b []byte) (f IndexFile, err error) {

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -54,4 +55,6 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 	assert.Len(t, idx.StacktraceChunkHeaders.Entries, 2)
 
 	// TODO(kolesnikovae): Validate the index and headers.
+
+	t.Log(pretty.Sprint(idx))
 }
