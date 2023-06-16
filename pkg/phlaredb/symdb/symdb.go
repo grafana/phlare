@@ -21,11 +21,9 @@ type StacktracesConfig struct {
 	MaxNodesPerChunk uint32
 }
 
-const defaultDirName = "symbols"
-
 func DefaultConfig() *Config {
 	return &Config{
-		Dir: defaultDirName,
+		Dir: DefaultDirName,
 		Stacktraces: StacktracesConfig{
 			// A million of nodes ensures predictable
 			// memory consumption, although causes a

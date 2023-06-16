@@ -7,32 +7,24 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-)
 
-const (
-	IndexFileName       = "index.symdb" // "index.symdb"
-	StacktracesFileName = "stacktraces.symdb"
+	"github.com/grafana/dskit/multierror"
 )
 
 type Writer struct {
 	dir string
-
-	header Header
-	toc    TOC
-	sch    StacktraceChunkHeaders
-
+	idx IndexFile
 	scd *fileWriter
 }
 
 func NewWriter(dir string) *Writer {
 	return &Writer{
 		dir: dir,
-		toc: TOC{
-			Entries: make([]TOCEntry, tocEntries),
-		},
-		header: Header{
-			Magic:   symdbMagic,
-			Version: FormatV1,
+		idx: IndexFile{
+			Header: Header{
+				Magic:   symdbMagic,
+				Version: FormatV1,
+			},
 		},
 	}
 }
@@ -45,7 +37,7 @@ func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 		}
 	}
 	h := StacktraceChunkHeader{
-		Offset:             w.scd.off,
+		Offset:             w.scd.w.offset,
 		Size:               0, // Set later.
 		MappingName:        c.mapping.name,
 		Stacktraces:        0, // TODO
@@ -59,45 +51,32 @@ func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 		return fmt.Errorf("writing stacktrace chunk data: %w", err)
 	}
 	h.CRC = crc.Sum32()
-	w.sch.Entries = append(w.sch.Entries, h)
+	w.idx.StacktraceChunkHeaders.Entries = append(w.idx.StacktraceChunkHeaders.Entries, h)
 	return nil
 }
 
-func (w *Writer) WriteTo(dst io.Writer) (n int64, err error) {
-	var m int
-	header, _ := w.header.MarshalBinary()
-	if m, err = dst.Write(header); err != nil {
-		return n + int64(m), fmt.Errorf("header write: %w", err)
+func (w *Writer) Flush() (err error) {
+	if err = w.scd.Close(); err != nil {
+		return fmt.Errorf("flushing stacktraces: %w", err)
 	}
-	// Make sure all the entries have proper offsets.
-	w.toc.Entries[tocEntryStacktraceChunkHeaders] = TOCEntry{
-		Offset: w.dataOffset(),
-		Size:   w.sch.Size(),
+	f, err := newFileWriter(IndexFileName)
+	if err != nil {
+		return fmt.Errorf("failed to create index file: %w", err)
 	}
-	toc, _ := w.toc.MarshalBinary()
-	if m, err = dst.Write(toc); err != nil {
-		return n + int64(m), fmt.Errorf("toc write: %w", err)
+	defer func() {
+		err = multierror.New(err, f.Close()).Err()
+	}()
+	if _, err = w.idx.WriteTo(f); err != nil {
+		return fmt.Errorf("failed to write index file: %w", err)
 	}
-	sch, _ := w.sch.MarshalBinary()
-	if m, err = dst.Write(sch); err != nil {
-		return n + int64(m), fmt.Errorf("stacktrace chunk headers: %w", err)
-	}
-	return n, err
-}
-
-func (w *Writer) dataOffset() int64 {
-	return int64(headerSize + tocEntrySize*tocEntries)
-}
-
-func (w *Writer) stacktraceChunkHeaderOffset() int64 {
-	return w.dataOffset() + w.scd.off
+	return nil
 }
 
 type fileWriter struct {
 	name string
 	buf  *bufio.Writer
 	f    *os.File
-	off  int64
+	w    *writerOffset
 }
 
 func newFileWriter(name string) (*fileWriter, error) {
@@ -105,20 +84,21 @@ func newFileWriter(name string) (*fileWriter, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := fileWriter{
-		f: f,
-		// There is no particular reason to use
-		// a buffer larger than the default 4K.
-		buf:  bufio.NewWriterSize(f, 4<<10),
+	// There is no particular reason to use
+	// a buffer larger than the default 4K.
+	b := bufio.NewWriterSize(f, 4<<10)
+	w := withWriterOffset(b, 0)
+	fw := fileWriter{
 		name: name,
+		buf:  b,
+		f:    f,
+		w:    w,
 	}
-	return &w, nil
+	return &fw, nil
 }
 
 func (f *fileWriter) Write(p []byte) (n int, err error) {
-	n, err = f.buf.Write(p)
-	f.off += int64(n)
-	return n, err
+	return f.buf.Write(p)
 }
 
 func (f *fileWriter) sync() (err error) {
@@ -135,37 +115,17 @@ func (f *fileWriter) Close() (err error) {
 	return f.f.Close()
 }
 
-func (f *fileWriter) WriteTo(w io.Writer) (n int64, err error) {
-	if err = f.sync(); err != nil {
-		return n, err
-	}
-	if _, err = f.f.Seek(0, io.SeekStart); err != nil {
-		return n, err
-	}
-	// We expect that w implements io.ReaderFrom, thus avoiding
-	// the buffer allocation (potentially).
-	return io.Copy(w, f.f)
+type writerOffset struct {
+	io.Writer
+	offset int64
 }
 
-func (f *fileWriter) ReadFrom(r io.Reader) (n int64, err error) {
-	// Ensure disk and memory states are synchronised, before
-	// writing to the file directly.
-	if err = f.sync(); err != nil {
-		return n, err
-	}
-	// os.File does satisfy the io.ReadFrom interface, however
-	// in most cases (all but Linux), it uses io.Copy internally,
-	// and the buffer of the default size is allocated either way.
-	if n, err = f.f.ReadFrom(r); err != nil {
-		return n, err
-	}
-	f.off += n
-	return n, nil
+func withWriterOffset(w io.Writer, base int64) *writerOffset {
+	return &writerOffset{Writer: w, offset: base}
 }
 
-func (f *fileWriter) remove() (err error) {
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.RemoveAll(f.name)
+func (w *writerOffset) Write(p []byte) (n int, err error) {
+	n, err = w.Writer.Write(p)
+	w.offset += int64(n)
+	return n, err
 }
