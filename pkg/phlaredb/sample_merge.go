@@ -66,25 +66,7 @@ func (b *singleBlockQuerier) resolveLocations(ctx context.Context, mapping uint6
 	sort.Slice(stacktraceIDs, func(i, j int) bool {
 		return stacktraceIDs[i] < stacktraceIDs[j]
 	})
-	// todo v2
-	return b.resolveLocationsV1(ctx, locs, stacktraceIDs)
-}
-
-func (b *singleBlockQuerier) resolveLocationsV2(ctx context.Context, mapping uint64, locs locationsIdsByStacktraceID, stacktraceIDs []uint32) error {
-	// todo v2
-	return nil
-}
-
-func (b *singleBlockQuerier) resolveLocationsV1(ctx context.Context, locs locationsIdsByStacktraceID, stacktraceIDs []uint32) error {
-	stacktraces := repeatedColumnIter(ctx, b.stacktraces.file, "LocationIDs.list.element", iter.NewSliceIterator(stacktraceIDs))
-	defer stacktraces.Close()
-
-	for stacktraces.Next() {
-		s := stacktraces.At()
-		locs.addFromParquet(int64(s.Row), s.Values)
-
-	}
-	return stacktraces.Err()
+	return b.stacktraces.Resolve(ctx, mapping, locs, stacktraceIDs)
 }
 
 func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSampleByMapping profileSampleByMapping) (*profile.Profile, error) {
