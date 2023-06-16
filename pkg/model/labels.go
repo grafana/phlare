@@ -24,6 +24,7 @@ const (
 	LabelNamePeriodUnit  = "__period_unit__"
 	LabelNameDelta       = "__delta__"
 	LabelNameProfileName = pmodel.MetricNameLabel
+	LabelNameServiceName = "service_name"
 
 	labelSep = '\xfe'
 )

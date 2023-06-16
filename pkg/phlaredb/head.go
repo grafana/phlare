@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bufbuild/connect-go"
+	"github.com/cespare/xxhash"
 	"github.com/dustin/go-humanize"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -270,7 +271,7 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartiton uint64, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -303,8 +304,7 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 			LocationIDs: in[idxSample].LocationId,
 		}
 	}
-	// todo(christian): pass the correct mapping/partition ID.
-	appender := h.symbolDB.MappingWriter(1).StacktraceAppender()
+	appender := h.symbolDB.MappingWriter(stacktracePartiton).StacktraceAppender()
 	defer appender.Release()
 
 	if cap(stacktracesIds) < len(stacktraces) {
@@ -325,6 +325,36 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 	return out, nil
 }
 
+const stacktracePartitionCount = 256
+
+func StacktracePartitionFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) uint64 {
+	return xxhash.Sum64String(stacktracePartitionKeyFromProfile(lbls, p)) % stacktracePartitionCount
+}
+func stacktracePartitionKeyFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) string {
+
+	// take the first mapping (which is the main binary's file basename)
+	if len(p.Mapping) > 0 {
+		if filenameID := p.Mapping[0].Filename; filenameID > 0 {
+			filename := p.StringTable[filenameID]
+
+			// filter out invalid filenames like `[vsdo]` and `[vsyscall]`
+			// TODO: Ensure we handle windows paths correctly
+			if filepath.IsAbs(filename) {
+				return filepath.Base(filename)
+			}
+		}
+	}
+
+	// failing that look through the labels for the ServiceName
+	for _, lbl := range lbls {
+		if lbl.Name == phlaremodel.LabelNameServiceName {
+			return lbl.Value
+		}
+	}
+
+	return "unknown"
+}
+
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
 
@@ -333,6 +363,9 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 			return err
 		}
 	}
+
+	// determine the stacktraces partition ID
+	stacktracePartition := StacktracePartitionFromProfile(labels[0], p)
 
 	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 
@@ -355,7 +388,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		return err
 	}
 
-	samplesPerType, err := h.convertSamples(ctx, rewrites, p.Sample)
+	samplesPerType, err := h.convertSamples(ctx, rewrites, stacktracePartition, p.Sample)
 	if err != nil {
 		return err
 	}
@@ -385,15 +418,16 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 			samples = copySlice(samples)
 		}
 		profile := &schemav1.Profile{
-			ID:                id,
-			SeriesFingerprint: seriesFingerprints[idxType],
-			Samples:           samples,
-			DropFrames:        p.DropFrames,
-			KeepFrames:        p.KeepFrames,
-			TimeNanos:         p.TimeNanos,
-			DurationNanos:     p.DurationNanos,
-			Comments:          copySlice(p.Comment),
-			DefaultSampleType: p.DefaultSampleType,
+			ID:                  id,
+			SeriesFingerprint:   seriesFingerprints[idxType],
+			StacktracePartition: stacktracePartition,
+			Samples:             samples,
+			DropFrames:          p.DropFrames,
+			KeepFrames:          p.KeepFrames,
+			TimeNanos:           p.TimeNanos,
+			DurationNanos:       p.DurationNanos,
+			Comments:            copySlice(p.Comment),
+			DefaultSampleType:   p.DefaultSampleType,
 		}
 
 		profile = h.delta.computeDelta(profile, labels[idxType])

@@ -484,9 +484,7 @@ func mergeByStacktraces(ctx context.Context, profileSource Source, rows iter.Ite
 	for it.Next() {
 		values := it.At().Values
 		for i := 0; i < len(values[0]); i++ {
-			// todo(christian): add the correct mapping/partition key from the profile
-			// Add default mapping if none found may be 0.
-			m.add(1, uint32(values[0][i].Int64()), values[1][i].Int64())
+			m.add(it.At().Row.StacktracePartition(), uint32(values[0][i].Int64()), values[1][i].Int64())
 		}
 	}
 	return nil
