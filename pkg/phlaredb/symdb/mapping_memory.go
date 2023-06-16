@@ -7,7 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
-	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	"github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
 var (
@@ -19,6 +19,8 @@ var (
 )
 
 type inMemoryMapping struct {
+	name uint64
+
 	maxNodesPerChunk uint32
 	// maxStackDepth uint32
 
@@ -27,6 +29,8 @@ type inMemoryMapping struct {
 	stacktraceMutex    sync.RWMutex
 	stacktraceHashToID map[uint64]uint32
 	stacktraceChunks   []*stacktraceChunk
+	// Headers of already written stack trace chunks.
+	stacktraceChunkHeaders []StacktraceChunkHeader
 }
 
 func (b *inMemoryMapping) StacktraceAppender() StacktraceAppender {
@@ -41,7 +45,9 @@ func (b *inMemoryMapping) StacktraceAppender() StacktraceAppender {
 }
 
 func (b *inMemoryMapping) StacktraceResolver() StacktraceResolver {
-	return new(stacktraceResolverMemory)
+	return &stacktraceResolverMemory{
+		mapping: b,
+	}
 }
 
 // stacktraceChunkForInsert returns a chunk for insertion:
@@ -51,8 +57,9 @@ func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
 	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
 	if n := c.tree.len(); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
 		c = &stacktraceChunk{
-			tree: newStacktraceTree(defaultStacktraceTreeSize),
-			stid: c.stid + b.maxNodesPerChunk,
+			mapping: b,
+			tree:    newStacktraceTree(defaultStacktraceTreeSize),
+			stid:    c.stid + b.maxNodesPerChunk,
 		}
 		b.stacktraceChunks = append(b.stacktraceChunks, c)
 	}
@@ -60,9 +67,10 @@ func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
 }
 
 type stacktraceChunk struct {
-	m    sync.Mutex // It is a write-intensive lock.
-	stid uint32     // Initial stack trace ID.
-	tree *stacktraceTree
+	mapping *inMemoryMapping
+	m       sync.Mutex // It is a write-intensive lock.
+	stid    uint32     // Initial stack trace ID.
+	tree    *stacktraceTree
 }
 
 func (s *stacktraceChunk) WriteTo(dst io.Writer) (int64, error) {
@@ -75,7 +83,7 @@ type stacktraceAppender struct {
 	releaseOnce sync.Once
 }
 
-func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*schemav1.Stacktrace) {
+func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*v1.Stacktrace) {
 	if len(s) == 0 {
 		return
 	}
@@ -83,7 +91,7 @@ func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*schemav1.Stackt
 	var (
 		id     uint32
 		found  bool
-		misses int32
+		misses int
 	)
 
 	a.mapping.stacktraceMutex.RLock()
@@ -131,10 +139,82 @@ type stacktraceResolverMemory struct {
 	releaseOnce sync.Once
 }
 
+const defaultStacktraceDepth = 64
+
 func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32) {
 	// We assume stacktraces is sorted in the ascending order.
-	// First, we split it into parts corresponding to the chunks.
+	// First, we split it into ranges corresponding to the chunks.
+	m := r.mapping.maxNodesPerChunk
+	d := splitStacktraces(stacktraces, m)
+	for _, x := range d {
+		// TODO(kolesnikovae):
+		// Each chunk should be resolved independently with
+		// a limit on concurrency and memory consumption.
+		c := r.mapping.stacktraceChunks[x.chunk]
+		s := make([]int32, 0, defaultStacktraceDepth)
+		// Restore the original stacktrace ID.
+		off := x.chunk * m
+		for _, sid := range x.ids {
+			s = c.tree.resolve(s, sid)
+			dst.InsertStacktrace(off+sid, s)
+		}
+	}
+}
 
+type stacktraceIDRange struct {
+	chunk uint32
+	ids   []uint32
+}
+
+// splitStacktraces splits the range of stack trace IDs by limit n into
+// sub-ranges matching to the corresponding chunks and shifts the values
+// accordingly. Note that the input s is modified in place.
+//
+// stack trace ID 0 is reserved and not expected at the input.
+// stack trace ID % max_nodes == 0 is not expected as well.
+func splitStacktraces(s []uint32, n uint32) []stacktraceIDRange {
+	if s[len(s)-1] < n || n == 0 {
+		// Fast path, just one chunk: the highest stack trace ID
+		// is less than the chunk size, or the size is not limited.
+		// It's expected that in most cases we'll end up here.
+		return []stacktraceIDRange{{ids: s}}
+	}
+
+	var (
+		loi int
+		lov = (s[0] / n) * n // Lowest possible value for the current chunk.
+		hiv = lov + n        // Highest possible value for the current chunk.
+		p   uint32           // Previous value (to derive chunk index).
+		// 16 chunks should be more than enough in most cases.
+		cs = make([]stacktraceIDRange, 0, 16)
+	)
+
+	for i, v := range s {
+		if v < hiv {
+			// The stack belongs to the current chunk.
+			s[i] -= lov
+			p = v
+			continue
+		}
+		lov = (v / n) * n
+		hiv = lov + n
+		s[i] -= lov
+		cs = append(cs, stacktraceIDRange{
+			chunk: p / n,
+			ids:   s[loi:i],
+		})
+		loi = i
+		p = v
+	}
+
+	if t := s[loi:]; len(t) > 0 {
+		cs = append(cs, stacktraceIDRange{
+			chunk: p / n,
+			ids:   t,
+		})
+	}
+
+	return cs
 }
 
 func (r *stacktraceResolverMemory) Release() {
@@ -143,13 +223,11 @@ func (r *stacktraceResolverMemory) Release() {
 
 var seed = maphash.MakeSeed()
 
-func hash(b []byte) uint64 { return maphash.Bytes(seed, b) }
-
 func hashLocations(s []uint64) uint64 {
 	var b []byte
 	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&b))
 	hdr.Len = len(s) * 8
 	hdr.Cap = hdr.Len
 	hdr.Data = uintptr(unsafe.Pointer(&s[0]))
-	return hash(b)
+	return maphash.Bytes(seed, b)
 }

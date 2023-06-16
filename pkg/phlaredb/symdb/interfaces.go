@@ -1,12 +1,11 @@
 package symdb
 
-import (
-	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
-)
+import "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 
 // Mapping is a binary that is part of the program during the profile
 // collection. https://github.com/google/pprof/blob/main/proto/README.md
-// Currently, we maintain a Mapping for all the version of a binary.
+//
+// In the package, Mapping represents all the version of a binary.
 
 type MappingWriter interface {
 	// StacktraceAppender provides exclusive write access
@@ -32,14 +31,19 @@ type StacktraceAppender interface {
 	// AppendStacktrace appends the stack traces into the mapping,
 	// and writes the allocated identifiers into dst. len(dst) must be >= len(s),
 	// The leaf is at locations[0].
-	AppendStacktrace(dst []uint32, s []*schemav1.Stacktrace)
+	AppendStacktrace(dst []uint32, s []*v1.Stacktrace)
 	Release()
 }
 
 type StacktraceResolver interface {
 	// ResolveStacktraces resolves locations for each stack trace
 	// and inserts it to the StacktraceInserter provided.
+	//
 	// The stacktraces must be ordered in the ascending order.
+	// If a stacktrace can't be resolved, dst receives an empty
+	// array of locations.
+	//
+	// Stacktraces slice might be modified during the call.
 	ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32)
 	Release()
 }

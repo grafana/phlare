@@ -1,26 +1,24 @@
 package symdb
 
-import (
-	"io"
-)
+import "io"
 
 var (
 	_ MappingReader      = (*mappingFileReader)(nil)
 	_ StacktraceResolver = (*stacktraceResolverFile)(nil)
 )
 
-type File interface {
+type FileReader interface {
 	RangeReader(offset, size int64) (io.ReadCloser, error)
 }
 
 type Reader struct {
-	f File
+	f FileReader
 
 	header Header
 	toc    TOC
 }
 
-func OpenFile(f File) (*Reader, error) {
+func OpenFile(f FileReader) (*Reader, error) {
 	return new(Reader), nil
 }
 

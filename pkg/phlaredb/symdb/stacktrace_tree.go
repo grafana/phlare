@@ -89,11 +89,11 @@ func (t *stacktraceTree) insert(refs []uint64) (id uint32) {
 	return uint32(n.i)
 }
 
-func (t *stacktraceTree) resolve(dst []int32, id int32) []int32 {
-	if id >= int32(len(t.nodes)) {
+func (t *stacktraceTree) resolve(dst []int32, id uint32) []int32 {
+	dst = dst[:0]
+	if id >= uint32(len(t.nodes)) {
 		return dst
 	}
-	dst = dst[:0]
 	n := t.nodes[id]
 	for n.p >= 0 {
 		dst = append(dst, n.ref)
