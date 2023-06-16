@@ -325,11 +325,10 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartit
 	return out, nil
 }
 
-const stacktracePartitionCount = 256
-
 func StacktracePartitionFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) uint64 {
-	return xxhash.Sum64String(stacktracePartitionKeyFromProfile(lbls, p)) % stacktracePartitionCount
+	return xxhash.Sum64String(stacktracePartitionKeyFromProfile(lbls, p))
 }
+
 func stacktracePartitionKeyFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) string {
 
 	// take the first mapping (which is the main binary's file basename)
