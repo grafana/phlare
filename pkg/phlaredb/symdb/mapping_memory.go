@@ -145,7 +145,9 @@ func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, st
 	// We assume stacktraces is sorted in the ascending order.
 	// First, we split it into ranges corresponding to the chunks.
 	m := r.mapping.maxNodesPerChunk
-	for _, x := range splitStacktracesByChunkMaxNodes(stacktraces, m) {
+	d := splitStacktraces(stacktraces, m)
+	for _, x := range d {
+		// TODO(kolesnikovae):
 		// Each chunk should be resolved independently with
 		// a limit on concurrency and memory consumption.
 		c := r.mapping.stacktraceChunks[x.chunk]
@@ -164,13 +166,13 @@ type stacktraceIDRange struct {
 	ids   []uint32
 }
 
-// splitStacktracesByChunkMaxNodes splits the range of stack trace IDs
-// by limit n into sub-ranges matching to the corresponding chunks and
-// shift the values accordingly. Note that the input s is modified in place.
+// splitStacktraces splits the range of stack trace IDs by limit n into
+// sub-ranges matching to the corresponding chunks and shifts the values
+// accordingly. Note that the input s is modified in place.
 //
 // stack trace ID 0 is reserved and not expected at the input.
 // stack trace ID % max_nodes == 0 is not expected as well.
-func splitStacktracesByChunkMaxNodes(s []uint32, n uint32) []stacktraceIDRange {
+func splitStacktraces(s []uint32, n uint32) []stacktraceIDRange {
 	if s[len(s)-1] < n || n == 0 {
 		// Fast path, just one chunk: the highest stack trace ID
 		// is less than the chunk size, or the size is not limited.
@@ -179,10 +181,10 @@ func splitStacktracesByChunkMaxNodes(s []uint32, n uint32) []stacktraceIDRange {
 	}
 
 	var (
-		m   = s[0] / n
-		lov = m * n   // Lowest possible value for the current chunk.
-		hiv = lov + n // Highest possible value for the current chunk.
 		loi int
+		lov = (s[0] / n) * n // Lowest possible value for the current chunk.
+		hiv = lov + n        // Highest possible value for the current chunk.
+		p   uint32           // Previous value (to derive chunk index).
 		// 16 chunks should be more than enough in most cases.
 		cs = make([]stacktraceIDRange, 0, 16)
 	)
@@ -191,22 +193,23 @@ func splitStacktracesByChunkMaxNodes(s []uint32, n uint32) []stacktraceIDRange {
 		if v < hiv {
 			// The stack belongs to the current chunk.
 			s[i] -= lov
+			p = v
 			continue
 		}
-		m = v / n
-		lov = m * n
+		lov = (v / n) * n
 		hiv = lov + n
 		s[i] -= lov
 		cs = append(cs, stacktraceIDRange{
-			chunk: m - 1,
+			chunk: p / n,
 			ids:   s[loi:i],
 		})
 		loi = i
+		p = v
 	}
 
 	if t := s[loi:]; len(t) > 0 {
 		cs = append(cs, stacktraceIDRange{
-			chunk: m,
+			chunk: p / n,
 			ids:   t,
 		})
 	}

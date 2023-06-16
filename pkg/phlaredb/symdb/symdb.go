@@ -2,11 +2,12 @@ package symdb
 
 import (
 	"io"
+	"os"
 	"sync"
 )
 
 type SymDB struct {
-	config Config
+	config *Config
 	writer *Writer
 
 	m        sync.RWMutex
@@ -14,9 +15,29 @@ type SymDB struct {
 }
 
 type Config struct {
-	Dir string
+	Dir         string
+	Stacktraces StacktracesConfig
+}
 
-	MaxStacktraceTreeNodesPerChunk uint32
+type StacktracesConfig struct {
+	MaxNodesPerChunk uint32
+}
+
+func DefaultConfig() *Config {
+	return &Config{
+		Dir: os.TempDir(),
+		Stacktraces: StacktracesConfig{
+			// A million of nodes ensures predictable
+			// memory consumption, although causes a
+			// small overhead.
+			MaxNodesPerChunk: 1 << 20,
+		},
+	}
+}
+
+func (c *Config) WithDirectory(dir string) Config {
+	c.Dir = dir
+	return *c
 }
 
 type Stats struct {
@@ -24,7 +45,10 @@ type Stats struct {
 	Mappings   uint32
 }
 
-func NewSymDB(c Config) *SymDB {
+func NewSymDB(c *Config) *SymDB {
+	if c == nil {
+		c = DefaultConfig()
+	}
 	return &SymDB{
 		config:   c,
 		writer:   NewWriter(c.Dir),
@@ -67,7 +91,7 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 	}
 	p = &inMemoryMapping{
 		name:               mappingName,
-		maxNodesPerChunk:   s.config.MaxStacktraceTreeNodesPerChunk,
+		maxNodesPerChunk:   s.config.Stacktraces.MaxNodesPerChunk,
 		stacktraceHashToID: make(map[uint64]uint32, defaultStacktraceTreeSize/2),
 		stacktraceChunks: []*stacktraceChunk{{
 			tree: newStacktraceTree(defaultStacktraceTreeSize),
