@@ -254,7 +254,7 @@ func SplitStacktraces(s []uint32, n uint32) []StacktracesRange {
 		// Fast path, just one chunk: the highest stack trace ID
 		// is less than the chunk size, or the size is not limited.
 		// It's expected that in most cases we'll end up here.
-		return []StacktracesRange{{ids: s}}
+		return []StacktracesRange{{m: n, ids: s}}
 	}
 
 	var (

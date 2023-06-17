@@ -15,7 +15,7 @@ func Test_StacktraceAppender_shards(t *testing.T) {
 	t.Run("WithMaxStacktraceTreeNodesPerChunk", func(t *testing.T) {
 		db := NewSymDB(&Config{
 			Stacktraces: StacktracesConfig{
-				MaxNodesPerChunk: 5,
+				MaxNodesPerChunk: 7,
 			},
 		})
 
@@ -30,32 +30,36 @@ func Test_StacktraceAppender_shards(t *testing.T) {
 			{LocationIDs: []uint64{4, 3, 2, 1}},
 			{LocationIDs: []uint64{3, 1}},
 		})
-		assert.Equal(t, []uint32{3, 2, 4, 7}, sids)
+		assert.Equal(t, []uint32{3, 2, 11, 16}, sids)
 
-		a.AppendStacktrace(sids, []*schemav1.Stacktrace{
+		a.AppendStacktrace(sids[:3], []*schemav1.Stacktrace{
 			{LocationIDs: []uint64{3, 2, 1}},
 			{LocationIDs: []uint64{2, 1}},
 			{LocationIDs: []uint64{4, 3, 2, 1}},
 		})
 		// Same input. Note that len(sids) > len(schemav1.Stacktrace)
-		assert.Equal(t, []uint32{3, 2, 4, 7}, sids)
+		assert.Equal(t, []uint32{3, 2, 11}, sids[:3])
 
-		a.AppendStacktrace(sids, []*schemav1.Stacktrace{
+		a.AppendStacktrace(sids[:1], []*schemav1.Stacktrace{
 			{LocationIDs: []uint64{5, 2, 1}},
 		})
-		assert.Equal(t, []uint32{9, 2, 4, 7}, sids)
+		assert.Equal(t, []uint32{18}, sids[:1])
 
 		require.Len(t, db.mappings, 1)
 		m := db.mappings[0]
-		require.Len(t, m.stacktraceChunks, 2)
+		require.Len(t, m.stacktraceChunks, 3)
 
 		c1 := m.stacktraceChunks[0]
 		assert.Equal(t, uint32(0), c1.stid)
-		assert.Equal(t, uint32(5), c1.tree.len())
+		assert.Equal(t, uint32(4), c1.tree.len())
 
 		c2 := m.stacktraceChunks[1]
-		assert.Equal(t, uint32(5), c2.stid)
+		assert.Equal(t, uint32(7), c2.stid)
 		assert.Equal(t, uint32(5), c2.tree.len())
+
+		c3 := m.stacktraceChunks[2]
+		assert.Equal(t, uint32(14), c3.stid)
+		assert.Equal(t, uint32(5), c3.tree.len())
 	})
 
 	t.Run("WithoutMaxStacktraceTreeNodesPerChunk", func(t *testing.T) {
@@ -97,7 +101,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			description: "no limit",
 			stacktraces: []uint32{234, 1234, 2345},
 			expected: []StacktracesRange{
-				{chunk: 0, ids: []uint32{234, 1234, 2345}},
+				{ids: []uint32{234, 1234, 2345}},
 			},
 		},
 		{
@@ -105,7 +109,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			maxNodes:    4,
 			stacktraces: []uint32{1, 2, 3},
 			expected: []StacktracesRange{
-				{chunk: 0, ids: []uint32{1, 2, 3}},
+				{m: 4, chunk: 0, ids: []uint32{1, 2, 3}},
 			},
 		},
 		{
@@ -113,24 +117,24 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			maxNodes:    4,
 			stacktraces: []uint32{401, 402},
 			expected: []StacktracesRange{
-				{chunk: 100, ids: []uint32{1, 2}},
+				{m: 4, chunk: 100, ids: []uint32{1, 2}},
 			},
 		},
 		{
 			description: "multiple shards",
-			maxNodes:    4, // denominator
+			maxNodes:    4,
 			stacktraces: []uint32{1, 2, 5, 7, 11, 13, 14, 15, 17, 41, 42, 43, 83, 85, 86},
-			// reminder: []uint32{1, 2, 1, 3,  3,  1,  2,  3,  1,  1,  2,  3,  3,  1,  2},
+			//         : []uint32{1, 2, 1, 3,  3,  1,  2,  3,  1,  1,  2,  3,  3,  1,  2},
 			//         : []uint32{0, 0, 1, 1,  2,  3,  3,  3,  4, 10, 10, 10, 20, 21, 21},
 			expected: []StacktracesRange{
-				{chunk: 0, ids: []uint32{1, 2}},
-				{chunk: 1, ids: []uint32{1, 3}},
-				{chunk: 2, ids: []uint32{3}},
-				{chunk: 3, ids: []uint32{1, 2, 3}},
-				{chunk: 4, ids: []uint32{1}},
-				{chunk: 10, ids: []uint32{1, 2, 3}},
-				{chunk: 20, ids: []uint32{3}},
-				{chunk: 21, ids: []uint32{1, 2}},
+				{m: 4, chunk: 0, ids: []uint32{1, 2}},
+				{m: 4, chunk: 1, ids: []uint32{1, 3}},
+				{m: 4, chunk: 2, ids: []uint32{3}},
+				{m: 4, chunk: 3, ids: []uint32{1, 2, 3}},
+				{m: 4, chunk: 4, ids: []uint32{1}},
+				{m: 4, chunk: 10, ids: []uint32{1, 2, 3}},
+				{m: 4, chunk: 20, ids: []uint32{3}},
+				{m: 4, chunk: 21, ids: []uint32{1, 2}},
 			},
 		},
 		{
@@ -138,14 +142,14 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			maxNodes:    4,
 			stacktraces: []uint32{1, 2, 5, 7, 11, 13, 14, 15, 17, 41, 42, 43, 83, 85, 86, 87},
 			expected: []StacktracesRange{
-				{chunk: 0, ids: []uint32{1, 2}},
-				{chunk: 1, ids: []uint32{1, 3}},
-				{chunk: 2, ids: []uint32{3}},
-				{chunk: 3, ids: []uint32{1, 2, 3}},
-				{chunk: 4, ids: []uint32{1}},
-				{chunk: 10, ids: []uint32{1, 2, 3}},
-				{chunk: 20, ids: []uint32{3}},
-				{chunk: 21, ids: []uint32{1, 2, 3}},
+				{m: 4, chunk: 0, ids: []uint32{1, 2}},
+				{m: 4, chunk: 1, ids: []uint32{1, 3}},
+				{m: 4, chunk: 2, ids: []uint32{3}},
+				{m: 4, chunk: 3, ids: []uint32{1, 2, 3}},
+				{m: 4, chunk: 4, ids: []uint32{1}},
+				{m: 4, chunk: 10, ids: []uint32{1, 2, 3}},
+				{m: 4, chunk: 20, ids: []uint32{3}},
+				{m: 4, chunk: 21, ids: []uint32{1, 2, 3}},
 			},
 		},
 	}
@@ -186,39 +190,7 @@ func Test_Stacktraces_append_resolve(t *testing.T) {
 	t.Run("multiple chunks", func(t *testing.T) {
 		db := NewSymDB(&Config{
 			Stacktraces: StacktracesConfig{
-				MaxNodesPerChunk: 5,
-			},
-		})
-
-		w := db.MappingWriter(0)
-		a := w.StacktraceAppender()
-		defer a.Release()
-
-		sids := make([]uint32, 4)
-		a.AppendStacktrace(sids, []*schemav1.Stacktrace{
-			{LocationIDs: []uint64{3, 2, 1}},
-			{LocationIDs: []uint64{2, 1}},
-			{LocationIDs: []uint64{4, 3, 2, 1}},
-			{LocationIDs: []uint64{3, 1}},
-		})
-		a.AppendStacktrace(sids, []*schemav1.Stacktrace{
-			{LocationIDs: []uint64{5, 2, 1}},
-		})
-
-		r := db.MappingReader(0).StacktraceResolver()
-		dst := new(mockStacktraceInserter)
-		dst.On("InsertStacktrace", uint32(2), []int32{2, 1})
-		dst.On("InsertStacktrace", uint32(3), []int32{3, 2, 1})
-		dst.On("InsertStacktrace", uint32(4), []int32{4, 3, 2, 1})
-		dst.On("InsertStacktrace", uint32(7), []int32{3, 1})
-		dst.On("InsertStacktrace", uint32(9), []int32{5, 2, 1})
-		r.ResolveStacktraces(dst, []uint32{2, 3, 4, 7, 9})
-	})
-
-	t.Run("multiple chunks mixed", func(t *testing.T) {
-		db := NewSymDB(&Config{
-			Stacktraces: StacktracesConfig{
-				MaxNodesPerChunk: 5,
+				MaxNodesPerChunk: 7,
 			},
 		})
 
@@ -229,66 +201,66 @@ func Test_Stacktraces_append_resolve(t *testing.T) {
 		stacktraces := []*schemav1.Stacktrace{ // ID, Chunk ID:
 			{LocationIDs: []uint64{3, 2, 1}},        // 3  0
 			{LocationIDs: []uint64{2, 1}},           // 2  0
-			{LocationIDs: []uint64{4, 3, 2, 1}},     // 4  0
-			{LocationIDs: []uint64{3, 1}},           // 7  1
-			{LocationIDs: []uint64{5, 2, 1}},        // 9  1
-			{LocationIDs: []uint64{13, 12, 11}},     // 13 2
-			{LocationIDs: []uint64{12, 11}},         // 12 2
-			{LocationIDs: []uint64{14, 13, 12, 11}}, // 14 2
-			{LocationIDs: []uint64{13, 11}},         // 17 3
-			{LocationIDs: []uint64{15, 12, 11}},     // 19 4
+			{LocationIDs: []uint64{4, 3, 2, 1}},     // 11 1
+			{LocationIDs: []uint64{3, 1}},           // 16 2
+			{LocationIDs: []uint64{5, 2, 1}},        // 18 2
+			{LocationIDs: []uint64{13, 12, 11}},     // 24 3
+			{LocationIDs: []uint64{12, 11}},         // 23 3
+			{LocationIDs: []uint64{14, 13, 12, 11}}, // 32 4
+			{LocationIDs: []uint64{13, 11}},         // 37 5
+			{LocationIDs: []uint64{15, 12, 11}},     // 39 5
 		}
-
-		// TODO(kolesnikovae): Add test cases:
-		// Invariants:
-		//        0
-		//      1
-		//      1 0
-		//    2
-		//    2   0
-		//    2 1
-		//    2 1 0
-		//  3
-		//  3     0
-		//  3   1
-		//  3   1 0
-		//  3 2
-		//  3 2   0
-		//  3 2 1
-		//  3 2 1 0
-
+		/*
+			// TODO(kolesnikovae): Add test cases:
+			// Invariants:
+			//        0
+			//      1
+			//      1 0
+			//    2
+			//    2   0
+			//    2 1
+			//    2 1 0
+			//  3
+			//  3     0
+			//  3   1
+			//  3   1 0
+			//  3 2
+			//  3 2   0
+			//  3 2 1
+			//  3 2 1 0
+		*/
 		sids := make([]uint32, len(stacktraces))
 		a.AppendStacktrace(sids, stacktraces)
-		require.Len(t, db.mappings[0].stacktraceChunks, 4)
+		require.Len(t, db.mappings[0].stacktraceChunks, 6)
 
 		t.Run("adjacent shards at beginning", func(t *testing.T) {
 			r := db.MappingReader(0).StacktraceResolver()
 			dst := new(mockStacktraceInserter)
 			dst.On("InsertStacktrace", uint32(2), []int32{2, 1})
 			dst.On("InsertStacktrace", uint32(3), []int32{3, 2, 1})
-			dst.On("InsertStacktrace", uint32(4), []int32{4, 3, 2, 1})
-			dst.On("InsertStacktrace", uint32(7), []int32{3, 1})
-			dst.On("InsertStacktrace", uint32(9), []int32{5, 2, 1})
-			r.ResolveStacktraces(dst, []uint32{2, 3, 4, 7, 9})
+			dst.On("InsertStacktrace", uint32(11), []int32{4, 3, 2, 1})
+			dst.On("InsertStacktrace", uint32(16), []int32{3, 1})
+			dst.On("InsertStacktrace", uint32(18), []int32{5, 2, 1})
+			r.ResolveStacktraces(dst, []uint32{2, 3, 11, 16, 18})
 		})
 
 		t.Run("adjacent shards at end", func(t *testing.T) {
 			r := db.MappingReader(0).StacktraceResolver()
 			dst := new(mockStacktraceInserter)
-			dst.On("InsertStacktrace", uint32(12), []int32{12, 11})
-			dst.On("InsertStacktrace", uint32(13), []int32{13, 12, 11})
-			dst.On("InsertStacktrace", uint32(14), []int32{14, 13, 12, 11})
-			dst.On("InsertStacktrace", uint32(17), []int32{13, 11})
-			dst.On("InsertStacktrace", uint32(19), []int32{15, 12, 11})
-			r.ResolveStacktraces(dst, []uint32{12, 13, 14, 17, 19})
+			dst.On("InsertStacktrace", uint32(23), []int32{12, 11})
+			dst.On("InsertStacktrace", uint32(24), []int32{13, 12, 11})
+			dst.On("InsertStacktrace", uint32(32), []int32{14, 13, 12, 11})
+			dst.On("InsertStacktrace", uint32(37), []int32{13, 11})
+			dst.On("InsertStacktrace", uint32(39), []int32{15, 12, 11})
+			r.ResolveStacktraces(dst, []uint32{23, 24, 32, 37, 39})
 		})
 
 		t.Run("non-adjacent shards", func(t *testing.T) {
 			r := db.MappingReader(0).StacktraceResolver()
 			dst := new(mockStacktraceInserter)
-			dst.On("InsertStacktrace", uint32(3), []int32{3, 2, 1})
-			dst.On("InsertStacktrace", uint32(19), []int32{15, 12, 11})
-			r.ResolveStacktraces(dst, []uint32{3, 19})
+			dst.On("InsertStacktrace", uint32(11), []int32{4, 3, 2, 1})
+			dst.On("InsertStacktrace", uint32(32), []int32{14, 13, 12, 11})
+			r.ResolveStacktraces(dst, []uint32{11, 32})
 		})
 	})
 }
