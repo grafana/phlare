@@ -1,6 +1,7 @@
 package symdb
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -162,6 +163,8 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 }
 
 func Test_Stacktraces_append_resolve(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("single chunk", func(t *testing.T) {
 		db := NewSymDB(new(Config))
 		w := db.MappingWriter(0)
@@ -177,14 +180,16 @@ func Test_Stacktraces_append_resolve(t *testing.T) {
 			{LocationIDs: []uint64{5, 2, 1}},
 		})
 
-		r := db.MappingReader(0).StacktraceResolver()
+		mr, _ := db.MappingReader(0)
+		r := mr.StacktraceResolver()
+		defer r.Release()
 		dst := new(mockStacktraceInserter)
 		dst.On("InsertStacktrace", uint32(2), []int32{2, 1})
 		dst.On("InsertStacktrace", uint32(3), []int32{3, 2, 1})
 		dst.On("InsertStacktrace", uint32(4), []int32{4, 3, 2, 1})
 		dst.On("InsertStacktrace", uint32(5), []int32{3, 1})
 		dst.On("InsertStacktrace", uint32(6), []int32{5, 2, 1})
-		r.ResolveStacktraces(dst, []uint32{2, 3, 4, 5, 6})
+		require.NoError(t, r.ResolveStacktraces(ctx, dst, []uint32{2, 3, 4, 5, 6}))
 	})
 
 	t.Run("multiple chunks", func(t *testing.T) {
@@ -234,33 +239,39 @@ func Test_Stacktraces_append_resolve(t *testing.T) {
 		require.Len(t, db.mappings[0].stacktraceChunks, 6)
 
 		t.Run("adjacent shards at beginning", func(t *testing.T) {
-			r := db.MappingReader(0).StacktraceResolver()
+			mr, _ := db.MappingReader(0)
+			r := mr.StacktraceResolver()
+			defer r.Release()
 			dst := new(mockStacktraceInserter)
 			dst.On("InsertStacktrace", uint32(2), []int32{2, 1})
 			dst.On("InsertStacktrace", uint32(3), []int32{3, 2, 1})
 			dst.On("InsertStacktrace", uint32(11), []int32{4, 3, 2, 1})
 			dst.On("InsertStacktrace", uint32(16), []int32{3, 1})
 			dst.On("InsertStacktrace", uint32(18), []int32{5, 2, 1})
-			r.ResolveStacktraces(dst, []uint32{2, 3, 11, 16, 18})
+			require.NoError(t, r.ResolveStacktraces(ctx, dst, []uint32{2, 3, 11, 16, 18}))
 		})
 
 		t.Run("adjacent shards at end", func(t *testing.T) {
-			r := db.MappingReader(0).StacktraceResolver()
+			mr, _ := db.MappingReader(0)
+			r := mr.StacktraceResolver()
+			defer r.Release()
 			dst := new(mockStacktraceInserter)
 			dst.On("InsertStacktrace", uint32(23), []int32{12, 11})
 			dst.On("InsertStacktrace", uint32(24), []int32{13, 12, 11})
 			dst.On("InsertStacktrace", uint32(32), []int32{14, 13, 12, 11})
 			dst.On("InsertStacktrace", uint32(37), []int32{13, 11})
 			dst.On("InsertStacktrace", uint32(39), []int32{15, 12, 11})
-			r.ResolveStacktraces(dst, []uint32{23, 24, 32, 37, 39})
+			require.NoError(t, r.ResolveStacktraces(ctx, dst, []uint32{23, 24, 32, 37, 39}))
 		})
 
 		t.Run("non-adjacent shards", func(t *testing.T) {
-			r := db.MappingReader(0).StacktraceResolver()
+			mr, _ := db.MappingReader(0)
+			r := mr.StacktraceResolver()
+			defer r.Release()
 			dst := new(mockStacktraceInserter)
 			dst.On("InsertStacktrace", uint32(11), []int32{4, 3, 2, 1})
 			dst.On("InsertStacktrace", uint32(32), []int32{14, 13, 12, 11})
-			r.ResolveStacktraces(dst, []uint32{11, 32})
+			require.NoError(t, r.ResolveStacktraces(ctx, dst, []uint32{11, 32}))
 		})
 	})
 }

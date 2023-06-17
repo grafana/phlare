@@ -1,6 +1,7 @@
 package symdb
 
 import (
+	"context"
 	"hash/maphash"
 	"io"
 	"reflect"
@@ -199,10 +200,11 @@ func (p *stacktraceLocationsPool) put(x []int32) {
 	stacktraceLocations.Put(x)
 }
 
-func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32) {
+func (r *stacktraceResolverMemory) ResolveStacktraces(_ context.Context, dst StacktraceInserter, stacktraces []uint32) error {
 	for _, sr := range SplitStacktraces(stacktraces, r.mapping.maxNodesPerChunk) {
 		r.ResolveStacktracesChunk(dst, sr)
 	}
+	return nil
 }
 
 // NOTE(kolesnikovae):
