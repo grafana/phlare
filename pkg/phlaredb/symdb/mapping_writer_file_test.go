@@ -11,7 +11,7 @@ import (
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
-func Test_Writer_OpenIndexFile(t *testing.T) {
+func Test_Writer_IndexFile(t *testing.T) {
 	dir := filepath.Join("testdata", DefaultDirName)
 	db := NewSymDB(&Config{
 		Dir: dir,
@@ -76,6 +76,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 					Offset:             0,
 					Size:               8,
 					MappingName:        0x0,
+					ChunkIndex:         0x0,
 					Stacktraces:        0x0,
 					StacktraceNodes:    0x4,
 					StacktraceMaxDepth: 0x0,
@@ -86,6 +87,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 					Offset:             8,
 					Size:               10,
 					MappingName:        0x0,
+					ChunkIndex:         0x1,
 					Stacktraces:        0x0,
 					StacktraceNodes:    0x5,
 					StacktraceMaxDepth: 0x0,
@@ -96,6 +98,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 					Offset:             18,
 					Size:               10,
 					MappingName:        0x0,
+					ChunkIndex:         0x2,
 					Stacktraces:        0x0,
 					StacktraceNodes:    0x5,
 					StacktraceMaxDepth: 0x0,
@@ -106,6 +109,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 					Offset:             28,
 					Size:               8,
 					MappingName:        0x1,
+					ChunkIndex:         0x0,
 					Stacktraces:        0x0,
 					StacktraceNodes:    0x4,
 					StacktraceMaxDepth: 0x0,
@@ -116,6 +120,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 					Offset:             36,
 					Size:               10,
 					MappingName:        0x1,
+					ChunkIndex:         0x1,
 					Stacktraces:        0x0,
 					StacktraceNodes:    0x5,
 					StacktraceMaxDepth: 0x0,
@@ -126,6 +131,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 					Offset:             46,
 					Size:               10,
 					MappingName:        0x1,
+					ChunkIndex:         0x2,
 					Stacktraces:        0x0,
 					StacktraceNodes:    0x5,
 					StacktraceMaxDepth: 0x0,
@@ -134,7 +140,7 @@ func Test_Writer_OpenIndexFile(t *testing.T) {
 				},
 			},
 		},
-		CRC: 0x7a77bb4,
+		CRC: 2954946361,
 	}
 
 	assert.Equal(t, expected, idx)

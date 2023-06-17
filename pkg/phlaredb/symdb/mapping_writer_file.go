@@ -29,7 +29,7 @@ func NewWriter(dir string) *Writer {
 	}
 }
 
-func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
+func (w *Writer) writeStacktraceChunk(ci int, c *stacktraceChunk) (err error) {
 	if w.scd == nil {
 		if err = w.createStacktracesFile(); err != nil {
 			return err
@@ -39,6 +39,7 @@ func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 		Offset:             w.scd.w.offset,
 		Size:               0, // Set later.
 		MappingName:        c.mapping.name,
+		ChunkIndex:         uint32(ci),
 		Stacktraces:        0, // TODO
 		StacktraceNodes:    c.tree.len(),
 		StacktraceMaxDepth: 0, // TODO

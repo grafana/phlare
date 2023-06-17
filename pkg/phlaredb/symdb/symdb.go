@@ -121,8 +121,8 @@ func (s *SymDB) Flush() error {
 	}
 	s.m.RUnlock()
 	for _, v := range m {
-		for _, c := range v.stacktraceChunks {
-			if err := s.writer.writeStacktraceChunk(c); err != nil {
+		for ci, c := range v.stacktraceChunks {
+			if err := s.writer.writeStacktraceChunk(ci, c); err != nil {
 				return err
 			}
 		}
