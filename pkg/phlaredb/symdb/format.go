@@ -77,7 +77,9 @@ type IndexFile struct {
 	Header Header
 	TOC    TOC
 
-	// Version-specific.
+	// Version-specific parts.
+
+	// StacktraceChunkHeaders are sorted by MappingName in ascending order.
 	StacktraceChunkHeaders StacktraceChunkHeaders
 
 	CRC uint32
@@ -194,6 +196,18 @@ func (h *StacktraceChunkHeaders) UnmarshalBinary(b []byte) error {
 		h.Entries[i].unmarshal(b[off : off+stacktraceChunkHeaderSize])
 	}
 	return nil
+}
+
+func (h *StacktraceChunkHeaders) Len() int {
+	return len(h.Entries)
+}
+
+func (h *StacktraceChunkHeaders) Less(i, j int) bool {
+	return h.Entries[i].MappingName < h.Entries[j].MappingName
+}
+
+func (h *StacktraceChunkHeaders) Swap(i, j int) {
+	h.Entries[j].MappingName, h.Entries[j].MappingName = h.Entries[i].MappingName, h.Entries[i].MappingName
 }
 
 type StacktraceChunkHeader struct {

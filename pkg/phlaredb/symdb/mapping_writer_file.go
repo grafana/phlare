@@ -114,7 +114,7 @@ func newFileWriter(name string) (*fileWriter, error) {
 	}
 	// There is no particular reason to use
 	// a buffer larger than the default 4K.
-	b := bufio.NewWriterSize(f, 4<<10)
+	b := bufio.NewWriterSize(f, 4096)
 	w := withWriterOffset(b, 0)
 	fw := fileWriter{
 		name: name,

@@ -1,7 +1,6 @@
 package symdb
 
 import (
-	"sort"
 	"sync"
 )
 
@@ -121,9 +120,6 @@ func (s *SymDB) Flush() error {
 		i++
 	}
 	s.m.RUnlock()
-	sort.Slice(m, func(i, j int) bool {
-		return m[i].name < m[j].name
-	})
 	for _, v := range m {
 		for _, c := range v.stacktraceChunks {
 			if err := s.writer.writeStacktraceChunk(c); err != nil {
