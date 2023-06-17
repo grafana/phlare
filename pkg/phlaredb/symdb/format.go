@@ -5,13 +5,18 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"unsafe"
 )
 
-// The file contains version-agnostic wire format implementation of
-// the symbols database file.
+// The database is a collection of files. The only file that is guaranteed
+// to be present is the index file: it indicates the version of the format,
+// and the structure of the database contents. The file is supposed to be
+// read into memory entirely and opened with a OpenIndexFile call.
 //
-// Layout (two-pass write):
+// Big endian order is used unless otherwise noted.
+//
+// Layout of the index file (single-pass write):
 //
 // [Header] Header defines the format version and denotes the content type.
 //
@@ -20,21 +25,40 @@ import (
 //
 // [Data]   Data is an arbitrary structured section. The exact structure is
 //          defined by the TOC and Header (version, flags, etc).
+//
+// [CRC32]  Checksum.
+//
 
-const headerSize = int(unsafe.Sizeof(Header{}))
+const (
+	DefaultDirName      = "symbols"
+	IndexFileName       = "index.symdb" // "index.symdb"
+	StacktracesFileName = "stacktraces.symdb"
+)
 
-const FormatV1 = 1
+const HeaderSize = int(unsafe.Sizeof(Header{}))
+
+const (
+	_ = iota
+
+	FormatV1
+	unknownVersion
+)
 
 const (
 	// TOC entries are version-specific.
 	tocEntryStacktraceChunkHeaders = iota
-	tocEntries                     = 1
+	tocEntries
 )
 
 // https://en.wikipedia.org/wiki/List_of_file_signatures
 var symdbMagic = [4]byte{'s', 'y', 'm', '1'}
 
 var castagnoli = crc32.MakeTable(crc32.Castagnoli)
+
+const (
+	checksumSize        = 4
+	indexChecksumOffset = -checksumSize
+)
 
 var (
 	ErrInvalidSize    = &FormatError{fmt.Errorf("invalid size")}
@@ -49,46 +73,50 @@ func (e *FormatError) Error() string {
 	return e.err.Error()
 }
 
+type IndexFile struct {
+	Header Header
+	TOC    TOC
+
+	// Version-specific.
+	StacktraceChunkHeaders StacktraceChunkHeaders
+
+	CRC uint32
+}
+
 type Header struct {
 	Magic    [4]byte
 	Version  uint32
-	Reserved [20]byte // Reserved for future use; padding to 32.
-	CRC      uint32   // CRC of the header.
+	Reserved [8]byte // Reserved for future use.
 }
 
 func (h *Header) MarshalBinary() ([]byte, error) {
-	b := make([]byte, headerSize)
+	b := make([]byte, HeaderSize)
 	copy(b[0:4], h.Magic[:])
 	binary.BigEndian.PutUint32(b[4:8], h.Version)
-	binary.BigEndian.PutUint32(b[headerSize-4:], crc32.Checksum(b[:headerSize-4], castagnoli))
+	binary.BigEndian.PutUint32(b[HeaderSize-4:], crc32.Checksum(b[:HeaderSize-4], castagnoli))
 	return b, nil
 }
 
 func (h *Header) UnmarshalBinary(b []byte) error {
-	if len(b) != headerSize {
+	if len(b) != HeaderSize {
 		return ErrInvalidSize
-	}
-	if h.CRC = binary.BigEndian.Uint32(b[headerSize-4:]); h.CRC != crc32.Checksum(b[:headerSize-4], castagnoli) {
-		return ErrInvalidCRC
 	}
 	if copy(h.Magic[:], b[0:4]); !bytes.Equal(h.Magic[:], symdbMagic[:]) {
 		return ErrInvalidMagic
 	}
-	h.Version = binary.BigEndian.Uint32(b[4:8])
+	// Reserved space may change from version to version.
+	if h.Version = binary.BigEndian.Uint32(b[4:8]); h.Version >= unknownVersion {
+		return ErrUnknownVersion
+	}
 	return nil
 }
 
 // Table of contents.
 
-const (
-	tocEntrySize     = int(unsafe.Sizeof(TOCEntry{}))
-	tocSizeAlignment = 16 // Reserved + CRC.
-)
+const tocEntrySize = int(unsafe.Sizeof(TOCEntry{}))
 
 type TOC struct {
-	Entries  []TOCEntry
-	Reserved [12]byte
-	CRC      uint32
+	Entries []TOCEntry
 }
 
 type TOCEntry struct {
@@ -97,28 +125,23 @@ type TOCEntry struct {
 }
 
 func (toc *TOC) Size() int {
-	return tocEntrySize*tocEntries + tocSizeAlignment
+	return tocEntrySize * tocEntries
 }
 
 func (toc *TOC) MarshalBinary() ([]byte, error) {
-	b := make([]byte, len(toc.Entries)*tocEntrySize+tocSizeAlignment)
+	b := make([]byte, len(toc.Entries)*tocEntrySize)
 	for i := range toc.Entries {
 		toc.Entries[i].marshal(b[i*tocEntrySize:])
 	}
-	binary.BigEndian.PutUint32(b[len(b)-4:], crc32.Checksum(b[:len(b)-4], castagnoli))
 	return b, nil
 }
 
 func (toc *TOC) UnmarshalBinary(b []byte) error {
 	s := len(b)
-	entriesSize := s - tocSizeAlignment
-	if entriesSize < tocEntrySize || entriesSize%tocEntrySize > 0 {
+	if s < tocEntrySize || s%tocEntrySize > 0 {
 		return ErrInvalidSize
 	}
-	if toc.CRC = binary.BigEndian.Uint32(b[s-4:]); toc.CRC != crc32.Checksum(b[:s-4], castagnoli) {
-		return ErrInvalidCRC
-	}
-	toc.Entries = make([]TOCEntry, entriesSize/tocEntrySize)
+	toc.Entries = make([]TOCEntry, s/tocEntrySize)
 	for i := range toc.Entries {
 		off := i * tocEntrySize
 		toc.Entries[i].unmarshal(b[off : off+tocEntrySize])
@@ -139,45 +162,33 @@ func (h *TOCEntry) unmarshal(b []byte) {
 // Types below define the Data section structure.
 // Currently, the data section is as follows:
 //
-//   []StacaktraceChunkHeader
-//   []StacaktraceChunkData
+//  1. StacktraceChunkHeaders // v1.
 
-const (
-	stacktraceChunkHeaderSize       = int(unsafe.Sizeof(StacktraceChunkHeader{}))
-	stacktraceChunkHeadersAlignment = 32
-)
+const stacktraceChunkHeaderSize = int(unsafe.Sizeof(StacktraceChunkHeader{}))
 
 type StacktraceChunkHeaders struct {
 	Entries []StacktraceChunkHeader
-
-	_   [28]byte // Reserved. Aligned to 32.
-	CRC uint32
 }
 
 func (h *StacktraceChunkHeaders) Size() int64 {
-	return int64(stacktraceChunkHeaderSize*len(h.Entries) + stacktraceChunkHeadersAlignment)
+	return int64(stacktraceChunkHeaderSize * len(h.Entries))
 }
 
 func (h *StacktraceChunkHeaders) MarshalBinary() ([]byte, error) {
-	b := make([]byte, len(h.Entries)*stacktraceChunkHeaderSize+stacktraceChunkHeadersAlignment)
+	b := make([]byte, len(h.Entries)*stacktraceChunkHeaderSize)
 	for i := range h.Entries {
 		off := i * stacktraceChunkHeaderSize
 		h.Entries[i].marshal(b[off : off+stacktraceChunkHeaderSize])
 	}
-	h.CRC = crc32.Checksum(b[stacktraceChunkHeaderSize-4:], castagnoli)
-	binary.BigEndian.PutUint32(b[stacktraceChunkHeaderSize-4:], h.CRC)
 	return b, nil
 }
 
 func (h *StacktraceChunkHeaders) UnmarshalBinary(b []byte) error {
-	if s := len(b); s < stacktraceChunkHeadersAlignment || s%stacktraceChunkHeaderSize > 0 {
+	s := len(b)
+	if s%stacktraceChunkHeaderSize > 0 {
 		return ErrInvalidSize
 	}
-	h.CRC = binary.BigEndian.Uint32(b[stacktraceChunkHeaderSize-4:])
-	if crc32.Checksum(b[stacktraceChunkHeaderSize-4:], castagnoli) != h.CRC {
-		return ErrInvalidCRC
-	}
-	h.Entries = make([]StacktraceChunkHeader, (len(b)-stacktraceChunkHeadersAlignment)/stacktraceChunkHeaderSize)
+	h.Entries = make([]StacktraceChunkHeader, s/stacktraceChunkHeaderSize)
 	for i := range h.Entries {
 		off := i * stacktraceChunkHeaderSize
 		h.Entries[i].unmarshal(b[off : off+stacktraceChunkHeaderSize])
@@ -197,7 +208,7 @@ type StacktraceChunkHeader struct {
 	StacktraceMaxNodes uint32 // Max number of nodes at the time of the chunk creation.
 
 	_   [20]byte // Padding. 64 bytes per chunk header.
-	CRC uint32   // Checksum of the chunk data.
+	CRC uint32   // Checksum of the chunk data [Offset:Size).
 }
 
 func (h *StacktraceChunkHeader) marshal(b []byte) {
@@ -218,4 +229,76 @@ func (h *StacktraceChunkHeader) unmarshal(b []byte) {
 	h.StacktraceNodes = binary.BigEndian.Uint32(b[28:32])
 	h.StacktraceMaxDepth = binary.BigEndian.Uint32(b[32:36])
 	h.StacktraceMaxNodes = binary.BigEndian.Uint32(b[36:40])
+}
+
+func OpenIndexFile(b []byte) (f IndexFile, err error) {
+	s := len(b)
+	if !f.assertSizeIsValid(b) {
+		return f, ErrInvalidSize
+	}
+	f.CRC = binary.BigEndian.Uint32(b[s+indexChecksumOffset:])
+	if f.CRC != crc32.Checksum(b[:s+indexChecksumOffset], castagnoli) {
+		return f, ErrInvalidCRC
+	}
+	if err = f.Header.UnmarshalBinary(b[:HeaderSize]); err != nil {
+		return f, fmt.Errorf("unmarshal header: %w", err)
+	}
+	if err = f.TOC.UnmarshalBinary(b[HeaderSize:f.dataOffset()]); err != nil {
+		return f, fmt.Errorf("unmarshal table of contents: %w", err)
+	}
+
+	// Version-specific data section.
+	switch f.Header.Version {
+	default:
+		// Must never happen: the version is verified
+		// when the file header is read.
+		panic("bug: invalid version")
+	case FormatV1:
+		sch := f.TOC.Entries[tocEntryStacktraceChunkHeaders]
+		d := b[sch.Offset : sch.Offset+sch.Size]
+		if err = f.StacktraceChunkHeaders.UnmarshalBinary(d); err != nil {
+			return f, fmt.Errorf("unmarshal chunk header: %w", err)
+		}
+	}
+
+	return f, nil
+}
+
+func (f *IndexFile) assertSizeIsValid(b []byte) bool {
+	return len(b) >= HeaderSize+f.TOC.Size()+checksumSize
+}
+
+func (f *IndexFile) dataOffset() int {
+	return HeaderSize + f.TOC.Size()
+}
+
+func (f *IndexFile) WriteTo(dst io.Writer) (n int64, err error) {
+	checksum := crc32.New(castagnoli)
+	w := withWriterOffset(io.MultiWriter(dst, checksum), 0)
+	headerBytes, _ := f.Header.MarshalBinary()
+	if _, err = w.Write(headerBytes); err != nil {
+		return w.offset, fmt.Errorf("header write: %w", err)
+	}
+
+	toc := TOC{Entries: make([]TOCEntry, tocEntries)}
+	toc.Entries[tocEntryStacktraceChunkHeaders] = TOCEntry{
+		Offset: int64(f.dataOffset()),
+		Size:   f.StacktraceChunkHeaders.Size(),
+	}
+	tocBytes, _ := toc.MarshalBinary()
+	if _, err = w.Write(tocBytes); err != nil {
+		return w.offset, fmt.Errorf("toc write: %w", err)
+	}
+
+	sch, _ := f.StacktraceChunkHeaders.MarshalBinary()
+	if _, err = w.Write(sch); err != nil {
+		return w.offset, fmt.Errorf("stacktrace chunk headers: %w", err)
+	}
+
+	f.CRC = checksum.Sum32()
+	if err = binary.Write(dst, binary.BigEndian, f.CRC); err != nil {
+		return w.offset, fmt.Errorf("checksum write: %w", err)
+	}
+
+	return w.offset, nil
 }

@@ -89,14 +89,14 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 		description string
 		maxNodes    uint32
 		stacktraces []uint32
-		expected    []stacktraceIDRange
+		expected    []StacktracesRange
 	}
 
 	testCases := []testCase{
 		{
 			description: "no limit",
 			stacktraces: []uint32{234, 1234, 2345},
-			expected: []stacktraceIDRange{
+			expected: []StacktracesRange{
 				{chunk: 0, ids: []uint32{234, 1234, 2345}},
 			},
 		},
@@ -104,7 +104,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			description: "one chunk",
 			maxNodes:    4,
 			stacktraces: []uint32{1, 2, 3},
-			expected: []stacktraceIDRange{
+			expected: []StacktracesRange{
 				{chunk: 0, ids: []uint32{1, 2, 3}},
 			},
 		},
@@ -112,7 +112,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			description: "one chunk shifted",
 			maxNodes:    4,
 			stacktraces: []uint32{401, 402},
-			expected: []stacktraceIDRange{
+			expected: []StacktracesRange{
 				{chunk: 100, ids: []uint32{1, 2}},
 			},
 		},
@@ -122,7 +122,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			stacktraces: []uint32{1, 2, 5, 7, 11, 13, 14, 15, 17, 41, 42, 43, 83, 85, 86},
 			// reminder: []uint32{1, 2, 1, 3,  3,  1,  2,  3,  1,  1,  2,  3,  3,  1,  2},
 			//         : []uint32{0, 0, 1, 1,  2,  3,  3,  3,  4, 10, 10, 10, 20, 21, 21},
-			expected: []stacktraceIDRange{
+			expected: []StacktracesRange{
 				{chunk: 0, ids: []uint32{1, 2}},
 				{chunk: 1, ids: []uint32{1, 3}},
 				{chunk: 2, ids: []uint32{3}},
@@ -137,7 +137,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 			description: "multiple shards exact",
 			maxNodes:    4,
 			stacktraces: []uint32{1, 2, 5, 7, 11, 13, 14, 15, 17, 41, 42, 43, 83, 85, 86, 87},
-			expected: []stacktraceIDRange{
+			expected: []StacktracesRange{
 				{chunk: 0, ids: []uint32{1, 2}},
 				{chunk: 1, ids: []uint32{1, 3}},
 				{chunk: 2, ids: []uint32{3}},
@@ -152,7 +152,7 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			assert.Equal(t, tc.expected, splitStacktraces(tc.stacktraces, tc.maxNodes))
+			assert.Equal(t, tc.expected, SplitStacktraces(tc.stacktraces, tc.maxNodes))
 		})
 	}
 }

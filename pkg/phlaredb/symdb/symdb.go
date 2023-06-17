@@ -1,6 +1,7 @@
 package symdb
 
 import (
+	"sort"
 	"sync"
 )
 
@@ -21,11 +22,9 @@ type StacktracesConfig struct {
 	MaxNodesPerChunk uint32
 }
 
-const defaultDirName = "symbols"
-
 func DefaultConfig() *Config {
 	return &Config{
-		Dir: defaultDirName,
+		Dir: DefaultDirName,
 		Stacktraces: StacktracesConfig{
 			// A million of nodes ensures predictable
 			// memory consumption, although causes a
@@ -84,10 +83,11 @@ func (s *SymDB) mapping(mappingName uint64) *inMemoryMapping {
 		name:               mappingName,
 		maxNodesPerChunk:   s.config.Stacktraces.MaxNodesPerChunk,
 		stacktraceHashToID: make(map[uint64]uint32, defaultStacktraceTreeSize/2),
-		stacktraceChunks: []*stacktraceChunk{{
-			tree: newStacktraceTree(defaultStacktraceTreeSize),
-		}},
 	}
+	p.stacktraceChunks = append(p.stacktraceChunks, &stacktraceChunk{
+		tree:    newStacktraceTree(defaultStacktraceTreeSize),
+		mapping: p,
+	})
 	s.mappings[mappingName] = p
 	s.m.Unlock()
 	return p
@@ -113,6 +113,23 @@ func (s *SymDB) Size() uint64 { return 0 }
 func (s *SymDB) MemorySize() uint64 { return 0 }
 
 func (s *SymDB) Flush() error {
-	// TODO(kolesnikovae): Write all the files to the directory and dispose allocated resources.
-	return nil
+	s.m.RLock()
+	m := make([]*inMemoryMapping, len(s.mappings))
+	var i int
+	for _, v := range s.mappings {
+		m[i] = v
+		i++
+	}
+	s.m.RUnlock()
+	sort.Slice(m, func(i, j int) bool {
+		return m[i].name < m[j].name
+	})
+	for _, v := range m {
+		for _, c := range v.stacktraceChunks {
+			if err := s.writer.writeStacktraceChunk(c); err != nil {
+				return err
+			}
+		}
+	}
+	return s.writer.Flush()
 }

@@ -102,6 +102,10 @@ func (t *stacktraceTree) resolve(dst []int32, id uint32) []int32 {
 	return dst
 }
 
+func (t *stacktraceTree) merge(*stacktraceTree) {
+	// TODO(kolesnikovae): implement.
+}
+
 func (t *stacktraceTree) WriteTo(dst io.Writer) (int64, error) {
 	var m int64
 	var prev node
