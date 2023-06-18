@@ -223,27 +223,39 @@ type StacktraceChunkHeader struct {
 	Offset int64 // Relative to the mapping offset.
 	Size   int64
 
-	MappingName uint64 // MappingName the chunk refers to.
-	ChunkIndex  uint32
+	MappingName   uint64 // MappingName the chunk refers to.
+	ChunkIndex    uint16
+	ChunkEncoding ChunkEncoding
+	_             [5]byte // Reserved.
 
 	Stacktraces        uint32 // Number of unique stack traces in the chunk.
 	StacktraceNodes    uint32 // Number of nodes in the stacktrace tree.
 	StacktraceMaxDepth uint32 // Max stack trace depth in the tree.
 	StacktraceMaxNodes uint32 // Max number of nodes at the time of the chunk creation.
 
-	_   [16]byte // Padding. 64 bytes per chunk header.
+	_   [12]byte // Padding. 64 bytes per chunk header.
 	CRC uint32   // Checksum of the chunk data [Offset:Size).
 }
+
+type ChunkEncoding byte
+
+const (
+	_ ChunkEncoding = iota
+	ChunkEncodingGroupVarint
+)
 
 func (h *StacktraceChunkHeader) marshal(b []byte) {
 	binary.BigEndian.PutUint64(b[0:8], uint64(h.Offset))
 	binary.BigEndian.PutUint64(b[8:16], uint64(h.Size))
 	binary.BigEndian.PutUint64(b[16:24], h.MappingName)
-	binary.BigEndian.PutUint32(b[24:28], h.ChunkIndex)
-	binary.BigEndian.PutUint32(b[28:32], h.Stacktraces)
-	binary.BigEndian.PutUint32(b[32:36], h.StacktraceNodes)
-	binary.BigEndian.PutUint32(b[36:40], h.StacktraceMaxDepth)
-	binary.BigEndian.PutUint32(b[40:44], h.StacktraceMaxNodes)
+	binary.BigEndian.PutUint16(b[24:26], h.ChunkIndex)
+	b[27] = byte(h.ChunkEncoding)
+	// 5 bytes reserved.
+	binary.BigEndian.PutUint32(b[32:36], h.Stacktraces)
+	binary.BigEndian.PutUint32(b[36:40], h.StacktraceNodes)
+	binary.BigEndian.PutUint32(b[40:44], h.StacktraceMaxDepth)
+	binary.BigEndian.PutUint32(b[44:48], h.StacktraceMaxNodes)
+	// 12 bytes reserved.
 	binary.BigEndian.PutUint32(b[60:64], h.CRC)
 }
 
@@ -251,11 +263,14 @@ func (h *StacktraceChunkHeader) unmarshal(b []byte) {
 	h.Offset = int64(binary.BigEndian.Uint64(b[0:8]))
 	h.Size = int64(binary.BigEndian.Uint64(b[8:16]))
 	h.MappingName = binary.BigEndian.Uint64(b[16:24])
-	h.ChunkIndex = binary.BigEndian.Uint32(b[24:28])
-	h.Stacktraces = binary.BigEndian.Uint32(b[28:32])
-	h.StacktraceNodes = binary.BigEndian.Uint32(b[32:36])
-	h.StacktraceMaxDepth = binary.BigEndian.Uint32(b[36:40])
-	h.StacktraceMaxNodes = binary.BigEndian.Uint32(b[40:44])
+	h.ChunkIndex = binary.BigEndian.Uint16(b[24:26])
+	h.ChunkEncoding = ChunkEncoding(b[27])
+	// 5 bytes reserved.
+	h.Stacktraces = binary.BigEndian.Uint32(b[32:36])
+	h.StacktraceNodes = binary.BigEndian.Uint32(b[36:40])
+	h.StacktraceMaxDepth = binary.BigEndian.Uint32(b[40:44])
+	h.StacktraceMaxNodes = binary.BigEndian.Uint32(b[44:48])
+	// 12 bytes reserved.
 	h.CRC = binary.BigEndian.Uint32(b[60:64])
 }
 

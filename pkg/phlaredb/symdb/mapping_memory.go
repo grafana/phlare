@@ -219,13 +219,15 @@ func (r *stacktraceResolverMemory) ResolveStacktracesChunk(dst StacktraceInserte
 	c := r.mapping.stacktraceChunkForRead(int(sr.chunk))
 	t := stacktraceTree{nodes: c.tree.nodes}
 	// tree.resolve is thread safe: only the parent node index (p)
-	// and the reference to location (ref) node fields are accessed,
+	// and the reference to location (r) node fields are accessed,
 	// which are never modified after insertion.
 	//
 	// Nevertheless, the node slice header should be copied to avoid
 	// races when the slice grows: in the worst case, the underlying
 	// capacity will be retained and thus not be eligible for GC during
 	// the call.
+	// TODO(kolesnikovae): Actually, currently entire
+	//  node gets rewritten. Needs fixing.
 	r.mapping.stacktraceMutex.RUnlock()
 	s := stacktraceLocations.get()
 	// Restore the original stacktrace ID.

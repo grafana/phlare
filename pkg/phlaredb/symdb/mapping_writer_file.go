@@ -39,7 +39,8 @@ func (w *Writer) writeStacktraceChunk(ci int, c *stacktraceChunk) (err error) {
 		Offset:             w.scd.w.offset,
 		Size:               0, // Set later.
 		MappingName:        c.mapping.name,
-		ChunkIndex:         uint32(ci),
+		ChunkIndex:         uint16(ci),
+		ChunkEncoding:      ChunkEncodingGroupVarint,
 		Stacktraces:        0, // TODO
 		StacktraceNodes:    c.tree.len(),
 		StacktraceMaxDepth: 0, // TODO

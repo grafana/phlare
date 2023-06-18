@@ -197,9 +197,8 @@ func (r *stacktracesResolve) resolveStacktracesChunk(dst StacktraceInserter, sr 
 type stacktraceChunkFileReader struct {
 	reader *Reader
 	header StacktraceChunkHeader
-	// Concurrency model of the reader is as follows:
-	m    sync.Mutex
-	tree *parentPointerTree
+	m      sync.Mutex
+	tree   *parentPointerTree
 }
 
 func (c *stacktraceChunkFileReader) reset() {
@@ -223,15 +222,12 @@ func (c *stacktraceChunkFileReader) fetch(ctx context.Context) (_ *parentPointer
 		err = multierror.New(err, rc.Close()).Err()
 	}()
 
-	// NOTE(kolesnikovae): Pool of node chunks could reduce the
-	//   alloc size, but it may badly affect memory locality.
+	// NOTE(kolesnikovae): Pool of node chunks could reduce
+	//   the alloc size, but it may affect memory locality.
 	//   Although, properly aligned chunks of, say, 1-4K nodes
 	//   which is 8-32KiB respectively, should not make things
 	//   much worse than they are. Worth experimenting.
-	t := &parentPointerTree{
-		// TODO: Init with size.
-		nodes: make([]pptNode, 0, c.header.StacktraceNodes),
-	}
+	t := newParentPointerTree(c.header.StacktraceNodes)
 
 	// We unmarshal the tree speculatively, before validating
 	// the checksum. Even random bytes can be unmarshalled to
@@ -239,19 +235,16 @@ func (c *stacktraceChunkFileReader) fetch(ctx context.Context) (_ *parentPointer
 	// to verify the correctness of the data.
 	crc := crc32.New(castagnoli)
 	tee := io.TeeReader(rc, crc)
+
 	// Consider pooling the buffer.
 	buf := bufio.NewReaderSize(tee, c.reader.chunkFetchBufferSize)
-
-	// TODO(kolesnikovae): Stream decoding.
-	b := make([]byte, c.header.Size)
-	if _, err = io.ReadFull(buf, b); err != nil {
-		return nil, err
+	if _, err = t.ReadFrom(buf); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal stack treaces: %w", err)
 	}
-
-	t.unmarshal(b)
 	if c.header.CRC != crc.Sum32() {
 		return nil, ErrInvalidCRC
 	}
+
 	c.tree = t
 	return t, nil
 }
