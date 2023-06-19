@@ -1,6 +1,7 @@
 package symdb
 
 import (
+	"context"
 	"hash/maphash"
 	"io"
 	"reflect"
@@ -53,9 +54,9 @@ func (b *inMemoryMapping) StacktraceResolver() StacktraceResolver {
 // stacktraceChunkForInsert returns a chunk for insertion:
 // if the existing one has capacity, or a new one, if the former is full.
 // Must be called with the stracktraces mutex write lock held.
-func (b *inMemoryMapping) stacktraceChunkForInsert() *stacktraceChunk {
+func (b *inMemoryMapping) stacktraceChunkForInsert(x int) *stacktraceChunk {
 	c := b.stacktraceChunks[len(b.stacktraceChunks)-1]
-	if n := c.tree.len(); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
+	if n := c.tree.len() + uint32(x); b.maxNodesPerChunk > 0 && n >= b.maxNodesPerChunk {
 		c = &stacktraceChunk{
 			mapping: b,
 			tree:    newStacktraceTree(defaultStacktraceTreeSize),
@@ -145,7 +146,7 @@ func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*v1.Stacktrace) 
 			// If we're close to the max nodes limit and can
 			// potentially exceed it, we take the next chunk,
 			// even if there are some space.
-			a.chunk = a.mapping.stacktraceChunkForInsert()
+			a.chunk = a.mapping.stacktraceChunkForInsert(len(x))
 			t, j = a.chunk.tree, a.chunk.stid
 		}
 
@@ -199,10 +200,11 @@ func (p *stacktraceLocationsPool) put(x []int32) {
 	stacktraceLocations.Put(x)
 }
 
-func (r *stacktraceResolverMemory) ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32) {
+func (r *stacktraceResolverMemory) ResolveStacktraces(_ context.Context, dst StacktraceInserter, stacktraces []uint32) error {
 	for _, sr := range SplitStacktraces(stacktraces, r.mapping.maxNodesPerChunk) {
 		r.ResolveStacktracesChunk(dst, sr)
 	}
+	return nil
 }
 
 // NOTE(kolesnikovae):
@@ -217,13 +219,15 @@ func (r *stacktraceResolverMemory) ResolveStacktracesChunk(dst StacktraceInserte
 	c := r.mapping.stacktraceChunkForRead(int(sr.chunk))
 	t := stacktraceTree{nodes: c.tree.nodes}
 	// tree.resolve is thread safe: only the parent node index (p)
-	// and the reference to location (ref) node fields are accessed,
+	// and the reference to location (r) node fields are accessed,
 	// which are never modified after insertion.
 	//
 	// Nevertheless, the node slice header should be copied to avoid
 	// races when the slice grows: in the worst case, the underlying
 	// capacity will be retained and thus not be eligible for GC during
 	// the call.
+	// TODO(kolesnikovae): Actually, currently entire
+	//  node gets rewritten. Needs fixing.
 	r.mapping.stacktraceMutex.RUnlock()
 	s := stacktraceLocations.get()
 	// Restore the original stacktrace ID.
@@ -254,7 +258,7 @@ func SplitStacktraces(s []uint32, n uint32) []StacktracesRange {
 		// Fast path, just one chunk: the highest stack trace ID
 		// is less than the chunk size, or the size is not limited.
 		// It's expected that in most cases we'll end up here.
-		return []StacktracesRange{{ids: s}}
+		return []StacktracesRange{{m: n, ids: s}}
 	}
 
 	var (

@@ -1,6 +1,10 @@
 package symdb
 
-import "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+import (
+	"context"
+
+	"github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+)
 
 // Mapping is a binary that is part of the program during the profile
 // collection. https://github.com/google/pprof/blob/main/proto/README.md
@@ -48,7 +52,7 @@ type StacktraceResolver interface {
 	// array of locations.
 	//
 	// Stacktraces slice might be modified during the call.
-	ResolveStacktraces(dst StacktraceInserter, stacktraces []uint32)
+	ResolveStacktraces(ctx context.Context, dst StacktraceInserter, stacktraces []uint32) error
 	Release()
 }
 

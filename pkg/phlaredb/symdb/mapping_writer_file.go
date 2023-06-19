@@ -29,7 +29,7 @@ func NewWriter(dir string) *Writer {
 	}
 }
 
-func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
+func (w *Writer) writeStacktraceChunk(ci int, c *stacktraceChunk) (err error) {
 	if w.scd == nil {
 		if err = w.createStacktracesFile(); err != nil {
 			return err
@@ -39,6 +39,8 @@ func (w *Writer) writeStacktraceChunk(c *stacktraceChunk) (err error) {
 		Offset:             w.scd.w.offset,
 		Size:               0, // Set later.
 		MappingName:        c.mapping.name,
+		ChunkIndex:         uint16(ci),
+		ChunkEncoding:      ChunkEncodingGroupVarint,
 		Stacktraces:        0, // TODO
 		StacktraceNodes:    c.tree.len(),
 		StacktraceMaxDepth: 0, // TODO
@@ -114,7 +116,7 @@ func newFileWriter(name string) (*fileWriter, error) {
 	}
 	// There is no particular reason to use
 	// a buffer larger than the default 4K.
-	b := bufio.NewWriterSize(f, 4<<10)
+	b := bufio.NewWriterSize(f, 4096)
 	w := withWriterOffset(b, 0)
 	fw := fileWriter{
 		name: name,
@@ -126,7 +128,7 @@ func newFileWriter(name string) (*fileWriter, error) {
 }
 
 func (f *fileWriter) Write(p []byte) (n int, err error) {
-	return f.buf.Write(p)
+	return f.w.Write(p)
 }
 
 func (f *fileWriter) sync() (err error) {

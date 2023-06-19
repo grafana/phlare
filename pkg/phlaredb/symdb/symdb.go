@@ -1,7 +1,6 @@
 package symdb
 
 import (
-	"sort"
 	"sync"
 )
 
@@ -54,8 +53,8 @@ func (s *SymDB) MappingWriter(mappingName uint64) MappingWriter {
 	return s.mapping(mappingName)
 }
 
-func (s *SymDB) MappingReader(mappingName uint64) MappingReader {
-	return s.mapping(mappingName)
+func (s *SymDB) MappingReader(mappingName uint64) (MappingReader, bool) {
+	return s.lookupMapping(mappingName)
 }
 
 func (s *SymDB) lookupMapping(mappingName uint64) (*inMemoryMapping, bool) {
@@ -121,12 +120,9 @@ func (s *SymDB) Flush() error {
 		i++
 	}
 	s.m.RUnlock()
-	sort.Slice(m, func(i, j int) bool {
-		return m[i].name < m[j].name
-	})
 	for _, v := range m {
-		for _, c := range v.stacktraceChunks {
-			if err := s.writer.writeStacktraceChunk(c); err != nil {
+		for ci, c := range v.stacktraceChunks {
+			if err := s.writer.writeStacktraceChunk(ci, c); err != nil {
 				return err
 			}
 		}
