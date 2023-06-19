@@ -83,7 +83,7 @@ type PhlareDB struct {
 	// flushLock serializes flushes. Only one flush at a time
 	// is allowed.
 	flushLock sync.Mutex
-	headInit  chan struct{} // Closed every time a new head is initialized.
+	headInit  chan struct{} // Closes every time a new head is initialized.
 
 	blockQuerier *BlockQuerier
 	limiter      TenantLimiter
@@ -184,7 +184,7 @@ func (f *PhlareDB) initHead() (err error) {
 	return nil
 }
 
-func (f *PhlareDB) headFlushCh() <-chan struct{} {
+func (f *PhlareDB) headFlushCh() chan struct{} {
 	f.headLock.RLock()
 	defer f.headLock.RUnlock()
 	if h := f.head; h != nil {
@@ -205,12 +205,12 @@ func (f *PhlareDB) evictBlock(e *blockEviction) {
 }
 
 func (f *PhlareDB) Close() error {
-	errs := multierror.New()
-	if f.head != nil {
-		errs.Add(f.head.Close())
-	}
 	close(f.stopCh)
 	f.wg.Wait()
+	errs := multierror.New()
+	if f.head != nil {
+		errs.Add(f.head.Flush(f.phlarectx))
+	}
 	close(f.evictCh)
 	if err := f.blockQuerier.Close(); err != nil {
 		errs.Add(err)
@@ -500,12 +500,12 @@ func (f *PhlareDB) Flush(ctx context.Context) (err error) {
 	//  operation, consider making the lock more selective and block only
 	//  queries that target the old head.
 	f.headLock.Lock()
-	defer f.headLock.Unlock()
 	// Now that there are no in-flight queries we can move the head.
 	err = f.oldHead.Move()
 	// Propagate the new block to blockQuerier.
 	f.blockQuerier.AddBlockQuerierByMeta(f.oldHead.meta)
 	f.oldHead = nil
+	f.headLock.Unlock()
 	// The old in-memory head is not available to queries from now on.
 	return err
 }

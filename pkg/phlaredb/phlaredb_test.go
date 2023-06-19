@@ -550,3 +550,51 @@ func Test_QueryNotInitializedHead(t *testing.T) {
 		cancel()
 	})
 }
+
+func Test_FlushNotInitializedHead(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
+	db, err := New(context.Background(), Config{
+		DataPath: t.TempDir(),
+	}, NoLimit)
+
+	var (
+		end   = time.Unix(0, int64(time.Hour))
+		start = end.Add(-time.Minute)
+		step  = 15 * time.Second
+	)
+
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
+
+	require.Equal(t, db.headFlushCh(), db.stopCh)
+	ingestProfiles(t, db, cpuProfileGenerator, start.UnixNano(), end.UnixNano(), step,
+		&typesv1.LabelPair{Name: "namespace", Value: "my-namespace"},
+		&typesv1.LabelPair{Name: "pod", Value: "my-pod"},
+	)
+
+	ctx := context.Background()
+	c1 := db.headFlushCh()
+	require.NotEqual(t, db.stopCh, c1)
+	require.NoError(t, db.Flush(ctx))
+
+	// After flush and before the next head is initialized, stopCh is expected.
+	c2 := db.headFlushCh()
+	require.Equal(t, db.stopCh, c2)
+
+	// Once data is getting in, the head flush channel is updated.
+	require.Equal(t, db.headFlushCh(), db.stopCh)
+	ingestProfiles(t, db, cpuProfileGenerator, start.UnixNano(), end.UnixNano(), step,
+		&typesv1.LabelPair{Name: "namespace", Value: "my-namespace"},
+		&typesv1.LabelPair{Name: "pod", Value: "my-pod"},
+	)
+	c3 := db.headFlushCh()
+	require.NotEqual(t, c2, c3)
+	require.NotEqual(t, db.stopCh, c3)
+	require.NoError(t, db.Flush(ctx))
+
+	require.Equal(t, db.stopCh, db.headFlushCh())
+	require.NoError(t, db.Flush(ctx)) // Nil head flush does not cause errors.
+}
