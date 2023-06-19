@@ -45,16 +45,24 @@ func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[
 }
 
 type locationsIdsByStacktraceID struct {
-	byStacktraceID map[int64][]uint64
+	byStacktraceID map[int64][]int32
 	ids            uniqueIDs[struct{}]
 }
 
 func (l locationsIdsByStacktraceID) addFromParquet(stacktraceID int64, locs []parquet.Value) {
-	l.byStacktraceID[stacktraceID] = make([]uint64, len(locs))
+	l.byStacktraceID[stacktraceID] = make([]int32, len(locs))
 	for i, locationID := range locs {
 		locID := locationID.Uint64()
 		l.ids[int64(locID)] = struct{}{}
-		l.byStacktraceID[stacktraceID][i] = locID
+		l.byStacktraceID[stacktraceID][i] = int32(locID)
+	}
+}
+
+func (l locationsIdsByStacktraceID) add(stacktraceID int64, locs []int32) {
+	l.byStacktraceID[stacktraceID] = make([]int32, len(locs))
+	for i, locationID := range locs {
+		l.ids[int64(locationID)] = struct{}{}
+		l.byStacktraceID[stacktraceID][i] = locationID
 	}
 }
 
@@ -204,7 +212,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSam
 			locsId := locationsIdsByStacktraceID.byStacktraceID[int64(id)]
 			model.Location = make([]*profile.Location, len(locsId))
 			for i, locId := range locsId {
-				model.Location[i] = locationModelsByIds[locId]
+				model.Location[i] = locationModelsByIds[uint64(locId)]
 			}
 			// todo labels.
 		}

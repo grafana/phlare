@@ -43,6 +43,7 @@ import (
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	"github.com/grafana/phlare/pkg/phlaredb/query"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	"github.com/grafana/phlare/pkg/phlaredb/symdb"
 	"github.com/grafana/phlare/pkg/phlaredb/tsdb/index"
 	"github.com/grafana/phlare/pkg/util"
 )
@@ -311,7 +312,6 @@ type StacktraceDB interface {
 
 type stacktraceResolverV1 struct {
 	stacktraces  parquetReader[*schemav1.Stacktrace, *schemav1.StacktracePersister]
-	metrics      *blocksMetrics
 	bucketReader phlareobj.Bucket
 }
 
@@ -336,7 +336,36 @@ func (r *stacktraceResolverV1) Resolve(ctx context.Context, mapping uint64, locs
 }
 
 type stacktraceResolverV2 struct {
-	// todo
+	reader       *symdb.Reader
+	bucketReader phlareobj.Bucket
+}
+
+func (r *stacktraceResolverV2) Open(ctx context.Context) error {
+	if r.reader != nil {
+		return nil
+	}
+	var err error
+	r.reader, err = symdb.Open(ctx, r.bucketReader)
+	return err
+}
+
+func (r *stacktraceResolverV2) Close() error {
+	return nil
+}
+
+func (r *stacktraceResolverV2) Resolve(ctx context.Context, mapping uint64, locs locationsIdsByStacktraceID, stacktraceIDs []uint32) error {
+	mr, ok := r.reader.MappingReader(mapping)
+	if !ok {
+		return nil
+	}
+	resolver := mr.StacktraceResolver()
+	defer resolver.Release()
+
+	return resolver.ResolveStacktraces(ctx, symdb.StacktraceInserterFn(
+		func(stacktraceID uint32, locations []int32) {
+			locs.add(int64(stacktraceID), locations)
+		},
+	), stacktraceIDs)
 }
 
 func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlareobj.Bucket, meta *block.Meta) *singleBlockQuerier {
@@ -371,8 +400,8 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 	switch meta.Version {
 	case block.MetaVersion1:
 		q.stacktraces = newStacktraceResolverV1(phlarectx, bucketReader, meta)
-	// case block.MetaVersion2:
-	// 	q.stacktraces = newStacktraceResolverV2(phlarectx, bucketReader, meta)
+	case block.MetaVersion2:
+		q.stacktraces = newStacktraceResolverV2(phlarectx, bucketReader)
 	default:
 		panic(fmt.Errorf("unsupported block version %d", meta.Version))
 	}
@@ -382,7 +411,6 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 
 func newStacktraceResolverV1(phlarectx context.Context, bucketReader phlareobj.Bucket, meta *block.Meta) StacktraceDB {
 	q := &stacktraceResolverV1{
-		metrics:      contextBlockMetrics(phlarectx),
 		bucketReader: bucketReader,
 	}
 	for _, f := range meta.Files {
@@ -392,6 +420,12 @@ func newStacktraceResolverV1(phlarectx context.Context, bucketReader phlareobj.B
 		}
 	}
 	return q
+}
+
+func newStacktraceResolverV2(_ context.Context, bucketReader phlareobj.Bucket) StacktraceDB {
+	return &stacktraceResolverV2{
+		bucketReader: bucketReader,
+	}
 }
 
 func (b *singleBlockQuerier) Close() error {

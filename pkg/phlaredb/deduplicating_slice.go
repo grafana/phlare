@@ -174,7 +174,7 @@ func (s *deduplicatingSlice[M, K, H, P]) ingest(_ context.Context, elems []M, re
 		rewritingMap = make(map[int64]int64)
 		missing      = int64SlicePool.Get()
 	)
-
+	missing = missing[:0]
 	// rewrite elements
 	for pos := range elems {
 		if err := s.helper.rewrite(rewriter, elems[pos]); err != nil {

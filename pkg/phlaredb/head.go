@@ -276,7 +276,7 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartiton uint64, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartition uint64, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -309,7 +309,7 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartit
 			LocationIDs: in[idxSample].LocationId,
 		}
 	}
-	appender := h.symbolDB.MappingWriter(stacktracePartiton).StacktraceAppender()
+	appender := h.symbolDB.MappingWriter(stacktracePartition).StacktraceAppender()
 	defer appender.Release()
 
 	if cap(stacktracesIds) < len(stacktraces) {
@@ -646,10 +646,15 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
 	_ = stacktracesByMapping.ForEach(
 		func(mapping uint64, stacktraceSamples stacktraceSampleMap) error {
-			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
+			mp, ok := h.symbolDB.MappingReader(mapping)
+			if !ok {
+				return nil
+			}
+			resolver := mp.StacktraceResolver()
 			defer resolver.Release()
 
-			resolver.ResolveStacktraces(
+			return resolver.ResolveStacktraces(
+				ctx,
 				symdb.StacktraceInserterFn(
 					func(stacktraceID uint32, locs []int32) {
 						fnIds := make([]int32, 0, 2*len(locs))
@@ -671,7 +676,6 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 				),
 				stacktraceSamples.Ids(),
 			)
-			return nil
 		},
 	)
 
@@ -701,10 +705,15 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 	// now add locationIDs and stacktraces
 	_ = stacktracesByMapping.ForEach(
 		func(mapping uint64, stacktraceSamples profileSampleMap) error {
-			resolver := h.symbolDB.MappingReader(mapping).StacktraceResolver()
+			mp, ok := h.symbolDB.MappingReader(mapping)
+			if !ok {
+				return nil
+			}
+			resolver := mp.StacktraceResolver()
 			defer resolver.Release()
 
-			resolver.ResolveStacktraces(
+			return resolver.ResolveStacktraces(
+				ctx,
 				symdb.StacktraceInserterFn(
 					func(stacktraceID uint32, locationIds []int32) {
 						stacktraceLocations := make([]*profile.Location, len(locationIds))
@@ -764,7 +773,6 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 				),
 				stacktraceSamples.Ids(),
 			)
-			return nil
 		},
 	)
 
