@@ -399,9 +399,9 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 	}
 	switch meta.Version {
 	case block.MetaVersion1:
-		q.stacktraces = newStacktraceResolverV1(phlarectx, bucketReader, meta)
+		q.stacktraces = newStacktraceResolverV1(bucketReader, meta)
 	case block.MetaVersion2:
-		q.stacktraces = newStacktraceResolverV2(phlarectx, bucketReader)
+		q.stacktraces = newStacktraceResolverV2(bucketReader)
 	default:
 		panic(fmt.Errorf("unsupported block version %d", meta.Version))
 	}
@@ -409,7 +409,7 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 	return q
 }
 
-func newStacktraceResolverV1(phlarectx context.Context, bucketReader phlareobj.Bucket, meta *block.Meta) StacktraceDB {
+func newStacktraceResolverV1(bucketReader phlareobj.Bucket, meta *block.Meta) StacktraceDB {
 	q := &stacktraceResolverV1{
 		bucketReader: bucketReader,
 	}
@@ -422,7 +422,7 @@ func newStacktraceResolverV1(phlarectx context.Context, bucketReader phlareobj.B
 	return q
 }
 
-func newStacktraceResolverV2(_ context.Context, bucketReader phlareobj.Bucket) StacktraceDB {
+func newStacktraceResolverV2(bucketReader phlareobj.Bucket) StacktraceDB {
 	return &stacktraceResolverV2{
 		bucketReader: bucketReader,
 	}
@@ -1043,63 +1043,6 @@ func (m uniqueIDs[T]) iterator() iter.Iterator[int64] {
 	return iter.NewSliceIterator(ids)
 }
 
-type minMax struct {
-	min, max model.Time
-}
-
-func (q *singleBlockQuerier) readTSBoundaries(ctx context.Context) (minMax, []minMax, error) {
-	if err := q.Open(ctx); err != nil {
-		return minMax{}, nil, err
-	}
-
-	// find minTS and maxTS
-	var columnTimeNanos *parquet.Column
-	for _, c := range q.profiles.file.Root().Columns() {
-		if c.Name() == "TimeNanos" {
-			columnTimeNanos = c
-			break
-		}
-	}
-	if columnTimeNanos == nil {
-		return minMax{}, nil, errors.New("'TimeNanos' column not found")
-	}
-
-	var (
-		rowGroups             = q.profiles.file.RowGroups()
-		tsBoundary            minMax
-		tsBoundaryPerRowGroup = make([]minMax, len(rowGroups))
-	)
-	for idxRowGroup, rowGroup := range rowGroups {
-		chunks := rowGroup.ColumnChunks()[columnTimeNanos.Index()]
-		columnIndex := chunks.ColumnIndex()
-
-		var min, max model.Time
-
-		// determine the min/max across all pages
-		for pageNum := 0; pageNum < columnIndex.NumPages(); pageNum++ {
-			if current := model.TimeFromUnixNano(columnIndex.MinValue(pageNum).Int64()); pageNum == 0 || current < min {
-				min = current
-			}
-			if current := model.TimeFromUnixNano(columnIndex.MaxValue(pageNum).Int64()); pageNum == 0 || current > max {
-				max = current
-			}
-		}
-
-		tsBoundaryPerRowGroup[idxRowGroup].min = min
-		tsBoundaryPerRowGroup[idxRowGroup].max = max
-
-		// determine the min/max across all row groups
-		if idxRowGroup == 0 || min < tsBoundary.min {
-			tsBoundary.min = min
-		}
-		if idxRowGroup == 0 || max > tsBoundary.max {
-			tsBoundary.max = max
-		}
-	}
-
-	return tsBoundary, tsBoundaryPerRowGroup, nil
-}
-
 func newByteSliceFromBucketReader(ctx context.Context, bucketReader objstore.BucketReader, path string) (index.RealByteSlice, error) {
 	f, err := bucketReader.Get(ctx, path)
 	if err != nil {
@@ -1348,17 +1291,6 @@ func (r *inMemoryparquetReader[M, P]) Close() error {
 
 func (r *inMemoryparquetReader[M, P]) relPath() string {
 	return r.persister.Name() + block.ParquetSuffix
-}
-
-func (r *inMemoryparquetReader[M, P]) info() block.File {
-	return block.File{
-		Parquet: &block.ParquetFile{
-			NumRows:      uint64(r.file.NumRows()),
-			NumRowGroups: uint64(len(r.file.RowGroups())),
-		},
-		SizeBytes: uint64(r.file.Size()),
-		RelPath:   r.relPath(),
-	}
 }
 
 func (r *inMemoryparquetReader[M, P]) retrieveRows(_ context.Context, rowNumIterator iter.Iterator[int64]) iter.Iterator[ResultWithRowNum[M]] {

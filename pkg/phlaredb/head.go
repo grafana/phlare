@@ -3,7 +3,6 @@ package phlaredb
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -89,8 +88,7 @@ type rewriter struct {
 	// nolint unused
 	mappings idConversionTable
 	// nolint unused
-	locations   idConversionTable
-	stacktraces idConversionTable
+	locations idConversionTable
 }
 
 type storeHelper[M Models] interface {
@@ -276,9 +274,9 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartition uint64, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartition uint64, in []*profilev1.Sample) [][]*schemav1.Sample {
 	if len(in) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	// populate output
@@ -332,7 +330,7 @@ func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartitio
 		}
 	}
 
-	return out, nil
+	return out
 }
 
 func StacktracePartitionFromProfile(lbls []phlaremodel.Labels, p *profilev1.Profile) uint64 {
@@ -398,10 +396,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 		return err
 	}
 
-	samplesPerType, err := h.convertSamples(ctx, rewrites, stacktracePartition, p.Sample)
-	if err != nil {
-		return err
-	}
+	samplesPerType := h.convertSamples(ctx, rewrites, stacktracePartition, p.Sample)
 
 	var profileIngested bool
 	for idxType := range samplesPerType {
@@ -1046,7 +1041,7 @@ func (h *Head) flush(ctx context.Context) error {
 
 // list files in symdb folder
 func (h *Head) SymDBFiles() ([]block.File, error) {
-	files, err := ioutil.ReadDir(filepath.Join(h.headPath, block.SymDBFolder))
+	files, err := os.ReadDir(filepath.Join(h.headPath, block.SymDBFolder))
 	if err != nil {
 		return nil, err
 	}
@@ -1056,7 +1051,11 @@ func (h *Head) SymDBFiles() ([]block.File, error) {
 			continue
 		}
 		result[idx].RelPath = f.Name()
-		result[idx].SizeBytes = uint64(f.Size())
+		info, err := f.Info()
+		if err != nil {
+			return nil, err
+		}
+		result[idx].SizeBytes = uint64(info.Size())
 	}
 	return result, nil
 }
