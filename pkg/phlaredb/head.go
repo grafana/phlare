@@ -308,6 +308,9 @@ func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartitio
 			// will copy it, if it is required to be retained.
 			LocationIDs: in[idxSample].LocationId,
 		}
+		for i := range stacktraces[idxSample].LocationIDs {
+			r.locations.rewriteUint64(&stacktraces[idxSample].LocationIDs[i])
+		}
 	}
 	appender := h.symbolDB.MappingWriter(stacktracePartition).StacktraceAppender()
 	defer appender.Release()
