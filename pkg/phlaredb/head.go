@@ -276,7 +276,7 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartition uint64, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartition uint64, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -320,6 +320,8 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartit
 
 	appender.AppendStacktrace(stacktracesIds, stacktraces)
 
+	h.metrics.sizeBytes.WithLabelValues("stacktraces").Set(float64(h.symbolDB.MemorySize()))
+
 	// reference stacktraces
 	for idxType := range out {
 		for idxSample := range out[idxType] {
@@ -330,11 +332,11 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, stacktracePartit
 	return out, nil
 }
 
-func StacktracePartitionFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) uint64 {
+func StacktracePartitionFromProfile(lbls []phlaremodel.Labels, p *profilev1.Profile) uint64 {
 	return xxhash.Sum64String(stacktracePartitionKeyFromProfile(lbls, p))
 }
 
-func stacktracePartitionKeyFromProfile(lbls phlaremodel.Labels, p *profilev1.Profile) string {
+func stacktracePartitionKeyFromProfile(lbls []phlaremodel.Labels, p *profilev1.Profile) string {
 	// take the first mapping (which is the main binary's file basename)
 	if len(p.Mapping) > 0 {
 		if filenameID := p.Mapping[0].Filename; filenameID > 0 {
@@ -349,9 +351,11 @@ func stacktracePartitionKeyFromProfile(lbls phlaremodel.Labels, p *profilev1.Pro
 	}
 
 	// failing that look through the labels for the ServiceName
-	for _, lbl := range lbls {
-		if lbl.Name == phlaremodel.LabelNameServiceName {
-			return lbl.Value
+	if len(lbls) > 0 {
+		for _, lbl := range lbls[0] {
+			if lbl.Name == phlaremodel.LabelNameServiceName {
+				return lbl.Value
+			}
 		}
 	}
 
@@ -368,7 +372,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	}
 
 	// determine the stacktraces partition ID
-	stacktracePartition := StacktracePartitionFromProfile(labels[0], p)
+	stacktracePartition := StacktracePartitionFromProfile(labels, p)
 
 	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 

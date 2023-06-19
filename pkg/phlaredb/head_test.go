@@ -202,8 +202,8 @@ pyroscope_head_received_sample_values_total{profile_name=""} 3
 pyroscope_head_size_bytes{type="functions"} 240
 pyroscope_head_size_bytes{type="locations"} 344
 pyroscope_head_size_bytes{type="mappings"} 192
-pyroscope_head_size_bytes{type="profiles"} 416
-pyroscope_head_size_bytes{type="stacktraces"} 104
+pyroscope_head_size_bytes{type="profiles"} 432
+pyroscope_head_size_bytes{type="stacktraces"} 0
 pyroscope_head_size_bytes{type="strings"} 52
 
 `),
