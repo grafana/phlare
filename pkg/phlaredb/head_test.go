@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/common/model"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -261,9 +262,6 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	assert.Equal(t, "my-foo-binary", head.strings.slice[head.mappings.slice[0].Filename])
 	assert.Equal(t, "my-bar-binary", head.strings.slice[head.mappings.slice[1].Filename])
 
-	// expect 3 stacktraces
-	//	require.Equal(t, 3, len(head.stacktraces.slice))
-
 	// expect 3 profiles
 	require.Equal(t, 3, len(head.profiles.slice))
 
@@ -274,6 +272,7 @@ func TestHeadIngestStacktraces(t *testing.T) {
 		}
 	}
 	// expect 4 samples, 3 of which distinct
+	require.Len(t, lo.Uniq(samples), 3)
 	require.Equal(t, []uint64{1, 0, 2, 2}, samples)
 }
 
