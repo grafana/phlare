@@ -561,7 +561,7 @@ func Test_FlushNotInitializedHead(t *testing.T) {
 	var (
 		end   = time.Unix(0, int64(time.Hour))
 		start = end.Add(-time.Minute)
-		step  = 15 * time.Second
+		step  = 5 * time.Second
 	)
 
 	require.NoError(t, err)
