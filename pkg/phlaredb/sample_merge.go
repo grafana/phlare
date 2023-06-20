@@ -88,7 +88,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSam
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolvePprofSymbols - Block")
 	defer sp.Finish()
 
-	locationsIdsByStacktraceID := newLocationsIdsByStacktraceID()
+	locationsIdsByStacktraceID := newLocationsIdsByStacktraceID(len(profileSampleByMapping) * 1024)
 
 	// gather stacktraces
 	if err := profileSampleByMapping.ForEach(func(mapping uint64, samples profileSampleMap) error {
