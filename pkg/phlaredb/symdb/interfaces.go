@@ -3,7 +3,7 @@ package symdb
 import (
 	"context"
 
-	"github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	schemasv1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 )
 
 // Mapping is a binary that is part of the program during the profile
@@ -36,11 +36,8 @@ type StacktraceAppender interface {
 	// and writes the allocated identifiers into dst:
 	// len(dst) must be equal to len(s).
 	// The leaf is at locations[0].
-	AppendStacktrace(dst []uint32, s []*v1.Stacktrace)
+	AppendStacktrace(dst []uint32, s []*schemasv1.Stacktrace)
 	Release()
-	// Stats reports various statistics such as number of stack
-	// traces and nodes added.
-	// Stats() StacktraceAppenderStats
 }
 
 type StacktraceResolver interface {
