@@ -176,14 +176,6 @@ type stacktracesResolve struct {
 	t   *parentPointerTree
 }
 
-func (r *stacktracesResolve) do() (err error) {
-	if err = r.fetch(); err != nil {
-		return err
-	}
-	r.resolveStacktracesChunk(r.dst)
-	return nil
-}
-
 func (r *stacktracesResolve) fetch() (err error) {
 	cr := r.r.mapping.stacktraceChunkReader(r.c.chunk)
 	if cr == nil {
