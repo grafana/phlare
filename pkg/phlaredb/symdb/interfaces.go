@@ -62,3 +62,9 @@ type StacktraceResolver interface {
 type StacktraceInserter interface {
 	InsertStacktrace(stacktraceID uint32, locations []int32)
 }
+
+type StacktraceInserterFn func(stacktraceID uint32, locations []int32)
+
+func (fn StacktraceInserterFn) InsertStacktrace(stacktraceID uint32, locations []int32) {
+	fn(stacktraceID, locations)
+}
