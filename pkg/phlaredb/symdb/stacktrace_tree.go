@@ -9,22 +9,18 @@ import (
 	"github.com/grafana/phlare/pkg/util/math"
 )
 
-const defaultStacktraceTreeSize = 1 << 10
+const defaultStacktraceTreeSize = 10 << 10
 
 type stacktraceTree struct {
 	nodes []node
 }
 
 type node struct {
-	// TODO: Get rid of the self-reference.
-	i int // Index of the node in the stacktraces.
-
+	p   int32 // Parent index.
+	ref int32 // Reference the to stack frame data.
 	// Auxiliary members only needed for insertion.
 	fc int32 // First child index.
 	ns int32 // Next sibling index.
-
-	p   int32 // Parent index.
-	ref int32 // Reference the to stack frame data.
 }
 
 func newStacktraceTree(size int) *stacktraceTree {
@@ -37,58 +33,56 @@ const sentinel = -1
 
 func (t *stacktraceTree) len() uint32 { return uint32(len(t.nodes)) }
 
-func (t *stacktraceTree) newNode(parent int32, ref int32) node {
+func (t *stacktraceTree) newNode(parent int32, ref int32) (*node, int32) {
 	n := node{
 		ref: ref,
-		i:   len(t.nodes),
 		p:   parent,
 		fc:  sentinel,
 		ns:  sentinel,
 	}
+	i := len(t.nodes)
 	t.nodes = append(t.nodes, n)
-	return n
+	return &t.nodes[i], int32(i)
 }
 
-func (t *stacktraceTree) insert(refs []uint64) (id uint32) {
+func (t *stacktraceTree) insert(refs []uint64) uint32 {
 	var (
+		n = &t.nodes[0]
+		x int32
 		i int32
-		n node
 	)
 
-	// TODO(kolesnikovae): Optimize:
-	//   Avoid copying of nodes.
-	//   Avoid type conversions.
-	//   Avoid redundant accesses to the node slice.
 	for j := len(refs) - 1; j >= 0; {
 		r := int32(refs[j])
 		if i == sentinel {
-			x := t.newNode(int32(n.i), r)
-			n.fc = int32(x.i)
-			t.nodes[n.i] = n
-			n = x
+			nn, ni := t.newNode(x, r)
+			n.fc = ni
+			x = ni
+			n = nn
 		} else {
-			n = t.nodes[i]
+			n = &t.nodes[i]
+			x = i
 		}
 
-		switch {
-		case n.ref == r:
-			t.nodes[n.i] = n
+		if n.ref == r {
 			i = n.fc
 			j--
 			continue
-		case n.p == sentinel: // case n.i == 0:
+		}
+
+		if i == 0 {
 			i = n.fc
 			continue
-		case n.ns == sentinel:
-			x := t.newNode(n.p, r)
-			n.ns = int32(x.i)
-			t.nodes[n.i] = n
+		}
+
+		if n.ns < 0 {
+			_, n.ns = t.newNode(n.p, r)
 		}
 
 		i = n.ns
 	}
 
-	return uint32(n.i)
+	return uint32(x)
 }
 
 func (t *stacktraceTree) resolve(dst []int32, id uint32) []int32 {
@@ -104,9 +98,9 @@ func (t *stacktraceTree) resolve(dst []int32, id uint32) []int32 {
 	return dst
 }
 
-func (t *stacktraceTree) merge(*stacktraceTree) {
-	// TODO(kolesnikovae): implement.
-}
+// TODO(kolesnikovae): Implement tree merge.
+//
+// func (t *stacktraceTree) merge(*stacktraceTree) {}
 
 const (
 	maxGroupSize = 17 // 4 * uint32 + control byte
@@ -253,7 +247,7 @@ func (d *treeDecoder) unmarshal(t *parentPointerTree, r io.Reader) error {
 			g = g[:math.Min((xn+xn%2)*2, d.groupBuffer)]
 			var gp int
 
-			// Check if there is a reminder. If this is the case,
+			// Check if there is a remainder. If this is the case,
 			// decode the group and advance gp.
 			if len(rb) > 0 {
 				// It's expected that r contains a single complete group.
@@ -274,9 +268,9 @@ func (d *treeDecoder) unmarshal(t *parentPointerTree, r io.Reader) error {
 			// Re-fill g.
 			gi, n, rn := decodeU32Groups(g[gp:], b[read:])
 			gp += gi
-			read += n + rn // Mark reminder bytes as read, we copy them.
+			read += n + rn // Mark remainder bytes as read, we copy them.
 			if rn > 0 {
-				// If there is a reminder, it is copied and decoded on
+				// If there is a remainder, it is copied and decoded on
 				// the next Peek. This should not be possible with eof.
 				rb = append(rb, b[len(b)-rn:]...)
 			}

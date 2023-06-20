@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/grafana/phlare/pkg/pprof"
 )
 
 func Test_stacktrace_tree_encoding(t *testing.T) {
@@ -89,7 +91,6 @@ func Test_stacktrace_tree_encoding_rand(t *testing.T) {
 	nodes := make([]node, 1<<20)
 	for i := range nodes {
 		nodes[i] = node{
-			i:   1,
 			fc:  2,
 			ns:  3,
 			p:   int32(rand.Intn(10 << 10)),
@@ -110,6 +111,31 @@ func Test_stacktrace_tree_encoding_rand(t *testing.T) {
 		n, p := x.nodes[j], ppt.nodes[j]
 		if n.p != p.p || n.ref != p.r {
 			t.Fatalf("tree mismatch at %d: n:%#v. p:%#v", j, n, p)
+		}
+	}
+}
+
+func Test_stacktrace_tree_pprof_locations(t *testing.T) {
+	p, err := pprof.OpenFile("testdata/profile.pb.gz")
+	require.NoError(t, err)
+
+	x := newStacktraceTree(defaultStacktraceTreeSize)
+	m := make(map[uint32]int)
+	for i := range p.Sample {
+		m[x.insert(p.Sample[i].LocationId)] = i
+	}
+
+	tmp := stacktraceLocations.get()
+	defer stacktraceLocations.put(tmp)
+	for sid, i := range m {
+		tmp = x.resolve(tmp, sid)
+		locs := p.Sample[i].LocationId
+		for j := range locs {
+			if tmp[j] != int32(locs[j]) {
+				t.Log("resolved:", tmp)
+				t.Log("locations:", locs)
+				t.Fatalf("tmp[j] != locs[j]")
+			}
 		}
 	}
 }
