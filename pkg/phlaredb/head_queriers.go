@@ -258,7 +258,7 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 			if s.Value == 0 {
 				continue
 			}
-			stacktraceSamples.add(1, uint32(s.StacktraceID), s.Value)
+			stacktraceSamples.add(p.StacktracePartition(), uint32(s.StacktraceID), s.Value)
 		}
 	}
 
