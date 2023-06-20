@@ -16,8 +16,8 @@ type stacktraceTree struct {
 }
 
 type node struct {
-	p   int32 // Parent index.
-	ref int32 // Reference the to stack frame data.
+	p int32 // Parent index.
+	r int32 // Reference the to stack frame data.
 	// Auxiliary members only needed for insertion.
 	fc int32 // First child index.
 	ns int32 // Next sibling index.
@@ -33,12 +33,13 @@ const sentinel = -1
 
 func (t *stacktraceTree) len() uint32 { return uint32(len(t.nodes)) }
 
+// TODO(kolesnikovae): Ensure it is inlined.
 func (t *stacktraceTree) newNode(parent int32, ref int32) (*node, int32) {
 	n := node{
-		ref: ref,
-		p:   parent,
-		fc:  sentinel,
-		ns:  sentinel,
+		r:  ref,
+		p:  parent,
+		fc: sentinel,
+		ns: sentinel,
 	}
 	i := len(t.nodes)
 	t.nodes = append(t.nodes, n)
@@ -48,8 +49,8 @@ func (t *stacktraceTree) newNode(parent int32, ref int32) (*node, int32) {
 func (t *stacktraceTree) insert(refs []uint64) uint32 {
 	var (
 		n = &t.nodes[0]
+		i = n.fc
 		x int32
-		i int32
 	)
 
 	for j := len(refs) - 1; j >= 0; {
@@ -63,22 +64,14 @@ func (t *stacktraceTree) insert(refs []uint64) uint32 {
 			n = &t.nodes[i]
 			x = i
 		}
-
-		if n.ref == r {
+		if n.r == r {
 			i = n.fc
 			j--
 			continue
 		}
-
-		if i == 0 {
-			i = n.fc
-			continue
-		}
-
 		if n.ns < 0 {
 			_, n.ns = t.newNode(n.p, r)
 		}
-
 		i = n.ns
 	}
 
@@ -90,10 +83,11 @@ func (t *stacktraceTree) resolve(dst []int32, id uint32) []int32 {
 	if id >= uint32(len(t.nodes)) {
 		return dst
 	}
-	n := t.nodes[id]
-	for n.p >= 0 {
-		dst = append(dst, n.ref)
-		n = t.nodes[n.p]
+	// Only node members are accessed, in order to avoid
+	// race condition with insert: r and p are written once,
+	// when the node is created.
+	for i := int32(id); i > 0; i = t.nodes[i].p {
+		dst = append(dst, t.nodes[i].r)
 	}
 	return dst
 }
@@ -176,14 +170,14 @@ func (tc *treeEncoder) marshal(t *stacktraceTree, w io.Writer) (err error) {
 		c = t.nodes[i]
 		v = c.p - p.p
 		g[0] = uint32((v << 1) ^ (v >> 31))
-		g[1] = uint32(c.ref)
+		g[1] = uint32(c.r)
 		p = c
 		if sn := i + 1; sn < len(t.nodes) {
 			// Second node.
 			c = t.nodes[sn]
 			v = c.p - p.p
 			g[2] = uint32((v << 1) ^ (v >> 31))
-			g[3] = uint32(c.ref)
+			g[3] = uint32(c.r)
 			p = c
 		} else {
 			// A stub node is added to complete the group.

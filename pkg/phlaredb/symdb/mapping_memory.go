@@ -67,17 +67,13 @@ func (b *inMemoryMapping) stacktraceChunkForInsert(x int) *stacktraceChunk {
 	return c
 }
 
-// stacktraceChunkForRead returns a chunk for reads:
-// if for some reason the chunk does not exist, an empty chunk is returned.
+// stacktraceChunkForRead returns a chunk for reads.
 // Must be called with the stracktraces mutex read lock held.
-func (b *inMemoryMapping) stacktraceChunkForRead(i int) *stacktraceChunk {
+func (b *inMemoryMapping) stacktraceChunkForRead(i int) (*stacktraceChunk, bool) {
 	if i < len(b.stacktraceChunks) {
-		return b.stacktraceChunks[i]
+		return b.stacktraceChunks[i], true
 	}
-	return &stacktraceChunk{
-		mapping: b,
-		tree:    newStacktraceTree(0),
-	}
+	return nil, false
 }
 
 type stacktraceChunk struct {
@@ -161,9 +157,7 @@ func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*v1.Stacktrace) 
 
 func (a *stacktraceAppender) Release() {}
 
-func (r *stacktraceResolverMemory) Release() {
-	r.releaseOnce.Do(func() {})
-}
+func (r *stacktraceResolverMemory) Release() {}
 
 var seed = maphash.MakeSeed()
 
@@ -180,8 +174,7 @@ func hashLocations(s []uint64) uint64 {
 }
 
 type stacktraceResolverMemory struct {
-	mapping     *inMemoryMapping
-	releaseOnce sync.Once
+	mapping *inMemoryMapping
 }
 
 const defaultStacktraceDepth = 64
@@ -200,9 +193,13 @@ func (p *stacktraceLocationsPool) put(x []int32) {
 	stacktraceLocations.Put(x)
 }
 
-func (r *stacktraceResolverMemory) ResolveStacktraces(_ context.Context, dst StacktraceInserter, stacktraces []uint32) error {
+func (r *stacktraceResolverMemory) ResolveStacktraces(_ context.Context, dst StacktraceInserter, stacktraces []uint32) (err error) {
+	// TODO(kolesnikovae): Add option to do resolve concurrently.
+	//   Depends on StacktraceInserter implementation.
 	for _, sr := range SplitStacktraces(stacktraces, r.mapping.maxNodesPerChunk) {
-		r.ResolveStacktracesChunk(dst, sr)
+		if err = r.ResolveStacktracesChunk(dst, sr); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -214,9 +211,13 @@ func (r *stacktraceResolverMemory) ResolveStacktraces(_ context.Context, dst Sta
 //  slice, or an n-ary tree: the stacktraceTree should be one of
 //  the options, the package provides.
 
-func (r *stacktraceResolverMemory) ResolveStacktracesChunk(dst StacktraceInserter, sr StacktracesRange) {
+func (r *stacktraceResolverMemory) ResolveStacktracesChunk(dst StacktraceInserter, sr StacktracesRange) error {
 	r.mapping.stacktraceMutex.RLock()
-	c := r.mapping.stacktraceChunkForRead(int(sr.chunk))
+	c, found := r.mapping.stacktraceChunkForRead(int(sr.chunk))
+	if !found {
+		r.mapping.stacktraceMutex.RUnlock()
+		return ErrInvalidStacktraceRange
+	}
 	t := stacktraceTree{nodes: c.tree.nodes}
 	// tree.resolve is thread safe: only the parent node index (p)
 	// and the reference to location (r) node fields are accessed,
@@ -226,8 +227,6 @@ func (r *stacktraceResolverMemory) ResolveStacktracesChunk(dst StacktraceInserte
 	// races when the slice grows: in the worst case, the underlying
 	// capacity will be retained and thus not be eligible for GC during
 	// the call.
-	// TODO(kolesnikovae): Actually, currently entire
-	//  node gets rewritten. Needs fixing.
 	r.mapping.stacktraceMutex.RUnlock()
 	s := stacktraceLocations.get()
 	// Restore the original stacktrace ID.
@@ -237,6 +236,7 @@ func (r *stacktraceResolverMemory) ResolveStacktracesChunk(dst StacktraceInserte
 		dst.InsertStacktrace(off+sid, s)
 	}
 	stacktraceLocations.put(s)
+	return nil
 }
 
 type StacktracesRange struct {

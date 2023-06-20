@@ -29,9 +29,6 @@ type Reader struct {
 	mappings map[uint64]*mappingFileReader
 }
 
-// TODO(kolesnikovae):
-//   Chunk cache (with costs?)
-
 const (
 	defaultMaxConcurrentChunkFetch = 8
 	defaultChunkFetchBufferSize    = 4096
@@ -126,24 +123,39 @@ type stacktraceResolverFile struct {
 
 func (r *stacktraceResolverFile) Release() {}
 
-var ErrInvalidRange = fmt.Errorf("invalid range: stack traces can't be resolved")
+var ErrInvalidStacktraceRange = fmt.Errorf("invalid range: stack traces can't be resolved")
 
 func (r *stacktraceResolverFile) ResolveStacktraces(ctx context.Context, dst StacktraceInserter, s []uint32) error {
 	if len(r.mapping.stacktraceChunks) == 0 {
-		return ErrInvalidRange
+		return ErrInvalidStacktraceRange
 	}
+
 	// First, we determine the chunks needed for the range.
 	// All chunks in a block must have the same StacktraceMaxNodes.
 	sr := SplitStacktraces(s, r.mapping.stacktraceChunks[0].header.StacktraceMaxNodes)
+
+	// TODO(kolesnikovae):
 	// Chunks are fetched concurrently, but inserted to dst sequentially,
-	// to avoid race condition on the implementation end.
+	// to avoid race condition on the implementation end:
+	//  - Add maxConcurrentChunkResolve option that controls the behaviour.
+	//  - Caching: already fetched chunks should be cached (serialized or not).
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(r.mapping.reader.maxConcurrentChunkFetch)
-	for _, c := range sr {
-		// TODO(kolesnikovae): Avoid concurrent dst.InsertStacktrace calls.
-		g.Go(r.newResolve(ctx, dst, c).do)
+	rs := make([]*stacktracesResolve, len(sr))
+	for i, c := range sr {
+		rs[i] = r.newResolve(ctx, dst, c)
+		g.Go(rs[i].fetch)
 	}
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	for _, cr := range rs {
+		cr.resolveStacktracesChunk(dst)
+	}
+
+	return nil
 }
 
 func (r *stacktraceResolverFile) newResolve(ctx context.Context, dst StacktraceInserter, c StacktracesRange) *stacktracesResolve {
@@ -155,6 +167,7 @@ func (r *stacktraceResolverFile) newResolve(ctx context.Context, dst StacktraceI
 	}
 }
 
+// stacktracesResolve represents a stacktrace resolution operation.
 type stacktracesResolve struct {
 	ctx context.Context
 	dst StacktraceInserter
@@ -167,14 +180,14 @@ func (r *stacktracesResolve) do() (err error) {
 	if err = r.fetch(); err != nil {
 		return err
 	}
-	r.resolveStacktracesChunk(r.dst, r.c)
+	r.resolveStacktracesChunk(r.dst)
 	return nil
 }
 
 func (r *stacktracesResolve) fetch() (err error) {
 	cr := r.r.mapping.stacktraceChunkReader(r.c.chunk)
 	if cr == nil {
-		return ErrInvalidRange
+		return ErrInvalidStacktraceRange
 	}
 	r.t, err = cr.fetch(r.ctx)
 	if err != nil {
@@ -183,11 +196,11 @@ func (r *stacktracesResolve) fetch() (err error) {
 	return r.ctx.Err()
 }
 
-func (r *stacktracesResolve) resolveStacktracesChunk(dst StacktraceInserter, sr StacktracesRange) {
+func (r *stacktracesResolve) resolveStacktracesChunk(dst StacktraceInserter) {
 	s := stacktraceLocations.get()
 	// Restore the original stacktrace ID.
-	off := sr.offset()
-	for _, sid := range sr.ids {
+	off := r.c.offset()
+	for _, sid := range r.c.ids {
 		s = r.t.resolve(s, sid)
 		dst.InsertStacktrace(off+sid, s)
 	}
@@ -199,12 +212,6 @@ type stacktraceChunkFileReader struct {
 	header StacktraceChunkHeader
 	m      sync.Mutex
 	tree   *parentPointerTree
-}
-
-func (c *stacktraceChunkFileReader) reset() {
-	c.m.Lock()
-	c.tree = nil
-	c.m.Unlock()
 }
 
 func (c *stacktraceChunkFileReader) fetch(ctx context.Context) (_ *parentPointerTree, err error) {

@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
+	"github.com/grafana/phlare/pkg/pprof"
 )
 
 func Test_StacktraceAppender_shards(t *testing.T) {
@@ -301,4 +303,187 @@ func Test_hashLocations(t *testing.T) {
 		}
 		wg.Wait()
 	})
+}
+
+func Test_Stacktraces_memory_resolve_pprof(t *testing.T) {
+	p, err := pprof.OpenFile("testdata/profile.pb.gz")
+	require.NoError(t, err)
+	stacktraces := pprofSampleToStacktrace(p.Sample)
+	sids := make([]uint32, len(stacktraces))
+
+	db := NewSymDB(new(Config))
+	mw := db.MappingWriter(0)
+	a := mw.StacktraceAppender()
+	defer a.Release()
+
+	a.AppendStacktrace(sids, stacktraces)
+
+	mr, ok := db.MappingReader(0)
+	require.True(t, ok)
+	r := mr.StacktraceResolver()
+	defer r.Release()
+
+	si := newStacktracesMapInserter()
+	err = r.ResolveStacktraces(context.Background(), si, sids)
+	require.NoError(t, err)
+
+	si.assertValid(t, sids, stacktraces)
+}
+
+func Test_Stacktraces_memory_resolve_chunked(t *testing.T) {
+	p, err := pprof.OpenFile("testdata/profile.pb.gz")
+	require.NoError(t, err)
+	stacktraces := pprofSampleToStacktrace(p.Sample)
+	sids := make([]uint32, len(stacktraces))
+
+	cfg := &Config{
+		Stacktraces: StacktracesConfig{
+			MaxNodesPerChunk: 256,
+		},
+	}
+	db := NewSymDB(cfg)
+	mw := db.MappingWriter(0)
+	a := mw.StacktraceAppender()
+	defer a.Release()
+
+	a.AppendStacktrace(sids, stacktraces)
+
+	mr, ok := db.MappingReader(0)
+	require.True(t, ok)
+	r := mr.StacktraceResolver()
+	defer r.Release()
+
+	// ResolveStacktraces modifies sids in-place,
+	// if stacktraces are chunked.
+	sidsCopy := make([]uint32, len(sids))
+	copy(sidsCopy, sids)
+
+	si := newStacktracesMapInserter()
+	err = r.ResolveStacktraces(context.Background(), si, sids)
+	require.NoError(t, err)
+
+	si.assertValid(t, sidsCopy, stacktraces)
+}
+
+// Test_Stacktraces_memory_resolve_concurrency validates if concurrent
+// append and resolve do not cause race conditions.
+func Test_Stacktraces_memory_resolve_concurrency(t *testing.T) {
+	p, err := pprof.OpenFile("testdata/profile.pb.gz")
+	require.NoError(t, err)
+	stacktraces := pprofSampleToStacktrace(p.Sample)
+
+	cfg := &Config{
+		Stacktraces: StacktracesConfig{
+			MaxNodesPerChunk: 256,
+		},
+	}
+
+	// Allocate stacktrace IDs.
+	sids := make([]uint32, len(stacktraces))
+	db := NewSymDB(cfg)
+	mw := db.MappingWriter(0)
+	a := mw.StacktraceAppender()
+	a.AppendStacktrace(sids, stacktraces)
+	a.Release()
+
+	const (
+		iterations = 100
+		resolvers  = 100
+		appenders  = 5
+		appends    = 100
+	)
+
+	runTest := func(t *testing.T) {
+		db := NewSymDB(cfg)
+
+		var wg sync.WaitGroup
+		wg.Add(appenders)
+		for i := 0; i < appenders; i++ {
+			go func() {
+				defer wg.Done()
+
+				a := db.MappingWriter(0).StacktraceAppender()
+				defer a.Release()
+
+				for j := 0; j < appends; j++ {
+					a.AppendStacktrace(make([]uint32, len(stacktraces)), stacktraces)
+				}
+			}()
+		}
+
+		wg.Add(resolvers)
+		for i := 0; i < resolvers; i++ {
+			go func() {
+				defer wg.Done()
+
+				mr, ok := db.MappingReader(0)
+				if !ok {
+					return
+				}
+				require.True(t, ok)
+
+				r := mr.StacktraceResolver()
+				defer r.Release()
+
+				// ResolveStacktraces modifies sids in-place,
+				// if stacktraces are chunked.
+				sidsCopy := make([]uint32, len(sids))
+				copy(sidsCopy, sids)
+
+				// It's expected that only fraction of stack traces may not
+				// be appended by the time of querying, therefore validation
+				// of the result is omitted (covered separately).
+				si := newStacktracesMapInserter()
+				_ = r.ResolveStacktraces(context.Background(), si, sidsCopy)
+			}()
+		}
+
+		wg.Wait()
+	}
+
+	for i := 0; i < iterations; i++ {
+		runTest(t)
+	}
+}
+
+type stacktracesMapInserter struct {
+	m map[uint32][]int32 // Stacktrace ID => resolved locations
+
+	unresolved int
+}
+
+func newStacktracesMapInserter() *stacktracesMapInserter {
+	return &stacktracesMapInserter{m: make(map[uint32][]int32)}
+}
+
+func (m *stacktracesMapInserter) InsertStacktrace(sid uint32, locations []int32) {
+	if len(locations) == 0 {
+		m.unresolved++
+		return
+	}
+	s := make([]int32, len(locations)) // InsertStacktrace must not retain input locations.
+	copy(s, locations)
+	m.m[sid] = s
+}
+
+func (m *stacktracesMapInserter) assertValid(t *testing.T, sids []uint32, stacktraces []*schemav1.Stacktrace) {
+	assert.LessOrEqual(t, len(m.m), len(sids))
+	require.Equal(t, len(sids), len(stacktraces))
+	require.Zero(t, m.unresolved)
+	for s, sid := range sids {
+		locations := stacktraces[s].LocationIDs
+		resolved := m.m[sid]
+		require.Equal(t, len(locations), len(resolved))
+		for i := range locations {
+			require.Equal(t, int32(locations[i]), resolved[i])
+		}
+	}
+}
+
+func pprofSampleToStacktrace(samples []*googlev1.Sample) []*schemav1.Stacktrace {
+	s := make([]*schemav1.Stacktrace, len(samples))
+	for i := range samples {
+		s[i] = &schemav1.Stacktrace{LocationIDs: samples[i].LocationId}
+	}
+	return s
 }
