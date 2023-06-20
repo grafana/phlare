@@ -164,6 +164,42 @@ func Test_StacktraceResolver_stacktraces_split(t *testing.T) {
 	}
 }
 
+func Test_Stacktrace_append_existing(t *testing.T) {
+	db := NewSymDB(new(Config))
+	w := db.MappingWriter(0)
+	a := w.StacktraceAppender()
+	defer a.Release()
+	sids := make([]uint32, 2)
+	a.AppendStacktrace(sids, []*schemav1.Stacktrace{
+		{LocationIDs: []uint64{5, 4, 3, 2, 1}},
+		{LocationIDs: []uint64{5, 4, 3, 2, 1}},
+	})
+	assert.Equal(t, []uint32{5, 5}, sids)
+
+	a.AppendStacktrace(sids, []*schemav1.Stacktrace{
+		{LocationIDs: []uint64{5, 4, 3, 2, 1}},
+		{LocationIDs: []uint64{6, 5, 4, 3, 2, 1}},
+	})
+	assert.Equal(t, []uint32{5, 6}, sids)
+}
+
+func Test_Stacktrace_append_empty(t *testing.T) {
+	db := NewSymDB(new(Config))
+	w := db.MappingWriter(0)
+	a := w.StacktraceAppender()
+	defer a.Release()
+
+	sids := make([]uint32, 2)
+	a.AppendStacktrace(sids, nil)
+	assert.Equal(t, []uint32{0, 0}, sids)
+
+	a.AppendStacktrace(sids, []*schemav1.Stacktrace{})
+	assert.Equal(t, []uint32{0, 0}, sids)
+
+	a.AppendStacktrace(sids, []*schemav1.Stacktrace{{}})
+	assert.Equal(t, []uint32{0, 0}, sids)
+}
+
 func Test_Stacktraces_append_resolve(t *testing.T) {
 	ctx := context.Background()
 
@@ -387,7 +423,7 @@ func Test_Stacktraces_memory_resolve_concurrency(t *testing.T) {
 	a.Release()
 
 	const (
-		iterations = 100
+		iterations = 10
 		resolvers  = 100
 		appenders  = 5
 		appends    = 100

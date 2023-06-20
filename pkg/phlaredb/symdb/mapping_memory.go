@@ -130,7 +130,7 @@ func (a *stacktraceAppender) AppendStacktrace(dst []uint32, s []*v1.Stacktrace) 
 
 	m := int(a.mapping.maxNodesPerChunk)
 	t, j := a.chunk.tree, a.chunk.stid
-	for i, v := range dst {
+	for i, v := range dst[:len(s)] {
 		if v != 0 {
 			// Already resolved. ID 0 is reserved
 			// as it is the tree root.
