@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/prometheus/common/model"
+
 	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
-	"github.com/prometheus/common/model"
 )
 
 var labelNameServiceName = fmt.Sprintf("__%s__", phlaremodel.LabelNameServiceName)
