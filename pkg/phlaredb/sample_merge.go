@@ -49,6 +49,13 @@ type locationsIdsByStacktraceID struct {
 	ids            uniqueIDs[struct{}]
 }
 
+func newLocationsIdsByStacktraceID(size int) locationsIdsByStacktraceID {
+	return locationsIdsByStacktraceID{
+		byStacktraceID: make(map[int64][]int32, size),
+		ids:            newUniqueIDs[struct{}](),
+	}
+}
+
 func (l locationsIdsByStacktraceID) addFromParquet(stacktraceID int64, locs []parquet.Value) {
 	l.byStacktraceID[stacktraceID] = make([]int32, len(locs))
 	for i, locationID := range locs {
@@ -81,7 +88,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSam
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolvePprofSymbols - Block")
 	defer sp.Finish()
 
-	locationsIdsByStacktraceID := locationsIdsByStacktraceID{}
+	locationsIdsByStacktraceID := newLocationsIdsByStacktraceID()
 
 	// gather stacktraces
 	if err := profileSampleByMapping.ForEach(func(mapping uint64, samples profileSampleMap) error {
@@ -240,7 +247,7 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSam
 func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktracesByMapping stacktracesByMapping) (*ingestv1.MergeProfilesStacktracesResult, error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolveSymbols - Block")
 	defer sp.Finish()
-	locationsIdsByStacktraceID := locationsIdsByStacktraceID{}
+	locationsIdsByStacktraceID := newLocationsIdsByStacktraceID(len(stacktracesByMapping) * 1024)
 
 	// gather stacktraces
 	if err := stacktracesByMapping.ForEach(func(mapping uint64, samples stacktraceSampleMap) error {
