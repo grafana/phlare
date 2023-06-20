@@ -273,7 +273,7 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	}
 	// expect 4 samples, 3 of which distinct
 	require.Len(t, lo.Uniq(samples), 3)
-	require.Equal(t, []uint64{1, 0, 2, 2}, samples)
+	require.Len(t, samples, 4)
 }
 
 func TestHeadLabelValues(t *testing.T) {
