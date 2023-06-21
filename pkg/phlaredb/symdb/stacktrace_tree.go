@@ -24,27 +24,21 @@ type node struct {
 }
 
 func newStacktraceTree(size int) *stacktraceTree {
-	t := stacktraceTree{nodes: make([]node, 0, size)}
-	t.newNode(sentinel, 0)
+	if size < 1 {
+		size = 1
+	}
+	t := stacktraceTree{nodes: make([]node, 1, size)}
+	t.nodes[0] = node{
+		p:  sentinel,
+		fc: sentinel,
+		ns: sentinel,
+	}
 	return &t
 }
 
 const sentinel = -1
 
 func (t *stacktraceTree) len() uint32 { return uint32(len(t.nodes)) }
-
-// TODO(kolesnikovae): Ensure it is inlined.
-func (t *stacktraceTree) newNode(parent int32, ref int32) (*node, int32) {
-	n := node{
-		r:  ref,
-		p:  parent,
-		fc: sentinel,
-		ns: sentinel,
-	}
-	i := len(t.nodes)
-	t.nodes = append(t.nodes, n)
-	return &t.nodes[i], int32(i)
-}
 
 func (t *stacktraceTree) insert(refs []uint64) uint32 {
 	var (
@@ -56,13 +50,19 @@ func (t *stacktraceTree) insert(refs []uint64) uint32 {
 	for j := len(refs) - 1; j >= 0; {
 		r := int32(refs[j])
 		if i == sentinel {
-			nn, ni := t.newNode(x, r)
+			ni := int32(len(t.nodes))
+			t.nodes = append(t.nodes, node{
+				r:  r,
+				p:  x,
+				fc: sentinel,
+				ns: sentinel,
+			})
 			n.fc = ni
 			x = ni
-			n = nn
+			n = &t.nodes[ni]
 		} else {
-			n = &t.nodes[i]
 			x = i
+			n = &t.nodes[i]
 		}
 		if n.r == r {
 			i = n.fc
@@ -70,7 +70,13 @@ func (t *stacktraceTree) insert(refs []uint64) uint32 {
 			continue
 		}
 		if n.ns < 0 {
-			_, n.ns = t.newNode(n.p, r)
+			n.ns = int32(len(t.nodes))
+			t.nodes = append(t.nodes, node{
+				r:  r,
+				p:  n.p,
+				fc: sentinel,
+				ns: sentinel,
+			})
 		}
 		i = n.ns
 	}
