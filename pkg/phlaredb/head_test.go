@@ -271,8 +271,10 @@ func TestHeadIngestStacktraces(t *testing.T) {
 			samples = append(samples, sample.StacktraceID)
 		}
 	}
-	// expect 4 samples, 3 of which distinct
-	require.Len(t, lo.Uniq(samples), 3)
+	// expect 4 samples, 2 of which distinct: stacktrace ID is
+	// only valid within the scope of the stacktrace partition,
+	// which depends on the main binary mapping filename.
+	require.Len(t, lo.Uniq(samples), 2)
 	require.Len(t, samples, 4)
 }
 
