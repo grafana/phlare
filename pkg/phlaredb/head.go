@@ -132,17 +132,16 @@ type Head struct {
 	metaLock sync.RWMutex
 	meta     *block.Meta
 
-	parquetConfig   *ParquetConfig
-	strings         deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
-	mappings        deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
-	functions       deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
-	locations       deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
-	stacktraces     deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
-	profiles        *profileStore
-	totalSamples    *atomic.Uint64
-	tables          []Table
-	delta           *deltaProfiles
-	pprofLabelCache labelCache
+	parquetConfig *ParquetConfig
+	strings       deduplicatingSlice[string, string, *stringsHelper, *schemav1.StringPersister]
+	mappings      deduplicatingSlice[*profilev1.Mapping, mappingsKey, *mappingsHelper, *schemav1.MappingPersister]
+	functions     deduplicatingSlice[*profilev1.Function, functionsKey, *functionsHelper, *schemav1.FunctionPersister]
+	locations     deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
+	stacktraces   deduplicatingSlice[*schemav1.Stacktrace, stacktracesKey, *stacktracesHelper, *schemav1.StacktracePersister] // a stacktrace is a slice of location ids
+	profiles      *profileStore
+	totalSamples  *atomic.Uint64
+	tables        []Table
+	delta         *deltaProfiles
 
 	limiter TenantLimiter
 }
@@ -204,8 +203,6 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 	}
 
 	h.delta = newDeltaProfiles()
-
-	h.pprofLabelCache.init()
 
 	h.wg.Add(1)
 	go h.loop()
