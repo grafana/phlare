@@ -282,11 +282,11 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 
 	for idxSample := range in {
 		// populate samples
-		labels := h.pprofLabelCache.rewriteLabels(r.strings, in[idxSample].Label)
+		// labels := h.pprofLabelCache.rewriteLabels(r.strings, in[idxSample].Label)
 		for idxType := range out {
 			out[idxType][idxSample] = &schemav1.Sample{
-				Value:  in[idxSample].Value[idxType],
-				Labels: labels,
+				Value: in[idxSample].Value[idxType],
+				// Labels: labels,
 			}
 		}
 

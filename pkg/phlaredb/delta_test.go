@@ -80,7 +80,7 @@ func newProfileSchema(p *profilev1.Profile, name string) ([]*schemav1.Profile, [
 			ps[idxType].Samples[i] = &schemav1.Sample{
 				StacktraceID: hashes[i],
 				Value:        s.Value[idxType],
-				Labels:       copySlice(s.Label),
+				// Labels:       copySlice(s.Label),
 			}
 		}
 		ps[idxType].SeriesFingerprint = seriesRefs[idxType]

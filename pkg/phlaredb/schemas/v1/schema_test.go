@@ -9,8 +9,6 @@ import (
 	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 )
 
 // This test ensures that the structs that are stored and the used schema matches
@@ -92,14 +90,14 @@ func newProfiles() []*Profile {
 				{
 					StacktraceID: 0xba,
 					Value:        0xca,
-					Labels:       []*profilev1.Label{},
+					// Labels:       []*profilev1.Label{},
 				},
 				{
 					StacktraceID: 0xbb,
 					Value:        0xca,
-					Labels: []*profilev1.Label{
-						{Key: 0xda, Str: 0xea},
-					},
+					// Labels: []*profilev1.Label{
+					// 	{Key: 0xda, Str: 0xea},
+					// },
 				},
 			},
 			Comments: []int64{},
@@ -112,14 +110,14 @@ func newProfiles() []*Profile {
 				{
 					StacktraceID: 0xba,
 					Value:        0xcc,
-					Labels:       []*profilev1.Label{},
+					// Labels:       []*profilev1.Label{},
 				},
 				{
 					StacktraceID: 0xbb,
 					Value:        0xcc,
-					Labels: []*profilev1.Label{
-						{Key: 0xda, Str: 0xea},
-					},
+					// Labels: []*profilev1.Label{
+					// 	{Key: 0xda, Str: 0xea},
+					// },
 				},
 			},
 			Comments: []int64{},
@@ -132,7 +130,7 @@ func newProfiles() []*Profile {
 				{
 					StacktraceID: 0xbc,
 					Value:        0xcd,
-					Labels:       []*profilev1.Label{},
+					// Labels:       []*profilev1.Label{},
 				},
 			},
 			Comments: []int64{},
@@ -145,7 +143,7 @@ func newProfiles() []*Profile {
 				{
 					StacktraceID: 0xbc,
 					Value:        0xce,
-					Labels:       []*profilev1.Label{},
+					// Labels:       []*profilev1.Label{},
 				},
 			},
 			Comments: []int64{},

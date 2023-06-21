@@ -5,22 +5,15 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/segmentio/parquet-go"
 
-	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	phlareparquet "github.com/grafana/phlare/pkg/parquet"
 )
 
 var (
-	stringRef   = parquet.Encoded(parquet.Int(64), &parquet.DeltaBinaryPacked)
-	pprofLabels = parquet.List(phlareparquet.Group{
-		phlareparquet.NewGroupField("Key", stringRef),
-		phlareparquet.NewGroupField("Str", parquet.Optional(stringRef)),
-		phlareparquet.NewGroupField("Num", parquet.Optional(parquet.Encoded(parquet.Int(64), &parquet.DeltaBinaryPacked))),
-		phlareparquet.NewGroupField("NumUnit", parquet.Optional(stringRef)),
-	})
+	stringRef = parquet.Encoded(parquet.Int(64), &parquet.DeltaBinaryPacked)
+
 	sampleField = phlareparquet.Group{
 		phlareparquet.NewGroupField("StacktraceID", parquet.Encoded(parquet.Uint(64), &parquet.DeltaBinaryPacked)),
 		phlareparquet.NewGroupField("Value", parquet.Encoded(parquet.Int(64), &parquet.DeltaBinaryPacked)),
-		phlareparquet.NewGroupField("Labels", pprofLabels),
 	}
 	profilesSchema = parquet.NewSchema("Profile", phlareparquet.Group{
 		phlareparquet.NewGroupField("ID", parquet.UUID()),
@@ -37,9 +30,8 @@ var (
 )
 
 type Sample struct {
-	StacktraceID uint64             `parquet:",delta"`
-	Value        int64              `parquet:",delta"`
-	Labels       []*profilev1.Label `parquet:",list"`
+	StacktraceID uint64 `parquet:",delta"`
+	Value        int64  `parquet:",delta"`
 }
 
 type Profile struct {
