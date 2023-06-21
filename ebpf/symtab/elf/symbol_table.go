@@ -44,6 +44,10 @@ type SymbolTable struct {
 	File  *MMapedElfFile
 }
 
+func (st *SymbolTable) IsDead() bool {
+	return st.File.err != nil
+}
+
 func (st *SymbolTable) DebugInfo() SymTabDebugInfo {
 	return SymTabDebugInfo{
 		Name: "SymbolTable",

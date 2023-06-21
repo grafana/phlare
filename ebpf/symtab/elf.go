@@ -21,8 +21,9 @@ type ElfTable struct {
 	table       SymbolNameResolver
 	base        uint64
 
-	loaded bool
-	err    error
+	loaded       bool
+	loadedCached bool
+	err          error
 
 	options ElfTableOptions
 	logger  log.Logger
@@ -89,6 +90,7 @@ func (et *ElfTable) load() {
 	symbols := et.options.ElfCache.GetSymbolsByBuildID(buildID)
 	if symbols != nil {
 		et.table = symbols
+		et.loadedCached = true
 		return
 	}
 	fileInfo, err := os.Stat(fsElfFilePath)
@@ -99,6 +101,7 @@ func (et *ElfTable) load() {
 	symbols = et.options.ElfCache.GetSymbolsByStat(statFromFileInfo(fileInfo))
 	if symbols != nil {
 		et.table = symbols
+		et.loadedCached = true
 		return
 	}
 
@@ -154,9 +157,34 @@ func (et *ElfTable) createSymbolTable(me *elf2.MMapedElfFile) (SymbolNameResolve
 	panic("unreachable")
 }
 
+var errTableDead = fmt.Errorf("non cached table dead")
+
 func (et *ElfTable) Resolve(pc uint64) string {
-	et.load()
+	if !et.loaded {
+		et.load()
+	}
+	if et.err != nil {
+		return ""
+	}
 	pc -= et.base
+	res := et.table.Resolve(pc)
+	if res != "" {
+		return res
+	}
+	if !et.table.IsDead() {
+		return ""
+	}
+	if !et.loadedCached {
+		et.err = errTableDead
+		return ""
+	}
+	et.table = &noopSymbolNameResolver{}
+	et.loaded = false
+	et.loadedCached = false
+	et.load()
+	if et.err != nil {
+		return res
+	}
 	return et.table.Resolve(pc)
 }
 

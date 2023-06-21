@@ -25,7 +25,15 @@ func NewElfCache(buildIDCacheOptions GCacheOptions, sameFileCacheOptions GCacheO
 }
 
 func (e *ElfCache) GetSymbolsByBuildID(buildID elf.BuildID) SymbolNameResolver {
-	return e.BuildIDCache.Get(buildID)
+	res := e.BuildIDCache.Get(buildID)
+	if res == nil {
+		return nil
+	}
+	if res.IsDead() {
+		e.BuildIDCache.Remove(buildID)
+		return nil
+	}
+	return res
 }
 
 func (e *ElfCache) CacheByBuildID(buildID elf.BuildID, v SymbolNameResolver) {
@@ -36,7 +44,15 @@ func (e *ElfCache) CacheByBuildID(buildID elf.BuildID, v SymbolNameResolver) {
 }
 
 func (e *ElfCache) GetSymbolsByStat(s Stat) SymbolNameResolver {
-	return e.SameFileCache.Get(s)
+	res := e.SameFileCache.Get(s)
+	if res == nil {
+		return nil
+	}
+	if res.IsDead() {
+		e.SameFileCache.Remove(s)
+		return nil
+	}
+	return res
 }
 
 func (e *ElfCache) CacheByStat(s Stat, v SymbolNameResolver) {
@@ -59,6 +75,12 @@ func (e *ElfCache) NextRound() {
 func (e *ElfCache) Cleanup() {
 	e.BuildIDCache.Cleanup()
 	e.SameFileCache.Cleanup()
+	e.BuildIDCache.Each(func(k elf.BuildID, v SymbolNameResolver) {
+		e.BuildIDCache.Remove(k)
+	})
+	e.SameFileCache.Each(func(k Stat, v SymbolNameResolver) {
+		e.SameFileCache.Remove(k)
+	})
 }
 
 type ElfCacheDebugInfo struct {

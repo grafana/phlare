@@ -12,10 +12,15 @@ type SymbolNameResolver interface {
 	Refresh()
 	Cleanup()
 	DebugInfo() elf.SymTabDebugInfo
+	IsDead() bool
 	Resolve(addr uint64) string
 }
 
 type noopSymbolNameResolver struct {
+}
+
+func (n *noopSymbolNameResolver) IsDead() bool {
+	return false
 }
 
 func (n *noopSymbolNameResolver) DebugInfo() elf.SymTabDebugInfo {

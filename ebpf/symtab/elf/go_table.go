@@ -15,6 +15,10 @@ type GoTable struct {
 	funcNameOffset uint64
 }
 
+func (g *GoTable) IsDead() bool {
+	return g.File.err != nil
+}
+
 func (g *GoTable) DebugInfo() SymTabDebugInfo {
 	return SymTabDebugInfo{
 		Name: "GoTable",
@@ -136,6 +140,10 @@ func (g *GoTable) goSymbolName(idx int) (string, error) {
 type GoTableWithFallback struct {
 	GoTable  *GoTable
 	SymTable *SymbolTable
+}
+
+func (g *GoTableWithFallback) IsDead() bool {
+	return g.GoTable.File.err != nil
 }
 
 func (g *GoTableWithFallback) DebugInfo() SymTabDebugInfo {

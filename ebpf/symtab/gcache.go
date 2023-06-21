@@ -2,7 +2,6 @@ package symtab
 
 import (
 	"fmt"
-
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
@@ -46,6 +45,7 @@ func NewGCache[K comparable, V Resource](options GCacheOptions) (*GCache[K, V], 
 func (g *GCache[K, V]) NextRound() {
 	g.round++
 }
+
 func (g *GCache[K, V]) Get(k K) V {
 	var zeroKey K
 	var zeroVal V
@@ -114,6 +114,10 @@ func (g *GCache[K, V]) LRUSize() int {
 	return g.lruCache.Len()
 }
 
+func (g *GCache[K, V]) Each(f func(k K, v V)) {
+	g.EachLRU(f)
+	g.EachRound(f)
+}
 func (g *GCache[K, V]) EachLRU(f func(k K, v V)) {
 	keys := g.lruCache.Keys()
 	for _, k := range keys {
@@ -138,6 +142,11 @@ func (g *GCache[K, V]) EachRound(f func(k K, v V)) {
 		}
 		f(k, e.v)
 	}
+}
+
+func (g *GCache[K, V]) Remove(k K) {
+	g.lruCache.Remove(k)
+	delete(g.roundCache, k)
 }
 
 type GCacheDebugInfo[T any] struct {
