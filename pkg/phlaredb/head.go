@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/bufbuild/connect-go"
-	"github.com/cespare/xxhash"
 	"github.com/dustin/go-humanize"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -332,36 +331,6 @@ func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartitio
 	return out
 }
 
-func StacktracePartitionFromProfile(lbls []phlaremodel.Labels, p *profilev1.Profile) uint64 {
-	return xxhash.Sum64String(stacktracePartitionKeyFromProfile(lbls, p))
-}
-
-func stacktracePartitionKeyFromProfile(lbls []phlaremodel.Labels, p *profilev1.Profile) string {
-	// take the first mapping (which is the main binary's file basename)
-	if len(p.Mapping) > 0 {
-		if filenameID := p.Mapping[0].Filename; filenameID > 0 {
-			filename := p.StringTable[filenameID]
-
-			// filter out invalid filenames like `[vsdo]` and `[vsyscall]`
-			// TODO: Ensure we handle windows paths correctly
-			if filepath.IsAbs(filename) {
-				return filepath.Base(filename)
-			}
-		}
-	}
-
-	// failing that look through the labels for the ServiceName
-	if len(lbls) > 0 {
-		for _, lbl := range lbls[0] {
-			if lbl.Name == phlaremodel.LabelNameServiceName {
-				return lbl.Value
-			}
-		}
-	}
-
-	return "unknown"
-}
-
 func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, externalLabels ...*typesv1.LabelPair) error {
 	labels, seriesFingerprints := labelsForProfile(p, externalLabels...)
 
@@ -372,7 +341,7 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	}
 
 	// determine the stacktraces partition ID
-	stacktracePartition := StacktracePartitionFromProfile(labels, p)
+	stacktracePartition := phlaremodel.StacktracePartitionFromProfile(labels, p)
 
 	metricName := phlaremodel.Labels(externalLabels).Get(model.MetricNameLabel)
 
