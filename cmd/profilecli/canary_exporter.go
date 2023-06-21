@@ -67,46 +67,48 @@ type canaryExporter struct {
 }
 
 type canaryExporterMetrics struct {
-	successGaugeVec                         *prometheus.GaugeVec
-	durationGaugeVec                        *prometheus.GaugeVec
-	contentLengthGauge                      *prometheus.GaugeVec
-	bodyUncompressedLengthGaugeVec          *prometheus.GaugeVec
-	statusCodeGauge                         *prometheus.GaugeVec
-	isSSLGauge                              prometheus.Gauge
-	probeSSLEarliestCertExpiryGauge         prometheus.Gauge
+	success                                 *prometheus.GaugeVec
+	duration                                *prometheus.HistogramVec
+	contentLength                           *prometheus.GaugeVec
+	bodyUncompressedLength                  *prometheus.GaugeVec
+	statusCode                              *prometheus.GaugeVec
+	isSSL                                   prometheus.Gauge
+	probeSSLEarliestCertExpiry              prometheus.Gauge
 	probeSSLLastChainExpiryTimestampSeconds prometheus.Gauge
 	probeTLSVersion                         *prometheus.GaugeVec
 	probeSSLLastInformation                 *prometheus.GaugeVec
-	probeHTTPVersionGauge                   *prometheus.GaugeVec
+	probeHTTPVersion                        *prometheus.GaugeVec
 }
 
 func newCanaryExporterMetrics(reg prometheus.Registerer) *canaryExporterMetrics {
 	return &canaryExporterMetrics{
-		successGaugeVec: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		success: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "probe_success",
 			Help: "Duration of http request by phase, summed over all redirects",
 		}, []string{"name"}),
-		durationGaugeVec: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-			Name: "probe_http_duration_seconds",
-			Help: "Duration of http request by phase, summed over all redirects",
+		duration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "probe_http_duration_seconds",
+			Help:    "Duration of http request by phase, summed over all redirects",
+			Buckets: prometheus.ExponentialBuckets(0.00025, 4, 10),
 		}, []string{"name", "phase"}),
-		contentLengthGauge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+
+		contentLength: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "probe_http_content_length",
 			Help: "Length of http content response",
 		}, []string{"name"}),
-		bodyUncompressedLengthGaugeVec: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		bodyUncompressedLength: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "probe_http_uncompressed_body_length",
 			Help: "Length of uncompressed response body",
 		}, []string{"name"}),
-		statusCodeGauge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		statusCode: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "probe_http_status_code",
 			Help: "Response HTTP status code",
 		}, []string{"name"}),
-		isSSLGauge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		isSSL: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "probe_http_ssl",
 			Help: "Indicates if SSL was used for the final redirect",
 		}),
-		probeSSLEarliestCertExpiryGauge: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		probeSSLEarliestCertExpiry: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Name: "probe_ssl_earliest_cert_expiry",
 			Help: "Returns last SSL chain expiry in unixtime",
 		}),
@@ -128,7 +130,7 @@ func newCanaryExporterMetrics(reg prometheus.Registerer) *canaryExporterMetrics 
 			},
 			[]string{"fingerprint_sha256", "subject", "issuer", "subjectalternative"},
 		),
-		probeHTTPVersionGauge: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		probeHTTPVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Name: "probe_http_version",
 			Help: "Returns the version of HTTP of the probe response",
 		}, []string{"name"}),
@@ -238,21 +240,13 @@ func (ce *canaryExporter) doTrace(ctx context.Context, probeName string) (rCtx c
 		tt.current.end = time.Now()
 
 		// record body size
-		ce.metrics.bodyUncompressedLengthGaugeVec.WithLabelValues(probeName).Set(float64(tt.bodySize.Load()))
+		ce.metrics.bodyUncompressedLength.WithLabelValues(probeName).Set(float64(tt.bodySize.Load()))
 
-		durationGaugeVec := ce.metrics.durationGaugeVec
-		for _, phase := range []string{
-			"connect",
-			"processing",
-			"resolve",
-			"tls",
-			"transfer",
-		} {
-			durationGaugeVec.WithLabelValues(probeName, phase).Set(0)
-		}
+		// aggregate duration for all requests (that is to support redirects)
+		durations := make(map[string]float64)
 
 		for _, trace := range tt.traces {
-			ce.metrics.durationGaugeVec.WithLabelValues(probeName, "resolve").Add(trace.dnsDone.Sub(trace.start).Seconds())
+			durations["resolve"] += trace.dnsDone.Sub(trace.start).Seconds()
 
 			// Continue here if we never got a connection because a request failed.
 			if trace.gotConn.IsZero() {
@@ -261,26 +255,32 @@ func (ce *canaryExporter) doTrace(ctx context.Context, probeName string) (rCtx c
 
 			if trace.tls {
 				// dnsDone must be set if gotConn was set.
-				durationGaugeVec.WithLabelValues(probeName, "connect").Add(trace.connectDone.Sub(trace.dnsDone).Seconds())
-				durationGaugeVec.WithLabelValues(probeName, "tls").Add(trace.tlsDone.Sub(trace.tlsStart).Seconds())
+				durations["connect"] += trace.connectDone.Sub(trace.dnsDone).Seconds()
+				durations["tls"] += trace.tlsDone.Sub(trace.tlsStart).Seconds()
 			} else {
-				durationGaugeVec.WithLabelValues(probeName, "connect").Add(trace.gotConn.Sub(trace.dnsDone).Seconds())
+				durations["connect"] += trace.gotConn.Sub(trace.dnsDone).Seconds()
 			}
 
 			// Continue here if we never got a response from the server.
 			if trace.responseStart.IsZero() {
 				continue
 			}
-			ce.metrics.durationGaugeVec.WithLabelValues(probeName, "processing").Add(trace.responseStart.Sub(trace.gotConn).Seconds())
+			durations["processing"] += trace.responseStart.Sub(trace.gotConn).Seconds()
 
 			// Continue here if we never read the full response from the server.
 			// Usually this means that request either failed or was redirected.
 			if trace.end.IsZero() {
 				continue
 			}
-			durationGaugeVec.WithLabelValues(probeName, "transfer").Add(trace.end.Sub(trace.responseStart).Seconds())
+			durations["transfer"] += trace.end.Sub(trace.responseStart).Seconds()
 		}
-		if m := ce.metrics.successGaugeVec.WithLabelValues(probeName); result {
+
+		// now store the values in the histogram
+		for phase, value := range durations {
+			ce.metrics.duration.WithLabelValues(probeName, phase).Observe(value)
+		}
+
+		if m := ce.metrics.success.WithLabelValues(probeName); result {
 			level.Info(logger).Log("msg", "probe successful", "probeName", probeName)
 			m.Set(1)
 		} else {
@@ -474,22 +474,22 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp.Body = &readerWrapper{ReadCloser: resp.Body, bodySize: t.bodySize}
 
 	if resp.TLS != nil {
-		t.metrics.isSSLGauge.Set(float64(1))
-		t.metrics.probeSSLEarliestCertExpiryGauge.Set(float64(getEarliestCertExpiry(resp.TLS).Unix()))
+		t.metrics.isSSL.Set(float64(1))
+		t.metrics.probeSSLEarliestCertExpiry.Set(float64(getEarliestCertExpiry(resp.TLS).Unix()))
 		t.metrics.probeTLSVersion.WithLabelValues(getTLSVersion(resp.TLS)).Set(1)
 		t.metrics.probeSSLLastChainExpiryTimestampSeconds.Set(float64(getLastChainExpiry(resp.TLS).Unix()))
 		t.metrics.probeSSLLastInformation.WithLabelValues(getFingerprint(resp.TLS), getSubject(resp.TLS), getIssuer(resp.TLS), getDNSNames(resp.TLS)).Set(1)
 	}
 
-	t.metrics.statusCodeGauge.WithLabelValues(t.name).Set(float64(resp.StatusCode))
-	t.metrics.contentLengthGauge.WithLabelValues(t.name).Set(float64(resp.ContentLength))
+	t.metrics.statusCode.WithLabelValues(t.name).Set(float64(resp.StatusCode))
+	t.metrics.contentLength.WithLabelValues(t.name).Set(float64(resp.ContentLength))
 
 	var httpVersionNumber float64
 	httpVersionNumber, err = strconv.ParseFloat(strings.TrimPrefix(resp.Proto, "HTTP/"), 64)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error parsing version number from HTTP version", "err", err)
 	}
-	t.metrics.probeHTTPVersionGauge.WithLabelValues(t.name).Set(httpVersionNumber)
+	t.metrics.probeHTTPVersion.WithLabelValues(t.name).Set(httpVersionNumber)
 
 	return resp, err
 }
