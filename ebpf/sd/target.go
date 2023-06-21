@@ -14,6 +14,20 @@ import (
 
 type DiscoveryTarget map[string]string
 
+// DebugString return unsorted labels as a string.
+func (t *DiscoveryTarget) DebugString() string {
+	var b strings.Builder
+	b.WriteByte('{')
+	for k, v := range *t {
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(v)
+		b.WriteByte(',')
+	}
+	b.WriteByte('}')
+	return b.String()
+}
+
 const (
 	labelContainerID    = "__container_id__"
 	labelServiceName    = "service_name"
@@ -133,7 +147,7 @@ func (tf *targetFinder) setTargets(opts TargetsOptions) {
 			if err != nil {
 				_ = level.Error(tf.l).Log(
 					"msg", "target skipped",
-					"target", target.Labels().String(),
+					"target", target.DebugString(),
 					"err", err,
 				)
 				continue
@@ -152,7 +166,7 @@ func (tf *targetFinder) setTargets(opts TargetsOptions) {
 		if err != nil {
 			_ = level.Error(tf.l).Log(
 				"msg", "default target skipped",
-				"target", opts.DefaultTarget.Labels().String(),
+				"target", opts.DefaultTarget.DebugString(),
 				"err", err,
 			)
 			tf.defaultTarget = nil
