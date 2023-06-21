@@ -1,6 +1,6 @@
 module github.com/grafana/phlare/ebpf
 
-go 1.20
+go 1.19
 
 require (
 	github.com/cilium/ebpf v0.10.0

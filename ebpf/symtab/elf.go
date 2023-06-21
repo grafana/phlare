@@ -137,7 +137,7 @@ func (et *ElfTable) createSymbolTable(me *elf2.MMapedElfFile) (SymbolNameResolve
 	symTable, symErr := me.NewSymbolTable()
 	goTable, goErr := me.NewGoTable()
 	if symErr != nil && goErr != nil {
-		return nil, fmt.Errorf("s: %w g: %w", symErr, goErr)
+		return nil, fmt.Errorf("s: %s g: %s", symErr.Error(), goErr.Error())
 	}
 	if symErr == nil && goErr == nil {
 		return &elf2.GoTableWithFallback{

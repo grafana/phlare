@@ -7,7 +7,6 @@ import (
 )
 
 type Resource interface {
-	comparable
 	Refresh()
 	Cleanup()
 }
@@ -74,8 +73,7 @@ func (g *GCache[K, V]) Get(k K) V {
 
 func (g *GCache[K, V]) Cache(k K, v V) {
 	var zeroKey K
-	var zeroVal V
-	if k == zeroKey || v == zeroVal {
+	if k == zeroKey {
 		return
 	}
 	e := &entry[V]{v: v, round: g.round}

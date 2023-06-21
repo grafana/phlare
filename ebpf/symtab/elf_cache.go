@@ -29,6 +29,9 @@ func (e *ElfCache) GetSymbolsByBuildID(buildID elf.BuildID) SymbolNameResolver {
 }
 
 func (e *ElfCache) CacheByBuildID(buildID elf.BuildID, v SymbolNameResolver) {
+	if v == nil {
+		return
+	}
 	e.BuildIDCache.Cache(buildID, v)
 }
 
@@ -37,6 +40,9 @@ func (e *ElfCache) GetSymbolsByStat(s Stat) SymbolNameResolver {
 }
 
 func (e *ElfCache) CacheByStat(s Stat, v SymbolNameResolver) {
+	if v == nil {
+		return
+	}
 	e.SameFileCache.Cache(s, v)
 }
 
