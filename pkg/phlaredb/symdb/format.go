@@ -209,14 +209,14 @@ func (h stacktraceChunkHeadersByMappingAndIndex) Len() int {
 
 func (h stacktraceChunkHeadersByMappingAndIndex) Less(i, j int) bool {
 	a, b := h.Entries[i], h.Entries[j]
-	if a == b {
+	if a.MappingName == b.MappingName {
 		return a.ChunkIndex < b.ChunkIndex
 	}
 	return a.MappingName < b.MappingName
 }
 
 func (h stacktraceChunkHeadersByMappingAndIndex) Swap(i, j int) {
-	h.Entries[j].MappingName, h.Entries[j].MappingName = h.Entries[i].MappingName, h.Entries[i].MappingName
+	h.Entries[i], h.Entries[j] = h.Entries[j], h.Entries[i]
 }
 
 type StacktraceChunkHeader struct {
