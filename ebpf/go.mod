@@ -10,7 +10,7 @@ require (
 	github.com/klauspost/compress v1.16.6
 	github.com/prometheus/common v0.44.0
 	github.com/prometheus/prometheus v0.44.0
-	github.com/samber/lo v1.38.1
+	github.com/samber/lo v1.37.0
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/sys v0.9.0
