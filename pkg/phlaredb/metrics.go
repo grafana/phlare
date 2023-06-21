@@ -208,7 +208,7 @@ func newBlocksMetrics(reg prometheus.Registerer) *blocksMetrics {
 			Help: "Latency of opening a block in seconds",
 		}),
 		blockOpened: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "pyroscopedb_block_opened",
+			Name: "pyroscopedb_blocks_currently_open",
 			Help: "Number of blocks opened",
 		}),
 	}
