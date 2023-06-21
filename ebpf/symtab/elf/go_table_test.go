@@ -1,6 +1,7 @@
 package elf
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,8 @@ func TestSelfGoSymbolComparison(t *testing.T) {
 	}
 	for _, testcase := range ts {
 		t.Run(testcase.f, func(t *testing.T) {
-			expectedSymbols, err := GetGoSymbols(testcase.f)
+			patchGo20Magic := strings.Contains(testcase.f, "go20")
+			expectedSymbols, err := GetGoSymbols(testcase.f, patchGo20Magic)
 
 			require.NoError(t, err)
 

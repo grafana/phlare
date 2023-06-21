@@ -33,7 +33,7 @@ func TestMallocResolve(t *testing.T) {
 }
 
 func BenchmarkProc(b *testing.B) {
-	gosym, _ := elf.GetGoSymbols("/proc/self/exe")
+	gosym, _ := elf.GetGoSymbols("/proc/self/exe", false)
 	logger := log.NewSyncLogger(log.NewLogfmtLogger(os.Stderr))
 	proc := NewProcTable(logger, ProcTableOptions{Pid: os.Getpid()})
 	proc.Refresh()

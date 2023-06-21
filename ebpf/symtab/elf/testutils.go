@@ -3,6 +3,7 @@ package elf
 import (
 	"debug/elf"
 	"debug/gosym"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -48,21 +49,21 @@ func GetELFSymbolsFromSymtab(elfFile *elf.File) []TestSym {
 	return symbols
 }
 
-func GetGoSymbols(file string) ([]TestSym, error) {
+func GetGoSymbols(file string, patchGo20Magic bool) ([]TestSym, error) {
 	obj, err := elf.Open(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open elf file: %w", err)
 	}
 	defer obj.Close()
 
-	symbols, err := getGoSymbolsFromPCLN(obj)
+	symbols, err := getGoSymbolsFromPCLN(obj, patchGo20Magic)
 	if err != nil {
 		return nil, err
 	}
 	return symbols, nil
 }
 
-func getGoSymbolsFromPCLN(obj *elf.File) ([]TestSym, error) {
+func getGoSymbolsFromPCLN(obj *elf.File, patchGo20Magic bool) ([]TestSym, error) {
 	var err error
 	var pclntab []byte
 	text := obj.Section(".text")
@@ -86,6 +87,13 @@ func getGoSymbolsFromPCLN(obj *elf.File) ([]TestSym, error) {
 	}
 	if textStart < text.Addr || textStart >= text.Addr+text.Size {
 		return nil, fmt.Errorf(" runtime.text out of .text bounds %d %d %d", textStart, text.Addr, text.Size)
+	}
+
+	if patchGo20Magic {
+		magic := pclntab[0:4]
+		if binary.LittleEndian.Uint32(magic) == 0xFFFFFFF1 {
+			binary.LittleEndian.PutUint32(magic, 0xFFFFFFF0)
+		}
 	}
 	pcln := gosym.NewLineTable(pclntab, textStart)
 	table, err := gosym.NewTable(nil, pcln)

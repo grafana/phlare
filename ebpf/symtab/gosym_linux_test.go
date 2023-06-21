@@ -41,7 +41,7 @@ func TestPclntab18(t *testing.T) {
 
 func BenchmarkGoSym(b *testing.B) {
 	mod := "/proc/self/exe"
-	symbols, err := elf.GetGoSymbols(mod)
+	symbols, err := elf.GetGoSymbols(mod, false)
 	require.NoError(b, err)
 	me, err := elf.NewMMapedElfFile(mod)
 	require.NoError(b, err)
