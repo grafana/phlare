@@ -252,7 +252,7 @@ func (d *treeDecoder) unmarshal(t *parentPointerTree, r io.Reader) error {
 			if len(rb) > 0 {
 				// It's expected that r contains a single complete group.
 				m := groupvarint.BytesUsed[rb[0]] - len(rb)
-				if m >= len(b) {
+				if m >= (len(b) + len(rb)) {
 					return io.ErrUnexpectedEOF
 				}
 				rb = append(rb, b[:m]...)
