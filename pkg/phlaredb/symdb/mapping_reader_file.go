@@ -153,6 +153,7 @@ func (r *stacktraceResolverFile) ResolveStacktraces(ctx context.Context, dst Sta
 
 	for _, cr := range rs {
 		cr.resolveStacktracesChunk(dst)
+		cr.release()
 	}
 
 	return nil
@@ -170,19 +171,19 @@ func (r *stacktraceResolverFile) newResolve(ctx context.Context, dst StacktraceI
 // stacktracesResolve represents a stacktrace resolution operation.
 type stacktracesResolve struct {
 	ctx context.Context
-	dst StacktraceInserter
 	r   *stacktraceResolverFile
-	c   StacktracesRange
+	cr  *stacktraceChunkFileReader
 	t   *parentPointerTree
+
+	dst StacktraceInserter
+	c   StacktracesRange
 }
 
 func (r *stacktracesResolve) fetch() (err error) {
-	cr := r.r.mapping.stacktraceChunkReader(r.c.chunk)
-	if cr == nil {
+	if r.cr = r.r.mapping.stacktraceChunkReader(r.c.chunk); r.cr == nil {
 		return ErrInvalidStacktraceRange
 	}
-	r.t, err = cr.fetch(r.ctx)
-	if err != nil {
+	if r.t, err = r.cr.fetch(r.ctx); err != nil {
 		return fmt.Errorf("failed to fetch stack traces: %w", err)
 	}
 	return r.ctx.Err()
@@ -198,6 +199,8 @@ func (r *stacktracesResolve) resolveStacktracesChunk(dst StacktraceInserter) {
 	}
 	stacktraceLocations.put(s)
 }
+
+func (r *stacktracesResolve) release() { r.cr.reset() }
 
 type stacktraceChunkFileReader struct {
 	reader *Reader
@@ -246,4 +249,10 @@ func (c *stacktraceChunkFileReader) fetch(ctx context.Context) (_ *parentPointer
 
 	c.tree = t
 	return t, nil
+}
+
+func (c *stacktraceChunkFileReader) reset() {
+	c.m.Lock()
+	c.tree = nil
+	c.m.Unlock()
 }
