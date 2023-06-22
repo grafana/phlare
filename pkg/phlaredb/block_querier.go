@@ -401,7 +401,7 @@ func NewSingleBlockQuerierFromMeta(phlarectx context.Context, bucketReader phlar
 	case block.MetaVersion1:
 		q.stacktraces = newStacktraceResolverV1(q.bkt, meta)
 	case block.MetaVersion2:
-		br := phlareobj.NewPrefixedBucket(q.bkt, block.SymDBFolder)
+		br := phlareobj.NewPrefixedBucket(q.bkt, symdb.DefaultDirName)
 		q.stacktraces = newStacktraceResolverV2(br)
 	default:
 		panic(fmt.Errorf("unsupported block version %d", meta.Version))

@@ -205,7 +205,7 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 	}
 	h.symbolDB = symdb.NewSymDB(
 		symdb.DefaultConfig().
-			WithDirectory(filepath.Join(h.headPath, block.SymDBFolder)),
+			WithDirectory(filepath.Join(h.headPath, symdb.DefaultDirName)),
 	)
 
 	h.delta = newDeltaProfiles()
@@ -996,9 +996,9 @@ func (h *Head) flush(ctx context.Context) error {
 	return nil
 }
 
-// list files in symdb folder
+// SymDBFiles lists files in symdb folder
 func (h *Head) SymDBFiles() ([]block.File, error) {
-	files, err := os.ReadDir(filepath.Join(h.headPath, block.SymDBFolder))
+	files, err := os.ReadDir(filepath.Join(h.headPath, symdb.DefaultDirName))
 	if err != nil {
 		return nil, err
 	}

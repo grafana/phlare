@@ -20,7 +20,6 @@ import (
 const (
 	IndexFilename        = "index.tsdb"
 	ParquetSuffix        = ".parquet"
-	SymDBFolder          = "symdb"
 	DeletionMarkFilename = "deletion-mark.json"
 
 	HostnameLabel = "__hostname__"
