@@ -1007,7 +1007,7 @@ func (h *Head) SymDBFiles() ([]block.File, error) {
 		if f.IsDir() {
 			continue
 		}
-		result[idx].RelPath = f.Name()
+		result[idx].RelPath = filepath.Join(h.headPath, f.Name())
 		info, err := f.Info()
 		if err != nil {
 			return nil, err
