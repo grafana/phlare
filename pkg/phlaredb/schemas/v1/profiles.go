@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"io"
+
 	"github.com/google/uuid"
 	"github.com/prometheus/common/model"
 	"github.com/segmentio/parquet-go"
@@ -119,4 +121,140 @@ func (*ProfilePersister) Reconstruct(row parquet.Row) (id uint64, s *Profile, er
 		return 0, nil, err
 	}
 	return 0, &profile, nil
+}
+
+type SliceRowReader[T any] struct {
+	slice     []T
+	serialize func(T, parquet.Row) parquet.Row
+}
+
+func NewProfilesRowReader(slice []*Profile) *SliceRowReader[*Profile] {
+	return &SliceRowReader[*Profile]{
+		slice: slice,
+		serialize: func(p *Profile, r parquet.Row) parquet.Row {
+			return profilesSchema.Deconstruct(r, p)
+		},
+	}
+}
+
+func (r *SliceRowReader[T]) ReadRows(rows []parquet.Row) (n int, err error) {
+	if len(r.slice) == 0 {
+		return 0, io.EOF
+	}
+	if len(rows) > len(r.slice) {
+		rows = rows[:len(r.slice)]
+		err = io.EOF
+	}
+	for pos, p := range r.slice[:len(rows)] {
+		// serialize the row
+		rows[pos] = r.serialize(p, rows[pos])
+		n++
+	}
+	r.slice = r.slice[len(rows):]
+	return n, err
+}
+
+type InMemoryProfile struct {
+	// A unique UUID per ingested profile
+	ID uuid.UUID
+
+	// SeriesIndex references the underlying series and is generated when
+	// writing the TSDB index. The SeriesIndex is different from block to
+	// block.
+	SeriesIndex uint32
+
+	// SeriesFingerprint references the underlying series and is purely based
+	// on the label values. The value is consistent for the same label set (so
+	// also between different blocks).
+	SeriesFingerprint model.Fingerprint
+
+	// frames with Function.function_name fully matching the following
+	// regexp will be dropped from the samples, along with their successors.
+	DropFrames int64
+	// frames with Function.function_name fully matching the following
+	// regexp will be kept, even if it matches drop_frames.
+	KeepFrames int64
+	// Time of collection (UTC) represented as nanoseconds past the epoch.
+	TimeNanos int64
+	// Duration of the profile, if a duration makes sense.
+	DurationNanos int64
+	// The number of events between sampled occurrences.
+	Period int64
+	// Freeform text associated to the profile.
+	Comments []int64
+	// Index into the string table of the type of the preferred sample
+	// value. If unset, clients should default to the last sample value.
+	DefaultSampleType int64
+
+	Samples Samples
+}
+
+type Samples struct {
+	StacktraceIDs []uint32
+	Values        []uint64
+}
+
+func NewInMemoryProfilesRowReader(slice []InMemoryProfile) *SliceRowReader[InMemoryProfile] {
+	return &SliceRowReader[InMemoryProfile]{
+		slice:     slice,
+		serialize: DeconstructMemoryProfile,
+	}
+}
+
+func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row {
+	var (
+		col    = -1
+		newCol = func() int {
+			col++
+			return col
+		}
+		totalCols = 8 + (6 * len(imp.Samples.StacktraceIDs)) + len(imp.Comments)
+	)
+	if cap(row) < totalCols {
+		row = make(parquet.Row, 0, totalCols)
+	}
+	row = row[:0]
+	row = append(row, parquet.FixedLenByteArrayValue(imp.ID[:]).Level(0, 0, newCol()))
+	row = append(row, parquet.Int32Value(int32(imp.SeriesIndex)).Level(0, 0, newCol()))
+	newCol()
+	repetition := -1
+	for i := range imp.Samples.StacktraceIDs {
+		if repetition < 1 {
+			repetition++
+		}
+		row = append(row, parquet.Int64Value(int64(imp.Samples.StacktraceIDs[i])).Level(repetition, 1, col))
+	}
+	newCol()
+	repetition = -1
+	for i := range imp.Samples.Values {
+		if repetition < 1 {
+			repetition++
+		}
+		row = append(row, parquet.Int64Value(int64(imp.Samples.Values[i])).Level(repetition, 1, col))
+	}
+	for i := 0; i < 4; i++ {
+		newCol()
+		repetition := -1
+		for range imp.Samples.Values {
+			if repetition < 1 {
+				repetition++
+			}
+			row = append(row, parquet.Value{}.Level(repetition, 1, col))
+		}
+	}
+	row = append(row, parquet.Int64Value(imp.DropFrames).Level(0, 1, newCol()))
+	row = append(row, parquet.Int64Value(imp.KeepFrames).Level(0, 1, newCol()))
+	row = append(row, parquet.Int64Value(imp.TimeNanos).Level(0, 0, newCol()))
+	row = append(row, parquet.Int64Value(imp.DurationNanos).Level(0, 1, newCol()))
+	row = append(row, parquet.Int64Value(imp.Period).Level(0, 1, newCol()))
+	newCol()
+	repetition = -1
+	for i := range imp.Comments {
+		if repetition < 1 {
+			repetition++
+		}
+		row = append(row, parquet.Int64Value(imp.Comments[i]).Level(repetition, 1, col))
+	}
+	row = append(row, parquet.Int64Value(imp.DefaultSampleType).Level(0, 1, newCol()))
+	return row
 }

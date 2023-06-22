@@ -36,14 +36,14 @@ type profileStore struct {
 	path      string
 	persister schemav1.Persister[*schemav1.Profile]
 	helper    storeHelper[*schemav1.Profile]
-	writer    *parquet.GenericWriter[*schemav1.Profile]
+	writer    *parquet.Writer
 
 	// lock serializes appends to the slice. Every new profile is appended
 	// to the slice and to the index (has its own lock). In practice, it's
 	// only purpose is to accommodate the parquet writer: slice is never
 	// accessed for reads.
 	profilesLock sync.Mutex
-	slice        []*schemav1.Profile
+	slice        []schemav1.InMemoryProfile
 
 	// Rows lock synchronises access to the on-disk row groups.
 	// When the in-memory index (profiles) is being flushed on disk,
@@ -58,7 +58,7 @@ type profileStore struct {
 	flushQueue     chan int // channel to signal that a flush is needed for slice[:n]
 	closeOnce      sync.Once
 	flushWg        sync.WaitGroup
-	flushBuffer    []*schemav1.Profile
+	flushBuffer    []schemav1.InMemoryProfile
 	flushBufferLbs []phlaremodel.Labels
 }
 
@@ -75,7 +75,7 @@ func newProfileStore(phlarectx context.Context) *profileStore {
 	go s.cutRowGroupLoop()
 	// Initialize writer on /dev/null
 	// TODO: Reuse parquet.Writer beyond life time of the head.
-	s.writer = parquet.NewGenericWriter[*schemav1.Profile](io.Discard, s.persister.Schema(),
+	s.writer = parquet.NewWriter(io.Discard, s.persister.Schema(),
 		parquet.ColumnPageBuffers(parquet.NewFileBufferPool(os.TempDir(), "phlaredb-parquet-buffers*")),
 		parquet.CreatedBy("github.com/grafana/phlare/", build.Version, build.Revision),
 	)
@@ -240,7 +240,7 @@ func (s *profileStore) cutRowGroup(count int) (err error) {
 		return err
 	}
 
-	n, err := s.writer.Write(s.flushBuffer)
+	n, err := parquet.CopyRows(s.writer, schemav1.NewInMemoryProfilesRowReader(s.flushBuffer))
 	if err != nil {
 		return errors.Wrap(err, "write row group segments to disk")
 	}
@@ -279,7 +279,8 @@ func (s *profileStore) cutRowGroup(count int) (err error) {
 	defer s.profilesLock.Unlock()
 	for i := range s.slice[:count] {
 		// don't retain profiles and samples in memory as re-slice.
-		s.slice[i] = nil
+		s.slice[i].Samples.StacktraceIDs = nil
+		s.slice[i].Samples.Values = nil
 	}
 	// reset slice and metrics
 	s.slice = s.slice[count:]
@@ -296,7 +297,7 @@ func (s *profileStore) cutRowGroup(count int) (err error) {
 }
 
 type byLabels struct {
-	p   []*schemav1.Profile
+	p   []schemav1.InMemoryProfile
 	lbs []phlaremodel.Labels
 }
 
@@ -332,7 +333,7 @@ func (by byLabels) Less(i, j int) bool {
 // loadProfilesToFlush loads and sort profiles to flush into flushBuffer and returns the size of the profiles.
 func (s *profileStore) loadProfilesToFlush(count int) uint64 {
 	if cap(s.flushBuffer) < count {
-		s.flushBuffer = make([]*schemav1.Profile, 0, count)
+		s.flushBuffer = make([]schemav1.InMemoryProfile, 0, count)
 	}
 	if cap(s.flushBufferLbs) < count {
 		s.flushBufferLbs = make([]phlaremodel.Labels, 0, count)
@@ -389,7 +390,7 @@ func (s *profileStore) writeRowGroups(path string, rowGroups []parquet.RowGroup)
 	return n, numRowGroups, nil
 }
 
-func (s *profileStore) ingest(_ context.Context, profiles []*schemav1.Profile, lbs phlaremodel.Labels, profileName string, rewriter *rewriter) error {
+func (s *profileStore) ingest(_ context.Context, profiles []schemav1.InMemoryProfile, lbs phlaremodel.Labels, profileName string, rewriter *rewriter) error {
 	// rewrite elements
 	for pos := range profiles {
 		if err := s.helper.rewrite(rewriter, profiles[pos]); err != nil {
