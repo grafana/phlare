@@ -32,7 +32,7 @@ func TestInMemoryProfilesRowReader(t *testing.T) {
 
 const samplesPerProfile = 3
 
-func TestInMemoryLayout(t *testing.T) {
+func TestRoundtripProfile(t *testing.T) {
 	profiles := generateProfiles(1000)
 	iprofiles := generateMemoryProfiles(1000)
 	actual, err := readAll(NewInMemoryProfilesRowReader(iprofiles))
@@ -46,6 +46,7 @@ func BenchmarkRowReader(b *testing.B) {
 	profiles := generateProfiles(1000)
 	iprofiles := generateMemoryProfiles(1000)
 	b.Run("in-memory", func(b *testing.B) {
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			_, err := readAll(NewInMemoryProfilesRowReader(iprofiles))
 			if err != nil {
@@ -54,6 +55,7 @@ func BenchmarkRowReader(b *testing.B) {
 		}
 	})
 	b.Run("schema", func(b *testing.B) {
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			_, err := readAll(NewProfilesRowReader(profiles))
 			if err != nil {
