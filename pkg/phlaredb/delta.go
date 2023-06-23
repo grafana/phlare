@@ -76,27 +76,6 @@ func (d *deltaProfiles) computeDelta(ps schemav1.InMemoryProfile, lbs phlaremode
 	return schemav1.CloneSamples(schemav1.TrimZeroSamples(ps.Samples))
 }
 
-func copySampleSlice(s []*schemav1.Sample) []*schemav1.Sample {
-	if s == nil {
-		return nil
-	}
-	r := make([]*schemav1.Sample, len(s))
-	for i := range s {
-		r[i] = copySample(s[i])
-	}
-	return r
-}
-
-func copySample(s *schemav1.Sample) *schemav1.Sample {
-	if s == nil {
-		return nil
-	}
-	return &schemav1.Sample{
-		StacktraceID: s.StacktraceID,
-		Value:        s.Value,
-	}
-}
-
 func isDelta(lbs phlaremodel.Labels) bool {
 	switch lbs.Get(phlaremodel.LabelNameDelta) {
 	case "false":

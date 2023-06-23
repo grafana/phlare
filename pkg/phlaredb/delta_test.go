@@ -24,37 +24,35 @@ func TestComputeDelta(t *testing.T) {
 	profiles, labels := newProfileSchema(builder.Profile, "memory")
 
 	samples := delta.computeDelta(profiles[0], labels[0])
-	require.Nil(t, samples)
+	require.Empty(t, samples.StacktraceIDs)
 	samples = delta.computeDelta(profiles[1], labels[1])
-	require.Nil(t, samples)
+	require.Empty(t, samples.StacktraceIDs)
 	samples = delta.computeDelta(profiles[2], labels[2])
-	require.NotNil(t, samples)
+	require.NotEmpty(t, samples.StacktraceIDs)
 	require.Equal(t, 2, len(samples.StacktraceIDs))
-	require.Equal(t, int64(3), samples.Values[0])
-	require.Equal(t, int64(3), samples.Values[1])
+	require.Equal(t, uint64(3), samples.Values[0])
+	require.Equal(t, uint64(3), samples.Values[1])
 	samples = delta.computeDelta(profiles[3], labels[3])
-	require.NotNil(t, samples)
+	require.NotEmpty(t, samples.StacktraceIDs)
 	require.Equal(t, 2, len(samples.StacktraceIDs))
-	require.Equal(t, int64(4), samples.Values[0])
-	require.Equal(t, int64(4), samples.Values[1])
+	require.Equal(t, uint64(4), samples.Values[0])
+	require.Equal(t, uint64(4), samples.Values[1])
 
 	profiles, labels = newProfileSchema(builder.Profile, "memory")
 	samples = delta.computeDelta(profiles[0], labels[0])
-	require.NotNil(t, samples)
-	require.Equal(t, 0, len(samples.StacktraceIDs))
+	require.Empty(t, samples.StacktraceIDs)
 	samples = delta.computeDelta(profiles[1], labels[1])
-	require.NotNil(t, samples)
-	require.Equal(t, 0, len(samples.StacktraceIDs))
+	require.Empty(t, samples.StacktraceIDs)
 	samples = delta.computeDelta(profiles[2], labels[2])
-	require.NotNil(t, samples)
+	require.NotEmpty(t, samples.StacktraceIDs)
 	require.Equal(t, 2, len(samples.StacktraceIDs))
-	require.Equal(t, int64(3), samples.Values[0])
-	require.Equal(t, int64(3), samples.Values[1])
+	require.Equal(t, uint64(3), samples.Values[0])
+	require.Equal(t, uint64(3), samples.Values[1])
 	samples = delta.computeDelta(profiles[3], labels[3])
-	require.NotNil(t, samples)
+	require.NotEmpty(t, samples.StacktraceIDs)
 	require.Equal(t, 2, len(samples.StacktraceIDs))
-	require.Equal(t, int64(4), samples.Values[0])
-	require.Equal(t, int64(4), samples.Values[1])
+	require.Equal(t, uint64(4), samples.Values[0])
+	require.Equal(t, uint64(4), samples.Values[1])
 }
 
 func newProfileSchema(p *profilev1.Profile, name string) ([]schemav1.InMemoryProfile, []phlaremodel.Labels) {
@@ -96,11 +94,10 @@ func TestDeltaSample(t *testing.T) {
 	highest := map[uint32]uint64{}
 	_ = deltaSamples(highest, new)
 	require.Equal(t, 2, len(highest))
-	require.Equal(t, []*schemav1.Sample{
-		{StacktraceID: 2, Value: 1},
-		{StacktraceID: 3, Value: 1},
+	require.Equal(t, map[uint32]uint64{
+		2: 1,
+		3: 1,
 	}, highest)
-	require.Equal(t, highest, new)
 
 	t.Run("same stacktraces, matching counter samples, matching gauge samples", func(t *testing.T) {
 		new = schemav1.Samples{
@@ -109,13 +106,13 @@ func TestDeltaSample(t *testing.T) {
 		}
 		_ = deltaSamples(highest, new)
 		require.Equal(t, 2, len(highest))
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 2, Value: 1},
-			{StacktraceID: 3, Value: 1},
+		require.Equal(t, map[uint32]uint64{
+			2: 1,
+			3: 1,
 		}, highest)
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 2, Value: 0},
-			{StacktraceID: 3, Value: 0},
+		require.Equal(t, schemav1.Samples{
+			StacktraceIDs: []uint32{2, 3},
+			Values:        []uint64{0, 0},
 		}, new)
 	})
 
@@ -126,13 +123,13 @@ func TestDeltaSample(t *testing.T) {
 		}
 		_ = deltaSamples(highest, new)
 		require.Equal(t, 2, len(highest))
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 2, Value: 1},
-			{StacktraceID: 3, Value: 1},
+		require.Equal(t, map[uint32]uint64{
+			2: 1,
+			3: 1,
 		}, highest)
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 2, Value: 0},
-			{StacktraceID: 3, Value: 0},
+		require.Equal(t, schemav1.Samples{
+			StacktraceIDs: []uint32{2, 3},
+			Values:        []uint64{0, 0},
 		}, new)
 	})
 
@@ -142,10 +139,10 @@ func TestDeltaSample(t *testing.T) {
 			Values:        []uint64{6, 1},
 		}
 		_ = deltaSamples(highest, new)
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 2, Value: 1},
-			{StacktraceID: 3, Value: 6},
-			{StacktraceID: 5, Value: 1},
+		require.Equal(t, map[uint32]uint64{
+			2: 1,
+			3: 6,
+			5: 1,
 		}, highest)
 	})
 
@@ -156,10 +153,11 @@ func TestDeltaSample(t *testing.T) {
 		}
 		reset := deltaSamples(highest, new)
 		require.True(t, reset)
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 3, Value: 1},
-			{StacktraceID: 5, Value: 0},
-		}, new)
+		require.Equal(t, map[uint32]uint64{
+			2: 1,
+			3: 6,
+			5: 1,
+		}, highest)
 	})
 
 	t.Run("two new stacktraces, raise counters of existing stacktrace", func(t *testing.T) {
@@ -169,21 +167,18 @@ func TestDeltaSample(t *testing.T) {
 		}
 
 		_ = deltaSamples(highest, new)
-		// sort.Slice(highest, func(i, j int) bool {
-		// 	return highest[i].StacktraceID < highest[j].StacktraceID
-		// })
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 0, Value: 10},
-			{StacktraceID: 1, Value: 2},
-			{StacktraceID: 2, Value: 1},
-			{StacktraceID: 3, Value: 6},
-			{StacktraceID: 5, Value: 1},
-			{StacktraceID: 7, Value: 1},
+		require.Equal(t, map[uint32]uint64{
+			0: 10,
+			1: 2,
+			2: 1,
+			3: 6,
+			5: 1,
+			7: 1,
 		}, highest)
-		require.Equal(t, []*schemav1.Sample{
-			{StacktraceID: 0, Value: 10},
-			{StacktraceID: 1, Value: 2},
-			{StacktraceID: 7, Value: 1},
+
+		require.Equal(t, schemav1.Samples{
+			StacktraceIDs: []uint32{0, 1, 7},
+			Values:        []uint64{10, 2, 1},
 		}, new)
 	})
 }

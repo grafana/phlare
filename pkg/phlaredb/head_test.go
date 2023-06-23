@@ -3,6 +3,7 @@ package phlaredb
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -202,7 +203,7 @@ pyroscope_head_received_sample_values_total{profile_name=""} 3
 pyroscope_head_size_bytes{type="functions"} 240
 pyroscope_head_size_bytes{type="locations"} 344
 pyroscope_head_size_bytes{type="mappings"} 192
-pyroscope_head_size_bytes{type="profiles"} 416
+pyroscope_head_size_bytes{type="profiles"} 356
 pyroscope_head_size_bytes{type="stacktraces"} 104
 pyroscope_head_size_bytes{type="strings"} 52
 
@@ -269,12 +270,11 @@ func TestHeadIngestStacktraces(t *testing.T) {
 
 	var samples []uint32
 	for pos := range head.profiles.slice {
-		for _, id := range head.profiles.slice[pos].Samples.StacktraceIDs {
-			samples = append(samples, id)
-		}
+		samples = append(samples, head.profiles.slice[pos].Samples.StacktraceIDs...)
 	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
 	// expect 4 samples, 3 of which distinct
-	require.Equal(t, []uint32{1, 0, 2, 2}, samples)
+	require.Equal(t, []uint32{0, 1, 2, 2}, samples)
 }
 
 func TestHeadLabelValues(t *testing.T) {

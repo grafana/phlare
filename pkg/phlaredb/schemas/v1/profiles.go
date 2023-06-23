@@ -289,6 +289,9 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 	row = append(row, parquet.FixedLenByteArrayValue(imp.ID[:]).Level(0, 0, newCol()))
 	row = append(row, parquet.Int32Value(int32(imp.SeriesIndex)).Level(0, 0, newCol()))
 	newCol()
+	if len(imp.Samples.Values) == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, col))
+	}
 	repetition := -1
 	for i := range imp.Samples.StacktraceIDs {
 		if repetition < 1 {
@@ -298,6 +301,9 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 	}
 	newCol()
 	repetition = -1
+	if len(imp.Samples.Values) == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, col))
+	}
 	for i := range imp.Samples.Values {
 		if repetition < 1 {
 			repetition++
@@ -307,6 +313,9 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 	for i := 0; i < 4; i++ {
 		newCol()
 		repetition := -1
+		if len(imp.Samples.Values) == 0 {
+			row = append(row, parquet.Value{}.Level(0, 0, col))
+		}
 		for range imp.Samples.Values {
 			if repetition < 1 {
 				repetition++
@@ -320,6 +329,9 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 	row = append(row, parquet.Int64Value(imp.DurationNanos).Level(0, 1, newCol()))
 	row = append(row, parquet.Int64Value(imp.Period).Level(0, 1, newCol()))
 	newCol()
+	if len(imp.Comments) == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, col))
+	}
 	repetition = -1
 	for i := range imp.Comments {
 		if repetition < 1 {

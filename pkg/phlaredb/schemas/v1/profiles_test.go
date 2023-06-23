@@ -30,7 +30,7 @@ func TestInMemoryProfilesRowReader(t *testing.T) {
 	require.Equal(t, 10, count)
 }
 
-const samplesPerProfile = 3
+const samplesPerProfile = 100
 
 func TestRoundtripProfile(t *testing.T) {
 	profiles := generateProfiles(1000)
@@ -40,6 +40,38 @@ func TestRoundtripProfile(t *testing.T) {
 	expected, err := readAll(NewProfilesRowReader(profiles))
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
+
+	t.Run("EmptyComment", func(t *testing.T) {
+		profiles := generateProfiles(1)
+		for _, p := range profiles {
+			p.Comments = nil
+		}
+		inMemoryProfiles := generateMemoryProfiles(1)
+		for i := range inMemoryProfiles {
+			inMemoryProfiles[i].Comments = nil
+		}
+		expected, err := readAll(NewProfilesRowReader(profiles))
+		require.NoError(t, err)
+		actual, err := readAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("EmptySamples", func(t *testing.T) {
+		profiles := generateProfiles(1)
+		for _, p := range profiles {
+			p.Samples = nil
+		}
+		inMemoryProfiles := generateMemoryProfiles(1)
+		for i := range inMemoryProfiles {
+			inMemoryProfiles[i].Samples = Samples{}
+		}
+		expected, err := readAll(NewProfilesRowReader(profiles))
+		require.NoError(t, err)
+		actual, err := readAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	})
 }
 
 func TestTrimZeroSamples(t *testing.T) {
