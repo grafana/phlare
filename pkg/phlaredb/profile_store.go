@@ -277,13 +277,8 @@ func (s *profileStore) cutRowGroup(count int) (err error) {
 
 	s.profilesLock.Lock()
 	defer s.profilesLock.Unlock()
-	for i := range s.slice[:count] {
-		// don't retain profiles and samples in memory as re-slice.
-		s.slice[i].Samples.StacktraceIDs = nil
-		s.slice[i].Samples.Values = nil
-	}
 	// reset slice and metrics
-	s.slice = s.slice[count:]
+	s.slice = copySlice(s.slice[count:])
 	currentSize := s.size.Sub(size)
 	if err != nil {
 		return err
