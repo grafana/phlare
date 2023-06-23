@@ -2,6 +2,7 @@ package v1
 
 import (
 	"io"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/common/model"
@@ -192,6 +193,77 @@ type InMemoryProfile struct {
 type Samples struct {
 	StacktraceIDs []uint32
 	Values        []uint64
+}
+
+func TrimDuplicateSamples(samples Samples) Samples {
+	sort.Sort(samples)
+	n := 0
+	for j := 1; j < len(samples.StacktraceIDs); j++ {
+		if samples.StacktraceIDs[n] == samples.StacktraceIDs[j] {
+			samples.Values[n] += samples.Values[j]
+		} else {
+			n++
+			samples.StacktraceIDs[n] = samples.StacktraceIDs[j]
+			samples.Values[n] = samples.Values[j]
+		}
+	}
+	return Samples{
+		StacktraceIDs: samples.StacktraceIDs[:n+1],
+		Values:        samples.Values[:n+1],
+	}
+}
+
+func TrimZeroSamples(samples Samples) Samples {
+	n := 0
+	for j, v := range samples.Values {
+		if v != 0 {
+			samples.Values[n] = v
+			samples.StacktraceIDs[n] = samples.StacktraceIDs[j]
+			n++
+		}
+	}
+	return Samples{
+		StacktraceIDs: samples.StacktraceIDs[:n],
+		Values:        samples.Values[:n],
+	}
+}
+
+func CloneSamples(samples Samples) Samples {
+	return Samples{
+		StacktraceIDs: copySlice(samples.StacktraceIDs),
+		Values:        copySlice(samples.Values),
+	}
+}
+
+func (s Samples) Less(i, j int) bool {
+	return s.StacktraceIDs[i] < s.StacktraceIDs[j]
+}
+
+func (s Samples) Swap(i, j int) {
+	s.StacktraceIDs[i], s.StacktraceIDs[j] = s.StacktraceIDs[j], s.StacktraceIDs[i]
+	s.Values[i], s.Values[j] = s.Values[j], s.Values[i]
+}
+
+func (s Samples) Len() int {
+	return len(s.StacktraceIDs)
+}
+
+func (p InMemoryProfile) Timestamp() model.Time {
+	return model.TimeFromUnixNano(p.TimeNanos)
+}
+
+func (p InMemoryProfile) Total() int64 {
+	var total int64
+	for _, sample := range p.Samples.Values {
+		total += int64(sample)
+	}
+	return total
+}
+
+func copySlice[T any](in []T) []T {
+	out := make([]T, len(in))
+	copy(out, in)
+	return out
 }
 
 func NewInMemoryProfilesRowReader(slice []InMemoryProfile) *SliceRowReader[InMemoryProfile] {

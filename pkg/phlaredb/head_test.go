@@ -267,14 +267,14 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	// expect 3 profiles
 	require.Equal(t, 3, len(head.profiles.slice))
 
-	var samples []uint64
+	var samples []uint32
 	for pos := range head.profiles.slice {
-		for _, sample := range head.profiles.slice[pos].Samples {
-			samples = append(samples, sample.StacktraceID)
+		for _, id := range head.profiles.slice[pos].Samples.StacktraceIDs {
+			samples = append(samples, id)
 		}
 	}
 	// expect 4 samples, 3 of which distinct
-	require.Equal(t, []uint64{1, 0, 2, 2}, samples)
+	require.Equal(t, []uint32{1, 0, 2, 2}, samples)
 }
 
 func TestHeadLabelValues(t *testing.T) {

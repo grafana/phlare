@@ -35,8 +35,8 @@ type profileStore struct {
 
 	path      string
 	persister schemav1.Persister[*schemav1.Profile]
-	helper    storeHelper[*schemav1.Profile]
-	writer    *parquet.Writer
+	helper    storeHelper[*schemav1.InMemoryProfile]
+	writer    *parquet.GenericWriter[*schemav1.Profile]
 
 	// lock serializes appends to the slice. Every new profile is appended
 	// to the slice and to the index (has its own lock). In practice, it's
@@ -75,7 +75,7 @@ func newProfileStore(phlarectx context.Context) *profileStore {
 	go s.cutRowGroupLoop()
 	// Initialize writer on /dev/null
 	// TODO: Reuse parquet.Writer beyond life time of the head.
-	s.writer = parquet.NewWriter(io.Discard, s.persister.Schema(),
+	s.writer = parquet.NewGenericWriter[*schemav1.Profile](io.Discard, s.persister.Schema(),
 		parquet.ColumnPageBuffers(parquet.NewFileBufferPool(os.TempDir(), "phlaredb-parquet-buffers*")),
 		parquet.CreatedBy("github.com/grafana/phlare/", build.Version, build.Revision),
 	)
@@ -353,7 +353,7 @@ func (s *profileStore) loadProfilesToFlush(count int) uint64 {
 	sort.Sort(byLabels{p: s.flushBuffer, lbs: s.flushBufferLbs})
 	var size uint64
 	for _, p := range s.flushBuffer {
-		size += s.helper.size(p)
+		size += s.helper.size(&p)
 	}
 	return size
 }
@@ -393,7 +393,7 @@ func (s *profileStore) writeRowGroups(path string, rowGroups []parquet.RowGroup)
 func (s *profileStore) ingest(_ context.Context, profiles []schemav1.InMemoryProfile, lbs phlaremodel.Labels, profileName string, rewriter *rewriter) error {
 	// rewrite elements
 	for pos := range profiles {
-		if err := s.helper.rewrite(rewriter, profiles[pos]); err != nil {
+		if err := s.helper.rewrite(rewriter, &profiles[pos]); err != nil {
 			return err
 		}
 	}
@@ -412,10 +412,10 @@ func (s *profileStore) ingest(_ context.Context, profiles []schemav1.InMemoryPro
 		}
 
 		// add profile to the index
-		s.index.Add(p, lbs, profileName)
+		s.index.Add(&p, lbs, profileName)
 
 		// increase size of stored data
-		addedBytes := s.helper.size(profiles[pos])
+		addedBytes := s.helper.size(&profiles[pos])
 		s.metrics.sizeBytes.WithLabelValues(s.Name()).Set(float64(s.size.Add(addedBytes)))
 		s.totalSize.Add(addedBytes)
 

@@ -193,7 +193,7 @@ func (q *headInMemoryQuerier) SelectMatchingProfiles(ctx context.Context, params
 			continue
 		}
 
-		profiles := make([]*schemav1.Profile, len(profileSeries.profiles))
+		profiles := make([]*schemav1.InMemoryProfile, len(profileSeries.profiles))
 		copy(profiles, profileSeries.profiles)
 
 		iters = append(iters,
@@ -225,17 +225,18 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 		if !ok {
 			return nil, errors.New("expected ProfileWithLabels")
 		}
-
-		for _, s := range p.Samples() {
-			if s.Value == 0 {
+		samples := p.Samples()
+		for i := range samples.StacktraceIDs {
+			value, stacktraceID := samples.Values[i], samples.StacktraceIDs[i]
+			if value == 0 {
 				continue
 			}
-			sample, exists := stacktraceSamples[int64(s.StacktraceID)]
+			sample, exists := stacktraceSamples[int64(stacktraceID)]
 			if !exists {
 				sample = &ingestv1.StacktraceSample{}
-				stacktraceSamples[int64(s.StacktraceID)] = sample
+				stacktraceSamples[int64(stacktraceID)] = sample
 			}
-			sample.Value += s.Value
+			sample.Value += int64(value)
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -258,15 +259,16 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 		if !ok {
 			return nil, errors.New("expected ProfileWithLabels")
 		}
-
-		for _, s := range p.Samples() {
-			if s.Value == 0 {
+		samples := p.Samples()
+		for i := range samples.StacktraceIDs {
+			value, stacktraceID := samples.Values[i], samples.StacktraceIDs[i]
+			if value == 0 {
 				continue
 			}
-			if _, exists := stacktraceSamples[int64(s.StacktraceID)]; !exists {
-				stacktraceSamples[int64(s.StacktraceID)] = &profile.Sample{Value: []int64{0}}
+			if _, exists := stacktraceSamples[int64(stacktraceID)]; !exists {
+				stacktraceSamples[int64(stacktraceID)] = &profile.Sample{Value: []int64{0}}
 			}
-			stacktraceSamples[int64(s.StacktraceID)].Value[0] += s.Value
+			stacktraceSamples[int64(stacktraceID)].Value[0] += int64(value)
 		}
 	}
 

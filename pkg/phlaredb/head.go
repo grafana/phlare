@@ -35,7 +35,6 @@ import (
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
-	"github.com/grafana/phlare/pkg/slices"
 )
 
 func copySlice[T any](in []T) []T {
@@ -67,7 +66,7 @@ func (t idConversionTable) rewriteUint64(idx *uint64) {
 }
 
 type Models interface {
-	*schemav1.Profile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
+	*schemav1.Profile | *schemav1.InMemoryProfile | *schemav1.Stacktrace | *profilev1.Location | *profilev1.Mapping | *profilev1.Function | string | *schemav1.StoredString
 }
 
 func emptyRewriter() *rewriter {
@@ -266,28 +265,27 @@ func (h *Head) loop() {
 	}
 }
 
-func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample) ([][]*schemav1.Sample, error) {
+func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.Sample) ([]schemav1.Samples, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
 
 	// populate output
 	var (
-		out         = make([][]*schemav1.Sample, len(in[0].Value))
+		out         = make([]schemav1.Samples, len(in[0].Value))
 		stacktraces = make([]*schemav1.Stacktrace, len(in))
 	)
 	for idxType := range out {
-		out[idxType] = make([]*schemav1.Sample, len(in))
+		out[idxType] = schemav1.Samples{
+			Values:        make([]uint64, len(in)),
+			StacktraceIDs: make([]uint32, len(in)),
+		}
 	}
 
 	for idxSample := range in {
 		// populate samples
-		labels := h.pprofLabelCache.rewriteLabels(r.strings, in[idxSample].Label)
 		for idxType := range out {
-			out[idxType][idxSample] = &schemav1.Sample{
-				Value:  in[idxSample].Value[idxType],
-				Labels: labels,
-			}
+			out[idxType].Values[idxSample] = uint64(in[idxSample].Value[idxType])
 		}
 
 		// build full stack traces
@@ -305,8 +303,13 @@ func (h *Head) convertSamples(ctx context.Context, r *rewriter, in []*profilev1.
 
 	// reference stacktraces
 	for idxType := range out {
-		for idxSample := range out[idxType] {
-			out[idxType][idxSample].StacktraceID = uint64(r.stacktraces[int64(idxSample)])
+		for idxSample := range out[idxType].StacktraceIDs {
+			out[idxType].StacktraceIDs[idxSample] = uint32(r.stacktraces[int64(idxSample)])
+		}
+
+		trimmed := schemav1.TrimDuplicateSamples(schemav1.TrimZeroSamples(out[idxType]))
+		if trimmed.Len() != out[idxType].Len() {
+			out[idxType] = schemav1.CloneSamples(trimmed)
 		}
 	}
 
@@ -351,28 +354,8 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 	var profileIngested bool
 	for idxType := range samplesPerType {
 		samples := samplesPerType[idxType]
-		// Sort samples per stacktraceID and aggregate duplicate stacktraceIDs into
-		// a single value to make sure we won't have any duplicates, as this is not recognized as part of the delta calculation.
-		sort.Slice(samples, func(i, j int) bool {
-			return samples[i].StacktraceID > samples[j].StacktraceID
-		})
-		total := len(samples)
-		samples = slices.RemoveInPlace(samples, func(s *schemav1.Sample, i int) bool {
-			if s.Value == 0 {
-				return true
-			}
-			if i < len(p.Sample)-1 && s.StacktraceID == samples[i+1].StacktraceID {
-				samples[i+1].Value += s.Value
-				// TODO: Currently we're not aggregating labels, and we should probably decide what to do with them in this case.
-				return true
-			}
-			return false
-		})
-		if total != len(samples) {
-			// copy samples if there are less than received to avoid retaining memory.
-			samples = copySlice(samples)
-		}
-		profile := &schemav1.Profile{
+
+		profile := schemav1.InMemoryProfile{
 			ID:                id,
 			SeriesFingerprint: seriesFingerprints[idxType],
 			Samples:           samples,
@@ -384,20 +367,20 @@ func (h *Head) Ingest(ctx context.Context, p *profilev1.Profile, id uuid.UUID, e
 			DefaultSampleType: p.DefaultSampleType,
 		}
 
-		profile = h.delta.computeDelta(profile, labels[idxType])
+		profile.Samples = h.delta.computeDelta(profile, labels[idxType])
 
-		if profile == nil {
+		if profile.Samples.Len() == 0 {
 			level.Debug(h.logger).Log("msg", "profile is empty after delta computation", "metricName", metricName)
 			continue
 		}
 
-		if err := h.profiles.ingest(ctx, []*schemav1.Profile{profile}, labels[idxType], metricName, rewrites); err != nil {
+		if err := h.profiles.ingest(ctx, []schemav1.InMemoryProfile{profile}, labels[idxType], metricName, rewrites); err != nil {
 			return err
 		}
 
 		profileIngested = true
-		h.totalSamples.Add(uint64(len(profile.Samples)))
-		h.metrics.sampleValuesIngested.WithLabelValues(metricName).Add(float64(len(profile.Samples)))
+		h.totalSamples.Add(uint64(profile.Samples.Len()))
+		h.metrics.sampleValuesIngested.WithLabelValues(metricName).Add(float64(profile.Samples.Len()))
 		h.metrics.sampleValuesReceived.WithLabelValues(metricName).Add(float64(len(p.Sample)))
 	}
 
