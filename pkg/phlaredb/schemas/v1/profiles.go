@@ -28,6 +28,7 @@ var (
 	profilesSchema = parquet.NewSchema("Profile", phlareparquet.Group{
 		phlareparquet.NewGroupField("ID", parquet.UUID()),
 		phlareparquet.NewGroupField("SeriesIndex", parquet.Encoded(parquet.Uint(32), &parquet.DeltaBinaryPacked)),
+		phlareparquet.NewGroupField("StacktracePartition", parquet.Encoded(parquet.Uint(64), &parquet.DeltaBinaryPacked)),
 		phlareparquet.NewGroupField("Samples", parquet.List(sampleField)),
 		phlareparquet.NewGroupField("DropFrames", parquet.Optional(stringRef)),
 		phlareparquet.NewGroupField("KeepFrames", parquet.Optional(stringRef)),
@@ -53,6 +54,9 @@ type Profile struct {
 	// writing the TSDB index. The SeriesIndex is different from block to
 	// block.
 	SeriesIndex uint32 `parquet:",delta"`
+
+	// StacktracePartition is the partition ID of the stacktrace table that this profile belongs to.
+	StacktracePartition uint64 `parquet:",delta"`
 
 	// SeriesFingerprint references the underlying series and is purely based
 	// on the label values. The value is consistent for the same label set (so
@@ -163,6 +167,9 @@ type InMemoryProfile struct {
 	// writing the TSDB index. The SeriesIndex is different from block to
 	// block.
 	SeriesIndex uint32
+
+	// StacktracePartition is the partition ID of the stacktrace table that this profile belongs to.
+	StacktracePartition uint64
 
 	// SeriesFingerprint references the underlying series and is purely based
 	// on the label values. The value is consistent for the same label set (so
@@ -288,6 +295,7 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 	row = row[:0]
 	row = append(row, parquet.FixedLenByteArrayValue(imp.ID[:]).Level(0, 0, newCol()))
 	row = append(row, parquet.Int32Value(int32(imp.SeriesIndex)).Level(0, 0, newCol()))
+	row = append(row, parquet.Int64Value(int64(imp.StacktracePartition)).Level(0, 0, newCol()))
 	newCol()
 	if len(imp.Samples.Values) == 0 {
 		row = append(row, parquet.Value{}.Level(0, 0, col))

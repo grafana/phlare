@@ -53,6 +53,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 		[]query.Iterator{
 			rowIter,
 			q.rowGroup().columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(start.UnixNano(), end.UnixNano()), "TimeNanos"),
+			q.rowGroup().columnIter(ctx, "StacktracePartition", nil, "StacktracePartition"),
 		},
 		nil,
 	)
@@ -60,7 +61,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 
 	var (
 		profiles []Profile
-		buf      = make([][]parquet.Value, 1)
+		buf      = make([][]parquet.Value, 2)
 	)
 	for pIt.Next() {
 		res := pIt.At()
@@ -75,16 +76,17 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 			panic("no profile series labels with matching fingerprint found")
 		}
 
-		buf = res.Columns(buf, "TimeNanos")
-		if len(buf) != 1 || len(buf[0]) != 1 {
+		buf = res.Columns(buf, "TimeNanos", "StacktracePartition")
+		if len(buf) < 1 || len(buf[0]) != 1 {
 			level.Error(q.head.logger).Log("msg", "unable to read timeNanos from profiles", "row", res.RowNumber[0], "rowGroup", q.rowGroupIdx)
 			continue
 		}
 		profiles = append(profiles, BlockProfile{
-			labels: lbls,
-			fp:     v.fp,
-			ts:     model.TimeFromUnixNano(buf[0][0].Int64()),
-			RowNum: res.RowNumber[0],
+			labels:              lbls,
+			fp:                  v.fp,
+			ts:                  model.TimeFromUnixNano(buf[0][0].Int64()),
+			stacktracePartition: retrieveStacktracePartition(buf, 1),
+			RowNum:              res.RowNumber[0],
 		})
 	}
 	if err := pIt.Err(); err != nil {
@@ -108,7 +110,7 @@ func (q *headOnDiskQuerier) MergeByStacktraces(ctx context.Context, rows iter.It
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - HeadOnDisk")
 	defer sp.Finish()
 
-	stacktraceSamples := stacktraceSampleMap{}
+	stacktraceSamples := stacktracesByMapping{}
 
 	if err := mergeByStacktraces(ctx, q.rowGroup(), rows, stacktraceSamples); err != nil {
 		return nil, err
@@ -122,7 +124,7 @@ func (q *headOnDiskQuerier) MergePprof(ctx context.Context, rows iter.Iterator[P
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByPprof - HeadOnDisk")
 	defer sp.Finish()
 
-	stacktraceSamples := profileSampleMap{}
+	stacktraceSamples := profileSampleByMapping{}
 
 	if err := mergeByStacktraces(ctx, q.rowGroup(), rows, stacktraceSamples); err != nil {
 		return nil, err
@@ -217,9 +219,8 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 	sp, _ := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - HeadInMemory")
 	defer sp.Finish()
 
-	stacktraceSamples := stacktraceSampleMap{}
+	stacktraceSamples := stacktracesByMapping{}
 
-	q.head.stacktraces.lock.RLock()
 	for rows.Next() {
 		p, ok := rows.At().(ProfileWithLabels)
 		if !ok {
@@ -231,18 +232,12 @@ func (q *headInMemoryQuerier) MergeByStacktraces(ctx context.Context, rows iter.
 			if value == 0 {
 				continue
 			}
-			sample, exists := stacktraceSamples[int64(stacktraceID)]
-			if !exists {
-				sample = &ingestv1.StacktraceSample{}
-				stacktraceSamples[int64(stacktraceID)] = sample
-			}
-			sample.Value += int64(value)
+			stacktraceSamples.add(p.StacktracePartition(), stacktraceID, int64(value))
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	q.head.stacktraces.lock.RUnlock()
 
 	// TODO: Truncate insignificant stacks.
 	return q.head.resolveStacktraces(ctx, stacktraceSamples), nil
@@ -252,7 +247,7 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 	sp, _ := opentracing.StartSpanFromContext(ctx, "MergePprof - HeadInMemory")
 	defer sp.Finish()
 
-	stacktraceSamples := profileSampleMap{}
+	stacktraceSamples := profileSampleByMapping{}
 
 	for rows.Next() {
 		p, ok := rows.At().(ProfileWithLabels)
@@ -265,10 +260,7 @@ func (q *headInMemoryQuerier) MergePprof(ctx context.Context, rows iter.Iterator
 			if value == 0 {
 				continue
 			}
-			if _, exists := stacktraceSamples[int64(stacktraceID)]; !exists {
-				stacktraceSamples[int64(stacktraceID)] = &profile.Sample{Value: []int64{0}}
-			}
-			stacktraceSamples[int64(stacktraceID)].Value[0] += int64(value)
+			stacktraceSamples.add(p.StacktracePartition(), stacktraceID, int64(value))
 		}
 	}
 

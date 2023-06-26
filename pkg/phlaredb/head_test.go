@@ -3,7 +3,6 @@ package phlaredb
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/common/model"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -203,8 +203,8 @@ pyroscope_head_received_sample_values_total{profile_name=""} 3
 pyroscope_head_size_bytes{type="functions"} 240
 pyroscope_head_size_bytes{type="locations"} 344
 pyroscope_head_size_bytes{type="mappings"} 192
-pyroscope_head_size_bytes{type="profiles"} 356
-pyroscope_head_size_bytes{type="stacktraces"} 104
+pyroscope_head_size_bytes{type="profiles"} 372
+pyroscope_head_size_bytes{type="stacktraces"} 0
 pyroscope_head_size_bytes{type="strings"} 52
 
 `),
@@ -262,9 +262,6 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	assert.Equal(t, "my-foo-binary", head.strings.slice[head.mappings.slice[0].Filename])
 	assert.Equal(t, "my-bar-binary", head.strings.slice[head.mappings.slice[1].Filename])
 
-	// expect 3 stacktraces
-	require.Equal(t, 3, len(head.stacktraces.slice))
-
 	// expect 3 profiles
 	require.Equal(t, 3, len(head.profiles.slice))
 
@@ -272,9 +269,11 @@ func TestHeadIngestStacktraces(t *testing.T) {
 	for pos := range head.profiles.slice {
 		samples = append(samples, head.profiles.slice[pos].Samples.StacktraceIDs...)
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-	// expect 4 samples, 3 of which distinct
-	require.Equal(t, []uint32{0, 1, 2, 2}, samples)
+	// expect 4 samples, 2 of which distinct: stacktrace ID is
+	// only valid within the scope of the stacktrace partition,
+	// which depends on the main binary mapping filename.
+	require.Len(t, lo.Uniq(samples), 2)
+	require.Len(t, samples, 4)
 }
 
 func TestHeadLabelValues(t *testing.T) {
