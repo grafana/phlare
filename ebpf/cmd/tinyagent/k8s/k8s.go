@@ -463,10 +463,10 @@ func (c *Client) getTargets(pods *PodList) []Target {
 	return targets
 }
 
-func (c *Client) GetTargetsLite() []Target {
+func (c *Client) GetTargetsLite() ([]Target, error) {
 	u, err := url2.Parse(c.liteHost)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	u.Path = "/api/v1/pods"
 	q := u.Query()
@@ -479,14 +479,14 @@ func (c *Client) GetTargetsLite() []Target {
 	req, _ := http.NewRequest("GET", url, nil)
 
 	bearer := "Bearer " + c.liteToken
-	fmt.Println(bearer)
+	//fmt.Println(bearer)
 
 	// Add the bearer token to the request's header
 	req.Header.Add("Authorization", bearer)
 
 	resp, err := c.liteClient.Do(req)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -495,10 +495,10 @@ func (c *Client) GetTargetsLite() []Target {
 	if err := dec.Decode(podList); err == io.EOF {
 
 	} else if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return c.getTargets(podList)
+	return c.getTargets(podList), nil
 }
 
 var knownContainerIDPrefixes = []string{"docker://", "containerd://", "cri-o://"}

@@ -84,14 +84,16 @@ func main() {
 
 func loopK8sSD(client *k8s.Client, component *Component) error {
 	for {
-		targets := client.GetTargetsLite()
-		convertedTargets := make([]sd.DiscoveryTarget, len(targets))
-		for i, target := range targets {
-			convertedTargets[i] = sd.DiscoveryTarget(target)
+		targets, err := client.GetTargetsLite()
+		if err == nil {
+			convertedTargets := make([]sd.DiscoveryTarget, len(targets))
+			for i, target := range targets {
+				convertedTargets[i] = sd.DiscoveryTarget(target)
+			}
+			arguments := getArguments()
+			arguments.Targets = convertedTargets
+			component.Update(arguments)
 		}
-		arguments := getArguments()
-		arguments.Targets = convertedTargets
-		component.Update(arguments)
 		time.Sleep(15 * time.Second)
 	}
 }
