@@ -431,7 +431,10 @@ func newStacktraceResolverV2(bucketReader phlareobj.Bucket) StacktraceDB {
 
 func (b *singleBlockQuerier) Close() error {
 	b.openLock.Lock()
-	defer b.openLock.Unlock()
+	defer func() {
+		b.openLock.Unlock()
+		b.metrics.blockOpened.Dec()
+	}()
 	errs := multierror.New()
 	if b.index != nil {
 		err := b.index.Close()
@@ -1069,6 +1072,7 @@ func (q *singleBlockQuerier) Open(ctx context.Context) error {
 	if err := q.openFiles(ctx); err != nil {
 		return err
 	}
+	q.metrics.blockOpened.Inc()
 	q.opened = true
 	return nil
 }
