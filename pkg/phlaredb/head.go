@@ -622,7 +622,11 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 			}
 			resolver := mp.StacktraceResolver()
 			defer resolver.Release()
-
+			// sort the stacktrace IDs as expected by the resolver
+			stacktraceIDs := stacktraceSamples.Ids()
+			sort.Slice(stacktraceIDs, func(i, j int) bool {
+				return stacktraceIDs[i] < stacktraceIDs[j]
+			})
 			return resolver.ResolveStacktraces(
 				ctx,
 				symdb.StacktraceInserterFn(
@@ -644,7 +648,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 						stacktraceSamples[stacktraceID].FunctionIds = fnIds
 					},
 				),
-				stacktraceSamples.Ids(),
+				stacktraceIDs,
 			)
 		},
 	)
@@ -681,6 +685,12 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 			}
 			resolver := mp.StacktraceResolver()
 			defer resolver.Release()
+
+			// sort the stacktrace IDs as expected by the resolver
+			stacktraceIDs := stacktraceSamples.Ids()
+			sort.Slice(stacktraceIDs, func(i, j int) bool {
+				return stacktraceIDs[i] < stacktraceIDs[j]
+			})
 
 			return resolver.ResolveStacktraces(
 				ctx,
@@ -741,7 +751,7 @@ func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSam
 						stacktraceSamples[stacktraceID].Location = stacktraceLocations
 					},
 				),
-				stacktraceSamples.Ids(),
+				stacktraceIDs,
 			)
 		},
 	)
