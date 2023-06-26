@@ -75,7 +75,10 @@ func main() {
 	}
 	err = g.Run()
 	if err != nil {
-		panic(err)
+		println(err.Error())
+		for {
+
+		}
 	}
 }
 
@@ -137,9 +140,9 @@ func (rc *Arguments) UnmarshalRiver(f func(interface{}) error) error {
 func getArguments() Arguments {
 	res := defaultArguments()
 	res.ForwardTo = []Appendable{write}
-	host, err := os.Hostname()
-	if host == "korniltsev" && err == nil {
-		res.DefaultTarget = sd.DiscoveryTarget{"service_name": "tolyan-system"}
+	host, _ := os.Hostname()
+	if host == "korniltsev" || os.Getenv("HOSTNAME") == "korniltsev" {
+		res.DefaultTarget = sd.DiscoveryTarget{"service_name": "tolyan-host1"}
 		res.TargetsOnly = false
 	}
 	return res
