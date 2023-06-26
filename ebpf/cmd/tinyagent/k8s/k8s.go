@@ -445,17 +445,19 @@ func (c *Client) getTargets(pods *PodList) []Target {
 			ls["node"] = c.nodeName
 			ls["pod"] = pod.Name
 			ls["namespace"] = pod.Namespace
+			ls["__meta_kubernetes_namespace"] = pod.Namespace
+			ls["__meta_kubernetes_pod_container_name"] = status.Name
 			ls["__container_id__"] = cid
 			ls["container_name"] = status.Name
-			if v, ok := pod.Labels["app.kubernetes.io/name"]; ok {
-				ls["app_kubernetes_io_name"] = v
-			}
-			if v, ok := pod.Labels["app.kubernetes.io/version"]; ok {
-				ls["app_kubernetes_io_version"] = v
-			}
-			if v, ok := pod.Labels["app.kubernetes.io/instance"]; ok {
-				ls["app_kubernetes_io_instance"] = v
-			}
+			//if v, ok := pod.Labels["app.kubernetes.io/name"]; ok {
+			//	ls["app_kubernetes_io_name"] = v
+			//}
+			//if v, ok := pod.Labels["app.kubernetes.io/version"]; ok {
+			//	ls["app_kubernetes_io_version"] = v
+			//}
+			//if v, ok := pod.Labels["app.kubernetes.io/instance"]; ok {
+			//	ls["app_kubernetes_io_instance"] = v
+			//}
 			//sd.containerID2Labels[cid] = ls
 			targets = append(targets, ls)
 		}
