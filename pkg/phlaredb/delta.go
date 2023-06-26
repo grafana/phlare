@@ -73,7 +73,7 @@ func (d *deltaProfiles) computeDelta(ps schemav1.InMemoryProfile, lbs phlaremode
 		return schemav1.Samples{}
 	}
 
-	return schemav1.CloneSamples(schemav1.TrimZeroSamples(ps.Samples))
+	return ps.Samples.Compact(false).Clone()
 }
 
 func isDelta(lbs phlaremodel.Labels) bool {

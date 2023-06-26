@@ -202,7 +202,23 @@ type Samples struct {
 	Values        []uint64
 }
 
-func TrimDuplicateSamples(samples Samples) Samples {
+// Compact zero samples and optionally duplicates.
+func (s Samples) Compact(dedupe bool) Samples {
+	if len(s.StacktraceIDs) == 0 {
+		return s
+	}
+	if dedupe {
+		s = trimDuplicateSamples(s)
+	}
+	s = trimZeroSamples(s)
+	return s
+}
+
+func (s Samples) Clone() Samples {
+	return cloneSamples(s)
+}
+
+func trimDuplicateSamples(samples Samples) Samples {
 	sort.Sort(samples)
 	n := 0
 	for j := 1; j < len(samples.StacktraceIDs); j++ {
@@ -220,7 +236,7 @@ func TrimDuplicateSamples(samples Samples) Samples {
 	}
 }
 
-func TrimZeroSamples(samples Samples) Samples {
+func trimZeroSamples(samples Samples) Samples {
 	n := 0
 	for j, v := range samples.Values {
 		if v != 0 {
@@ -235,7 +251,7 @@ func TrimZeroSamples(samples Samples) Samples {
 	}
 }
 
-func CloneSamples(samples Samples) Samples {
+func cloneSamples(samples Samples) Samples {
 	return Samples{
 		StacktraceIDs: copySlice(samples.StacktraceIDs),
 		Values:        copySlice(samples.Values),

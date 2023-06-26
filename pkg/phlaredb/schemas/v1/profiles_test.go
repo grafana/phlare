@@ -74,24 +74,30 @@ func TestRoundtripProfile(t *testing.T) {
 	})
 }
 
-func TestTrimZeroSamples(t *testing.T) {
+func TestCompactSamples(t *testing.T) {
 	require.Equal(t, Samples{
-		StacktraceIDs: []uint32{1, 3, 4, 5, 7, 8},
-		Values:        []uint64{1, 1, 1, 1, 1, 1},
-	}, TrimZeroSamples(Samples{
-		StacktraceIDs: []uint32{1, 2, 3, 4, 5, 6, 7, 8, 9},
-		Values:        []uint64{1, 0, 1, 1, 1, 0, 1, 1, 0},
-	}))
-}
-
-func TestTrimDuplicateSamples(t *testing.T) {
-	require.Equal(t, Samples{
-		StacktraceIDs: []uint32{1, 2, 3, 5, 7},
-		Values:        []uint64{5, 2, 1, 1, 1},
-	}, TrimDuplicateSamples(Samples{
 		StacktraceIDs: []uint32{1, 2, 3, 2, 5, 1, 7, 7, 1},
 		Values:        []uint64{1, 1, 1, 1, 1, 3, 1, 0, 1},
-	}))
+	}.Compact(true), Samples{
+		StacktraceIDs: []uint32{1, 2, 3, 5, 7},
+		Values:        []uint64{5, 2, 1, 1, 1},
+	})
+
+	require.Equal(t, Samples{
+		StacktraceIDs: []uint32{1, 2, 3, 4, 5, 6, 7, 8, 9},
+		Values:        []uint64{1, 0, 1, 1, 1, 0, 1, 1, 0},
+	}.Compact(false), Samples{
+		StacktraceIDs: []uint32{1, 3, 4, 5, 7, 8},
+		Values:        []uint64{1, 1, 1, 1, 1, 1},
+	})
+
+	require.Equal(t, Samples{
+		StacktraceIDs: []uint32{1, 2, 3},
+		Values:        []uint64{1, 2, 3},
+	}.Compact(false), Samples{
+		StacktraceIDs: []uint32{1, 2, 3},
+		Values:        []uint64{1, 2, 3},
+	})
 }
 
 func BenchmarkRowReader(b *testing.B) {

@@ -321,14 +321,13 @@ func (h *Head) convertSamples(_ context.Context, r *rewriter, stacktracePartitio
 	// reference stacktraces
 	for idxType := range out {
 		for idxSample := range out[idxType].StacktraceIDs {
-			out[idxType].StacktraceIDs[idxSample] = uint32(stacktracesIds[int64(idxSample)])
+			out[idxType].StacktraceIDs[idxSample] = stacktracesIds[int64(idxSample)]
 		}
-
-		// tidy up samples
-		trimmed := schemav1.TrimDuplicateSamples(schemav1.TrimZeroSamples(out[idxType]))
-		if trimmed.Len() != out[idxType].Len() {
-			out[idxType] = schemav1.CloneSamples(trimmed)
+		compacted := out[idxType].Compact(true)
+		if compacted.Len() != out[idxType].Len() {
+			compacted = compacted.Clone()
 		}
+		out[idxType] = compacted
 	}
 
 	return out
