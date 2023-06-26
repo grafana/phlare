@@ -138,11 +138,10 @@ type Head struct {
 	locations     deduplicatingSlice[*profilev1.Location, locationsKey, *locationsHelper, *schemav1.LocationPersister]
 	symbolDB      *symdb.SymDB
 
-	profiles        *profileStore
-	totalSamples    *atomic.Uint64
-	tables          []Table
-	delta           *deltaProfiles
-	pprofLabelCache labelCache
+	profiles     *profileStore
+	totalSamples *atomic.Uint64
+	tables       []Table
+	delta        *deltaProfiles
 
 	limiter TenantLimiter
 }
@@ -207,8 +206,6 @@ func NewHead(phlarectx context.Context, cfg Config, limiter TenantLimiter) (*Hea
 	)
 
 	h.delta = newDeltaProfiles()
-
-	h.pprofLabelCache.init()
 
 	h.wg.Add(1)
 	go h.loop()
