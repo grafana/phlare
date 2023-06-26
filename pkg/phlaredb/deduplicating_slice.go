@@ -23,7 +23,7 @@ var (
 	uint32SlicePool zeropool.Pool[[]uint32]
 
 	defaultParquetConfig = &ParquetConfig{
-		MaxBufferRowCount: 100_000,
+		MaxBufferRowCount: 200_000,
 		MaxRowGroupBytes:  10 * 128 * 1024 * 1024,
 		MaxBlockBytes:     10 * 10 * 128 * 1024 * 1024,
 	}
