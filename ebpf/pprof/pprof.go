@@ -44,7 +44,7 @@ func (b ProfileBuilders) BuilderForTarget(hash uint64, labels labels.Labels) *Pr
 		locations: make(map[string]*profile.Location),
 		functions: make(map[string]*profile.Function),
 		Labels:    labels,
-		profile: &profile.Profile{
+		Profile: &profile.Profile{
 			Mapping: []*profile.Mapping{
 				{
 					ID: 1,
@@ -63,19 +63,19 @@ func (b ProfileBuilders) BuilderForTarget(hash uint64, labels labels.Labels) *Pr
 type ProfileBuilder struct {
 	locations map[string]*profile.Location
 	functions map[string]*profile.Function
-	profile   *profile.Profile
+	Profile   *profile.Profile
 	Labels    labels.Labels
 }
 
 func (p *ProfileBuilder) AddSample(stacktrace []string, value uint64) {
 	sample := &profile.Sample{
-		Value: []int64{int64(value) * p.profile.Period},
+		Value: []int64{int64(value) * p.Profile.Period},
 	}
 	for _, s := range stacktrace {
 		loc := p.addLocation(s)
 		sample.Location = append(sample.Location, loc)
 	}
-	p.profile.Sample = append(p.profile.Sample, sample)
+	p.Profile.Sample = append(p.Profile.Sample, sample)
 }
 
 func (p *ProfileBuilder) addLocation(function string) *profile.Location {
@@ -84,17 +84,17 @@ func (p *ProfileBuilder) addLocation(function string) *profile.Location {
 		return loc
 	}
 
-	id := uint64(len(p.profile.Location) + 1)
+	id := uint64(len(p.Profile.Location) + 1)
 	loc = &profile.Location{
 		ID:      id,
-		Mapping: p.profile.Mapping[0],
+		Mapping: p.Profile.Mapping[0],
 		Line: []profile.Line{
 			{
 				Function: p.addFunction(function),
 			},
 		},
 	}
-	p.profile.Location = append(p.profile.Location, loc)
+	p.Profile.Location = append(p.Profile.Location, loc)
 	p.locations[function] = loc
 	return loc
 }
@@ -105,12 +105,12 @@ func (p *ProfileBuilder) addFunction(function string) *profile.Function {
 		return f
 	}
 
-	id := uint64(len(p.profile.Function) + 1)
+	id := uint64(len(p.Profile.Function) + 1)
 	f = &profile.Function{
 		ID:   id,
 		Name: function,
 	}
-	p.profile.Function = append(p.profile.Function, f)
+	p.Profile.Function = append(p.Profile.Function, f)
 	p.functions[function] = f
 	return f
 }
@@ -122,7 +122,7 @@ func (p *ProfileBuilder) Write(dst io.Writer) (int64, error) {
 		gzipWriter.Reset(io.Discard)
 		gzipWriterPool.Put(gzipWriter)
 	}()
-	err := p.profile.WriteUncompressed(gzipWriter)
+	err := p.Profile.WriteUncompressed(gzipWriter)
 	if err != nil {
 		return 0, fmt.Errorf("ebpf profile encode %w", err)
 	}
