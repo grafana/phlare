@@ -6,7 +6,9 @@ type metrics struct {
 	targetsActive                 prometheus.Gauge
 	profilingSessionsTotal        prometheus.Counter
 	profilingSessionsFailingTotal prometheus.Counter
-	pprofsTotal                   prometheus.Counter
+	pprofsTotal                   *prometheus.CounterVec
+	pprofBytesTotal               *prometheus.CounterVec
+	pprofSamplesTotal             *prometheus.CounterVec
 }
 
 func newMetrics(reg prometheus.Registerer) *metrics {
@@ -23,10 +25,18 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 			Name: "pyroscope_ebpf_profiling_sessions_failing_total",
 			Help: "Total number of profiling sessions failed to complete by the ebpf component",
 		}),
-		pprofsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+		pprofsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "pyroscope_ebpf_pprofs_total",
 			Help: "Total number of pprof profiles collected by the ebpf component",
-		}),
+		}, []string{"service_name"}),
+		pprofBytesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "pyroscope_ebpf_pprof_bytes_total",
+			Help: "Total number of pprof profiles collected by the ebpf component",
+		}, []string{"service_name"}),
+		pprofSamplesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "pyroscope_ebpf_pprof_samples_total",
+			Help: "Total number of pprof profiles collected by the ebpf component",
+		}, []string{"service_name"}),
 	}
 
 	if reg != nil {
@@ -35,6 +45,8 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 			m.profilingSessionsTotal,
 			m.profilingSessionsFailingTotal,
 			m.pprofsTotal,
+			m.pprofBytesTotal,
+			m.pprofSamplesTotal,
 		)
 	}
 

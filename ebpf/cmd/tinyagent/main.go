@@ -14,6 +14,8 @@ import (
 	"github.com/grafana/phlare/ebpf/symtab"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 
 	"os"
 	"sync"
@@ -54,7 +56,12 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("ebpf session create: %w", err))
 	}
-	registry := prometheus.NewRegistry()
+	registry := prometheus.DefaultRegisterer
+
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(":80", nil)
+	}()
 	component, err := New(logger, registry, arguments, session, targetFinder)
 	if err != nil {
 		panic(err)
@@ -250,7 +257,9 @@ func (c *Component) collectProfiles() error {
 	level.Debug(c.logger).Log("msg", "ebpf collectProfiles done", "profiles", len(builders.Builders))
 	bytesSent := 0
 	for _, builder := range builders.Builders {
-		c.metrics.pprofsTotal.Inc()
+		serviceName := builder.Labels.Get("service_name")
+		c.metrics.pprofsTotal.WithLabelValues(serviceName).Inc()
+		c.metrics.pprofSamplesTotal.WithLabelValues(serviceName).Add(float64(len(builder.Profile.Sample)))
 
 		buf := bytes.NewBuffer(nil)
 		_, err := builder.Write(buf)
@@ -261,6 +270,8 @@ func (c *Component) collectProfiles() error {
 
 		appender := c.appendable.Appender()
 		bytesSent += len(rawProfile)
+		c.metrics.pprofBytesTotal.WithLabelValues(serviceName).Add(float64(len(rawProfile)))
+
 		samples := []*RawSample{{RawProfile: rawProfile}}
 		err = appender.Append(context.Background(), builder.Labels, samples)
 		if err != nil {
