@@ -41,6 +41,27 @@ func TestRoundtripProfile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
 
+	t.Run("EmptyOptionalField", func(t *testing.T) {
+		profiles := generateProfiles(1)
+		for _, p := range profiles {
+			p.DurationNanos = 0
+			p.Period = 0
+			p.DefaultSampleType = 0
+			p.KeepFrames = 0
+		}
+		inMemoryProfiles := generateMemoryProfiles(1)
+		for i := range inMemoryProfiles {
+			inMemoryProfiles[i].DurationNanos = 0
+			inMemoryProfiles[i].Period = 0
+			inMemoryProfiles[i].DefaultSampleType = 0
+			inMemoryProfiles[i].KeepFrames = 0
+		}
+		expected, err := readAll(NewProfilesRowReader(profiles))
+		require.NoError(t, err)
+		actual, err := readAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
+		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+	})
 	t.Run("EmptyComment", func(t *testing.T) {
 		profiles := generateProfiles(1)
 		for _, p := range profiles {

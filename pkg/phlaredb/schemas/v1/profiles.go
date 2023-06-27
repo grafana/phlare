@@ -292,11 +292,11 @@ func copySlice[T any](in []T) []T {
 func NewInMemoryProfilesRowReader(slice []InMemoryProfile) *SliceRowReader[InMemoryProfile] {
 	return &SliceRowReader[InMemoryProfile]{
 		slice:     slice,
-		serialize: DeconstructMemoryProfile,
+		serialize: deconstructMemoryProfile,
 	}
 }
 
-func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row {
+func deconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row {
 	var (
 		col    = -1
 		newCol = func() int {
@@ -347,11 +347,27 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 			row = append(row, parquet.Value{}.Level(repetition, 1, col))
 		}
 	}
-	row = append(row, parquet.Int64Value(imp.DropFrames).Level(0, 1, newCol()))
-	row = append(row, parquet.Int64Value(imp.KeepFrames).Level(0, 1, newCol()))
+	if imp.DropFrames == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, newCol()))
+	} else {
+		row = append(row, parquet.Int64Value(imp.DropFrames).Level(0, 1, newCol()))
+	}
+	if imp.KeepFrames == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, newCol()))
+	} else {
+		row = append(row, parquet.Int64Value(imp.KeepFrames).Level(0, 1, newCol()))
+	}
 	row = append(row, parquet.Int64Value(imp.TimeNanos).Level(0, 0, newCol()))
-	row = append(row, parquet.Int64Value(imp.DurationNanos).Level(0, 1, newCol()))
-	row = append(row, parquet.Int64Value(imp.Period).Level(0, 1, newCol()))
+	if imp.DurationNanos == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, newCol()))
+	} else {
+		row = append(row, parquet.Int64Value(imp.DurationNanos).Level(0, 1, newCol()))
+	}
+	if imp.Period == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, newCol()))
+	} else {
+		row = append(row, parquet.Int64Value(imp.Period).Level(0, 1, newCol()))
+	}
 	newCol()
 	if len(imp.Comments) == 0 {
 		row = append(row, parquet.Value{}.Level(0, 0, col))
@@ -363,6 +379,10 @@ func DeconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 		}
 		row = append(row, parquet.Int64Value(imp.Comments[i]).Level(repetition, 1, col))
 	}
-	row = append(row, parquet.Int64Value(imp.DefaultSampleType).Level(0, 1, newCol()))
+	if imp.DefaultSampleType == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, newCol()))
+	} else {
+		row = append(row, parquet.Int64Value(imp.DefaultSampleType).Level(0, 1, newCol()))
+	}
 	return row
 }
