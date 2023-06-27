@@ -81,6 +81,7 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	if pclntabData, err = obj.SectionData(pclntab); err != nil {
 		return nil, err
 	}
+	fmt.Printf("gopclntab %s %d \n", f.fpath, len(pclntabData))
 
 	textStart := gosym2.ParseRuntimeTextFromPclntab18(pclntabData)
 
