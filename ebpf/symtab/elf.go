@@ -132,8 +132,11 @@ func (et *ElfTable) load() {
 	}
 
 	et.table = symbols
-	et.options.ElfCache.CacheByBuildID(buildID, symbols)
-	et.options.ElfCache.CacheByStat(statFromFileInfo(fileInfo), symbols)
+	if !buildID.Empty() {
+		et.options.ElfCache.CacheByBuildID(buildID, symbols)
+	} else {
+		et.options.ElfCache.CacheByStat(statFromFileInfo(fileInfo), symbols)
+	}
 }
 
 func (et *ElfTable) createSymbolTable(me *elf2.MMapedElfFile) (SymbolNameResolver, error) {

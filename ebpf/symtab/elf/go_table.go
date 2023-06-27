@@ -4,8 +4,17 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"sync"
 
 	gosym2 "github.com/grafana/phlare/ebpf/symtab/gosym"
+)
+
+var (
+	bufPool = sync.Pool{
+		New: func() any {
+			return []byte{}
+		},
+	}
 )
 
 type GoTable struct {
@@ -68,7 +77,7 @@ var (
 func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	obj := f
 	var err error
-	var pclntabData []byte
+
 	text := obj.Section(".text")
 	if text == nil {
 		return nil, errEmptyText
@@ -78,10 +87,31 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 		return nil, errEmptyGoPCLNTab
 	}
 
-	if pclntabData, err = obj.SectionData(pclntab); err != nil {
+	buf := bufPool.Get().([]byte)
+	defer func() {
+		bufPool.Put(buf)
+	}()
+	if cap(buf) < int(pclntab.Size) {
+		buf = make([]byte, 0, int(pclntab.Size))
+		fmt.Printf("growing...... %d %d", cap(buf), int(pclntab.Size))
+		fmt.Printf("growing...... %d %d", cap(buf), int(pclntab.Size))
+		fmt.Printf("growing...... %d %d", cap(buf), int(pclntab.Size))
+	}
+
+	pclntabData := buf[:pclntab.Size]
+	fmt.Printf("gopclntab %s %d \n", f.fpath, len(pclntabData))
+	fmt.Printf("gopclntab %s %d \n", f.fpath, len(pclntabData))
+	fmt.Printf("gopclntab %s %d \n", f.fpath, len(pclntabData))
+
+	if len(pclntabData) != int(pclntab.Size) {
+		panic(fmt.Sprintf("buf size mismatch %d %d", len(pclntabData), int(pclntab.Size)))
+	}
+
+	err = obj.SectionData2(pclntab, pclntabData)
+
+	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("gopclntab %s %d \n", f.fpath, len(pclntabData))
 
 	textStart := gosym2.ParseRuntimeTextFromPclntab18(pclntabData)
 

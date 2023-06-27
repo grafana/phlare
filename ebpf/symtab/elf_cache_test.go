@@ -67,7 +67,7 @@ func TestElfCacheBuildID(t *testing.T) {
 		require.Equal(t, sym.name, res)
 	}
 	require.Equal(t, 1, elfCache.BuildIDCache.lruCache.Len())
-	require.Equal(t, 1, elfCache.SameFileCache.lruCache.Len())
+	require.Equal(t, 0, elfCache.SameFileCache.lruCache.Len())
 }
 
 func TestElfCacheStat(t *testing.T) {

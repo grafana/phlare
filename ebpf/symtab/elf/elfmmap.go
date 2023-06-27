@@ -116,6 +116,24 @@ func (f *MMapedElfFile) SectionData(s *elf.SectionHeader) ([]byte, error) {
 	return res, nil
 }
 
+func (f *MMapedElfFile) SectionData2(s *elf.SectionHeader, res []byte) error {
+	if err := f.ensureOpen(); err != nil {
+		return err
+	}
+	if len(res) != int(s.Size) {
+		return fmt.Errorf("section size is %d got %d buffer", s.Size, int64(len(res)))
+	}
+	//res := make([]byte, s.Size)
+	n, err := f.fd.ReadAt(res, int64(s.Offset))
+	if err != nil {
+		return err
+	}
+	if n != len(res) {
+		return fmt.Errorf("read %s section %s data faile. tried to read %d, got %d ", f.fpath, s.Name, len(res), n)
+	}
+	return nil
+}
+
 func (f *MMapedElfFile) FilePath() string {
 	return f.fpath
 }
