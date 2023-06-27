@@ -1,10 +1,13 @@
 package symtab
 
 import (
+	"fmt"
+	"github.com/grafana/phlare/ebpf/symtab/elf"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/grafana/phlare/ebpf/util"
 	"github.com/stretchr/testify/require"
@@ -165,4 +168,15 @@ func copyFile(src, dst string) (int64, error) {
 	}
 	defer df.Close()
 	return io.Copy(df, sf)
+}
+
+func TestHugeGoFile(t *testing.T) {
+	me, _ := elf.NewMMapedElfFile("/home/korniltsev/Downloads/terraform-provider-aws-main/terraform-provider-aws")
+	defer me.Close()
+	t1 := time.Now()
+	table, err := me.NewGoTable()
+	require.NoError(t, err)
+	_ = table
+	t2 := time.Now()
+	fmt.Println(t2.Sub(t1))
 }

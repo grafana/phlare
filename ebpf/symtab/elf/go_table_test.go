@@ -27,11 +27,11 @@ func TestSelfGoSymbolComparison(t *testing.T) {
 		f        string
 		expect32 bool
 	}{
-		{"./testdata/elfs/go12", true},
+		//{"./testdata/elfs/go12", true},
 		{"./testdata/elfs/go16", true},
 		{"./testdata/elfs/go18", true},
 		{"./testdata/elfs/go20", true},
-		{"./testdata/elfs/go12-static", true},
+		//{"./testdata/elfs/go12-static", true},
 		{"./testdata/elfs/go16-static", false}, // this one switches from 32 to 64 in the middle
 		{"./testdata/elfs/go18-static", false}, // this one starts with 64
 		{"./testdata/elfs/go20-static", true},

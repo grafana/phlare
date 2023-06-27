@@ -49,7 +49,7 @@ type ProcTableOptions struct {
 
 func NewProcTable(logger log.Logger, options ProcTableOptions) *ProcTable {
 	path := path.Join("/proc", strconv.Itoa(options.Pid), "root")
-	fmt.Printf("new proc table %s", path)
+	//fmt.Printf("new proc table %s", path)
 	return &ProcTable{
 		logger:     logger,
 		file2Table: make(map[file]*ElfTable),
