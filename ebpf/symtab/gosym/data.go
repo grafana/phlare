@@ -28,7 +28,7 @@ type FilePCLNData struct {
 
 func NewFilePCLNData(f *os.File, offset int) *FilePCLNData {
 	return &FilePCLNData{
-		file: bufra.NewBufReaderAt(f, 128*0x1000),
+		file: bufra.NewBufReaderAt(f, 16*1024*1024),
 		//file:   f,
 		offset: offset,
 		//buf:    make([]byte, 16*0x1000),
