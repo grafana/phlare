@@ -281,18 +281,23 @@ func (t *LineTable) Go12Funcs() (res FlatFuncIndex) {
 		Entry: NewPCIndex(nfunc),
 		Name:  make([]uint32, nfunc),
 	}
+	funcDatas := make([]uint64, nfunc)
 	for i := 0; i < nfunc; i++ {
 		entry := ft.pc(i)
 		res.Entry.Set(i, entry)
 		res.End = ft.pc(i + 1)
+		dataOffset := t.funcTab().funcOff(int(i))
+
 		//info := t.funcData(uint32(i))
-		//res.Name[i] = info.nameOff()
+		funcDatas[i] = dataOffset
+		//res.Name[i] = dataOffset
 	}
 	for i := 0; i < nfunc; i++ {
 		//entry := ft.pc(i)
 		//res.Entry.Set(i, entry)
 		//res.End = ft.pc(i + 1)
-		info := t.funcData(uint32(i))
+		//info := t.funcData(uint32(i))
+		info := funcData{t: t, dataOffset: funcDatas[i]}
 		res.Name[i] = info.nameOff()
 	}
 	return

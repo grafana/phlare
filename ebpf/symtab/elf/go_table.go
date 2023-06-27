@@ -78,6 +78,13 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 		return nil, errEmptyGoPCLNTab
 	}
 
+	//pclndataReader := gosym2.NewFilePCLNData(f.fd, int(pclntab.Offset))
+	//pclnData, err := f.SectionData(pclntab)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//pclndataReader := gosym2.MemPCLNData{Data: pclnData}
+
 	pclndataReader := gosym2.NewFilePCLNData(f.fd, int(pclntab.Offset))
 
 	pclntabDataHeader := make([]byte, 64)
