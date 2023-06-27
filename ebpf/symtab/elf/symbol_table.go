@@ -35,7 +35,7 @@ func (n *Name) LinkIndex() SectionLinkIndex {
 }
 
 type FlatSymbolIndex struct {
-	Links  []uint32
+	Links  []elf.SectionHeader
 	Names  []Name
 	Values gosym.PCIndex
 }
@@ -110,9 +110,9 @@ func (f *MMapedElfFile) NewSymbolTable() (*SymbolTable, error) {
 	})
 
 	res := &SymbolTable{Index: FlatSymbolIndex{
-		Links: []uint32{
-			sectionSym,    // should be at 0 - SectionTypeSym
-			sectionDynSym, // should be at 1 - SectionTypeDynSym
+		Links: []elf.SectionHeader{
+			f.Sections[sectionSym],    // should be at 0 - SectionTypeSym
+			f.Sections[sectionDynSym], // should be at 1 - SectionTypeDynSym
 		},
 		Names:  make([]Name, total),
 		Values: gosym.NewPCIndex(total),
@@ -126,13 +126,9 @@ func (f *MMapedElfFile) NewSymbolTable() (*SymbolTable, error) {
 
 func (st *SymbolTable) symbolName(idx int) (string, error) {
 	linkIndex := st.Index.Names[idx].LinkIndex()
-	SectionHeaderLink := st.Index.Links[linkIndex]
-	strSection, err := st.File.stringTable(SectionHeaderLink)
-	if err != nil {
-		return "", err
-	}
+	SectionHeaderLink := &st.Index.Links[linkIndex]
 	NameIndex := st.Index.Names[idx].NameIndex()
-	s, b := st.File.getString(int(NameIndex) + int(strSection.Offset))
+	s, b := st.File.getString(int(NameIndex) + int(SectionHeaderLink.Offset))
 	if !b {
 		return "", fmt.Errorf("elf getString")
 	}

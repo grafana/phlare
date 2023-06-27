@@ -3,7 +3,6 @@ package elf
 import (
 	"bytes"
 	"debug/elf"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -91,6 +90,7 @@ func (f *MMapedElfFile) Close() {
 		f.fd = nil
 	}
 	f.stringCache = nil
+	f.Sections = nil
 }
 func (f *MMapedElfFile) open() error {
 	if f.err != nil {
@@ -114,13 +114,6 @@ func (f *MMapedElfFile) SectionData(s *elf.SectionHeader) ([]byte, error) {
 		return nil, err
 	}
 	return res, nil
-}
-
-func (f *MMapedElfFile) stringTable(link uint32) (*elf.SectionHeader, error) {
-	if link <= 0 || link >= uint32(len(f.Sections)) {
-		return nil, errors.New("section has invalid string table link")
-	}
-	return &f.Sections[link], nil
 }
 
 func (f *MMapedElfFile) FilePath() string {
