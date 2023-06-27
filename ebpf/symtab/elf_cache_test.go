@@ -20,6 +20,7 @@ func TestElfCacheStrippedEmpty(t *testing.T) {
 	fs := "." // make it unable to find debug file by buildID
 	stripped := NewElfTable(logger, &ProcMap{StartAddr: 0x1000, Offset: 0x1000}, fs, "elf/testdata/elfs/elf.stripped",
 		ElfTableOptions{
+
 			ElfCache: elfCache,
 		})
 

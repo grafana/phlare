@@ -11,7 +11,7 @@ import (
 type GoTable struct {
 	Index          gosym2.FlatFuncIndex
 	File           *MMapedElfFile
-	gopclnSection  *elf.SectionHeader
+	gopclnSection  elf.SectionHeader
 	funcNameOffset uint64
 }
 
@@ -118,7 +118,7 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	return &GoTable{
 		Index:          funcs,
 		File:           f,
-		gopclnSection:  pclntab,
+		gopclnSection:  *pclntab,
 		funcNameOffset: funcNameOffset,
 	}, nil
 }
