@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/grafana/phlare/pkg/iter"
@@ -45,8 +46,8 @@ func NewMergeRowReader(readers []parquet.RowReader, maxValue parquet.Row, less f
 		return readers[0]
 	}
 	its := make([]iter.Iterator[parquet.Row], len(readers))
-	for i, r := range readers {
-		its[i] = NewBufferedRowReaderIterator(r, defaultRowBufferSize)
+	for i := range readers {
+		its[i] = NewBufferedRowReaderIterator(readers[i], defaultRowBufferSize)
 	}
 
 	return &MergeRowReader{
@@ -70,9 +71,12 @@ func (s *MergeRowReader) ReadRows(rows []parquet.Row) (int, error) {
 			break
 		}
 		if !s.tree.Next() {
+			s.tree.Close()
 			return n, io.EOF
 		}
 		rows[n] = s.tree.Winner().At()
+		fmt.Println("MergeRowReader rows", rows[n][1].Int32(), " ", rows[n][11].Int64())
+
 		n++
 	}
 	return n, nil
@@ -97,8 +101,10 @@ func NewBufferedRowReaderIterator(reader parquet.RowReader, bufferSize int) *Buf
 func (r *BufferedRowReaderIterator) Next() bool {
 	if len(r.buff) > 1 {
 		r.buff = r.buff[1:]
+		// fmt.Println("Next", r.buff[0][1].Int32(), " ", r.buff[0][11].Int64())
 		return true
 	}
+
 	if cap(r.buff) < r.bufferSize {
 		r.buff = make([]parquet.Row, r.bufferSize)
 	}
@@ -111,7 +117,9 @@ func (r *BufferedRowReaderIterator) Next() bool {
 		r.err = err
 		return false
 	}
+
 	r.buff = r.buff[:n]
+	// fmt.Println("Next after read", r.buff[0][1].Int32(), " ", r.buff[0][11].Int64())
 	return true
 }
 
@@ -119,6 +127,8 @@ func (r *BufferedRowReaderIterator) At() parquet.Row {
 	if len(r.buff) == 0 {
 		return parquet.Row{}
 	}
+	// fmt.Println("At", r.buff[0][1].Int32(), " ", r.buff[0][11].Int64())
+
 	return r.buff[0]
 }
 

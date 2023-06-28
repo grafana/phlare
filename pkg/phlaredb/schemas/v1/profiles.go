@@ -398,14 +398,9 @@ func deconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 	return row
 }
 
-func NewMergeProfilesRowReader(rowGroups []parquet.RowGroup) parquet.RowReader {
+func NewMergeProfilesRowReader(rowGroups []parquet.RowReader) parquet.RowReader {
 	if len(rowGroups) == 0 {
 		return phlareparquet.EmptyRowReader
-	}
-
-	readers := make([]parquet.RowReader, len(rowGroups))
-	for i, rg := range rowGroups {
-		readers[i] = rg.Rows()
 	}
 
 	seriesCol, ok := profilesSchema.Lookup("SeriesIndex")
@@ -417,7 +412,7 @@ func NewMergeProfilesRowReader(rowGroups []parquet.RowGroup) parquet.RowReader {
 		return phlareparquet.NewErrRowReader(fmt.Errorf("TimeNanos column not found"))
 	}
 
-	return phlareparquet.NewMergeRowReader(readers, maxProfileRow, func(r1, r2 parquet.Row) bool {
+	return phlareparquet.NewMergeRowReader(rowGroups, maxProfileRow, func(r1, r2 parquet.Row) bool {
 		var (
 			sv1, tv1 parquet.Value
 			sv2, tv2 parquet.Value

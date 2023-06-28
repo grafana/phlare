@@ -146,6 +146,59 @@ func BenchmarkRowReader(b *testing.B) {
 	})
 }
 
+func TestMergeProfiles(t *testing.T) {
+	reader := NewMergeProfilesRowReader([]parquet.RowReader{
+		NewInMemoryProfilesRowReader([]InMemoryProfile{
+			{SeriesIndex: 1, TimeNanos: 1},
+			{SeriesIndex: 2, TimeNanos: 2},
+			{SeriesIndex: 3, TimeNanos: 3},
+		}),
+		NewInMemoryProfilesRowReader([]InMemoryProfile{
+			{SeriesIndex: 1, TimeNanos: 4},
+			{SeriesIndex: 2, TimeNanos: 5},
+			{SeriesIndex: 3, TimeNanos: 6},
+		}),
+		// NewInMemoryProfilesRowReader([]InMemoryProfile{
+		// 	{SeriesIndex: 1, TimeNanos: 7},
+		// 	{SeriesIndex: 2, TimeNanos: 8},
+		// 	{SeriesIndex: 3, TimeNanos: 9},
+		// }),
+	})
+
+	actual, err := phlareparquet.ReadAll(reader)
+	require.NoError(t, err)
+	compareProfileRows(t, generateProfileRow([]InMemoryProfile{
+		{SeriesIndex: 1, TimeNanos: 1},
+		{SeriesIndex: 1, TimeNanos: 4},
+		// {SeriesIndex: 1, TimeNanos: 7},
+		{SeriesIndex: 2, TimeNanos: 2},
+		{SeriesIndex: 2, TimeNanos: 5},
+		// {SeriesIndex: 2, TimeNanos: 8},
+		{SeriesIndex: 3, TimeNanos: 3},
+		{SeriesIndex: 3, TimeNanos: 6},
+		// {SeriesIndex: 3, TimeNanos: 9},
+	}), actual)
+}
+
+func compareProfileRows(t *testing.T, expected, actual []parquet.Row) {
+	t.Helper()
+	require.Equal(t, len(expected), len(actual))
+	for i := range expected {
+		expectedProfile, actualProfile := &Profile{}, &Profile{}
+		require.NoError(t, profilesSchema.Reconstruct(actualProfile, actual[i]))
+		require.NoError(t, profilesSchema.Reconstruct(expectedProfile, expected[i]))
+		require.Equal(t, expectedProfile, actualProfile, "row %d", i)
+	}
+}
+
+func generateProfileRow(in []InMemoryProfile) []parquet.Row {
+	rows := make([]parquet.Row, len(in))
+	for i, p := range in {
+		rows[i] = deconstructMemoryProfile(p, rows[i])
+	}
+	return rows
+}
+
 func generateMemoryProfiles(n int) []InMemoryProfile {
 	profiles := make([]InMemoryProfile, n)
 	for i := 0; i < n; i++ {
