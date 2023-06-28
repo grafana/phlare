@@ -44,9 +44,10 @@ const (
 // For the most part, LineTable's methods should be treated as an internal
 // detail of the package; callers should use the methods on Table instead.
 type LineTable struct {
-	Data []byte
-	PC   uint64
-	Line int
+	//Data []byte
+	PCLNData PCLNData
+	PC       uint64
+	Line     int
 
 	// This mutex is used to keep parsing of pclntab synchronous.
 	mu sync.Mutex
@@ -55,21 +56,26 @@ type LineTable struct {
 	version version
 
 	// Go 1.2/1.16/1.18 state
-	binary      binary.ByteOrder
-	quantum     uint32
-	ptrsize     uint32
-	textStart   uint64 // address of runtime.text symbol (1.18+)
-	funcnametab []byte
-	cutab       []byte
-	funcdata    []byte
-	functab     []byte
-	nfunctab    uint32
-	filetab     []byte
-	pctab       []byte // points to the pctables.
-	nfiletab    uint32
+	binary    binary.ByteOrder
+	quantum   uint32
+	ptrsize   uint32
+	textStart uint64 // address of runtime.text symbol (1.18+)
+	//funcnametab []byte
+	//cutab       []byte
+	//funcdata []byte
+	//functab  []byte
+	funcdataOffset uint64
+	functabOffset  uint64
+	functabSize    int
+	nfunctab       uint32
+	//filetab     []byte
+	//pctab []byte // points to the pctables.
+	//nfiletab    uint32
 
 	funcnametabOffset uint64
 	failed            bool
+
+	tmpbuf [8]uint8
 }
 
 // NewLineTable returns a new PC/line table
@@ -78,9 +84,19 @@ type LineTable struct {
 // corresponding text segment.
 func NewLineTable(data []byte, text uint64) *LineTable {
 	return &LineTable{
-		Data: data,
-		PC:   text,
-		Line: 0,
+		//Data: data,
+		PCLNData: &MemPCLNData{data},
+		PC:       text,
+		Line:     0,
+	}
+}
+
+func NewLineTable2(data PCLNData, text uint64) *LineTable {
+	return &LineTable{
+		//Data: data,
+		PCLNData: data,
+		PC:       text,
+		Line:     0,
 	}
 }
 
@@ -110,11 +126,13 @@ const (
 
 // uintptr returns the pointer-sized value encoded at b.
 // The pointer size is dictated by the table being read.
-func (t *LineTable) uintptr(b []byte) uint64 {
+func (t *LineTable) uintptrAt(at int) uint64 {
+	tmpbuf := t.tmpbuf[:t.ptrsize]
+	_ = t.PCLNData.ReadAt(tmpbuf, at)
 	if t.ptrsize == 4 {
-		return uint64(t.binary.Uint32(b))
+		return uint64(t.binary.Uint32(tmpbuf))
 	}
-	return t.binary.Uint64(b)
+	return t.binary.Uint64(tmpbuf)
 }
 
 // parsePclnTab parses the pclntab, setting the version.
@@ -140,23 +158,30 @@ func (t *LineTable) parsePclnTab() {
 			}
 		}()
 	}
+	header := make([]byte, 16)
+	err := t.PCLNData.ReadAt(header, 0)
+	if err != nil {
+		return
+	}
 
 	// Check header: 4-byte magic, two zeros, pc quantum, pointer size.
-	if len(t.Data) < 16 || t.Data[4] != 0 || t.Data[5] != 0 ||
-		(t.Data[6] != 1 && t.Data[6] != 2 && t.Data[6] != 4) || // pc quantum
-		(t.Data[7] != 4 && t.Data[7] != 8) { // pointer size
+	if len(header) < 16 || header[4] != 0 || header[5] != 0 ||
+		(header[6] != 1 && header[6] != 2 && header[6] != 4) || // pc quantum
+		(header[7] != 4 && header[7] != 8) { // pointer size
 
 		return
 	}
 
 	var possibleVersion version
-	leMagic := binary.LittleEndian.Uint32(t.Data)
-	beMagic := binary.BigEndian.Uint32(t.Data)
+	leMagic := binary.LittleEndian.Uint32(header)
+	beMagic := binary.BigEndian.Uint32(header)
 	switch {
 	case leMagic == go12magic:
-		t.binary, possibleVersion = binary.LittleEndian, ver12
+		//t.binary, possibleVersion = binary.LittleEndian, ver12
+		return
 	case beMagic == go12magic:
-		t.binary, possibleVersion = binary.BigEndian, ver12
+		//t.binary, possibleVersion = binary.BigEndian, ver12
+		return
 	case leMagic == go116magic:
 		t.binary, possibleVersion = binary.LittleEndian, ver116
 	case beMagic == go116magic:
@@ -175,54 +200,55 @@ func (t *LineTable) parsePclnTab() {
 	t.version = possibleVersion
 
 	// quantum and ptrSize are the same between 1.2, 1.16, and 1.18
-	t.quantum = uint32(t.Data[6])
-	t.ptrsize = uint32(t.Data[7])
+	t.quantum = uint32(header[6])
+	t.ptrsize = uint32(header[7])
 
 	offset := func(word uint32) uint64 {
-		return t.uintptr(t.Data[8+word*t.ptrsize:])
+		at := 8 + word*t.ptrsize
+		return t.uintptrAt(int(at))
 	}
-	data := func(word uint32) []byte {
-		return t.Data[offset(word):]
-	}
+	//data := func(word uint32) []byte {
+	//	return t.Data[offset(word):]
+	//}
 
 	switch possibleVersion {
 	case ver118, ver120:
 		t.nfunctab = uint32(offset(0))
-		t.nfiletab = uint32(offset(1))
+		//t.nfiletab = uint32(offset(1))
 		t.textStart = t.PC // use the start PC instead of reading from the table, which may be unrelocated
-		t.funcnametab = data(3)
+		//t.funcnametab = data(3)
 		t.funcnametabOffset = offset(3)
-		t.cutab = data(4)
-		t.filetab = data(5)
-		t.pctab = data(6)
-		t.funcdata = data(7)
-		t.functab = data(7)
-		functabsize := (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
-		t.functab = t.functab[:functabsize]
+		//t.cutab = data(4)
+		//t.filetab = data(5)
+		//t.pctab = data(6)
+		t.funcdataOffset = offset(7)
+		t.functabOffset = offset(7)
+		t.functabSize = (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
+		//t.functab = t.functab[:functabsize]
 	case ver116:
 		t.nfunctab = uint32(offset(0))
-		t.nfiletab = uint32(offset(1))
-		t.funcnametab = data(2)
+		//t.nfiletab = uint32(offset(1))
+		//t.funcnametab = data(2)
 		t.funcnametabOffset = offset(2)
-		t.cutab = data(3)
-		t.filetab = data(4)
-		t.pctab = data(5)
-		t.funcdata = data(6)
-		t.functab = data(6)
-		functabsize := (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
-		t.functab = t.functab[:functabsize]
-	case ver12:
-		t.nfunctab = uint32(t.uintptr(t.Data[8:]))
-		t.funcdata = t.Data
-		t.funcnametab = t.Data
-		t.functab = t.Data[8+t.ptrsize:]
-		t.pctab = t.Data
-		functabsize := (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
-		fileoff := t.binary.Uint32(t.functab[functabsize:])
-		t.functab = t.functab[:functabsize]
-		t.filetab = t.Data[fileoff:]
-		t.nfiletab = t.binary.Uint32(t.filetab)
-		t.filetab = t.filetab[:t.nfiletab*4]
+		//t.cutab = data(3)
+		//t.filetab = data(4)
+		//t.pctab = data(5)
+		t.funcdataOffset = offset(6)
+		t.functabOffset = offset(6)
+		t.functabSize = (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
+		//t.functab = t.functab[:functabsize]
+	//case ver12:
+	//	t.nfunctab = uint32(t.uintptrAt(t.Data[8:]))
+	//	t.funcdata = t.Data
+	//	//t.funcnametab = t.Data
+	//	t.functab = t.Data[8+t.ptrsize:]
+	//	//t.pctab = t.Data
+	//	functabsize := (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
+	//	//fileoff := t.binary.Uint32(t.functab[functabsize:])
+	//	t.functab = t.functab[:functabsize]
+	//	//t.filetab = t.Data[fileoff:]
+	//	//t.nfiletab = t.binary.Uint32(t.filetab)
+	//	//t.filetab = t.filetab[:t.nfiletab*4]
 	default:
 		panic("unreachable")
 	}
@@ -255,11 +281,23 @@ func (t *LineTable) Go12Funcs() (res FlatFuncIndex) {
 		Entry: NewPCIndex(nfunc),
 		Name:  make([]uint32, nfunc),
 	}
+	funcDatas := make([]uint64, nfunc)
 	for i := 0; i < nfunc; i++ {
 		entry := ft.pc(i)
 		res.Entry.Set(i, entry)
 		res.End = ft.pc(i + 1)
-		info := t.funcData(uint32(i))
+		dataOffset := t.funcTab().funcOff(int(i))
+
+		//info := t.funcData(uint32(i))
+		funcDatas[i] = dataOffset
+		//res.Name[i] = dataOffset
+	}
+	for i := 0; i < nfunc; i++ {
+		//entry := ft.pc(i)
+		//res.Entry.Set(i, entry)
+		//res.End = ft.pc(i + 1)
+		//info := t.funcData(uint32(i))
+		info := funcData{t: t, dataOffset: funcDatas[i]}
 		res.Name[i] = info.nameOff()
 	}
 	return
@@ -292,7 +330,7 @@ func (f funcTab) Count() int {
 
 // pc returns the PC of the i'th func in f.
 func (f funcTab) pc(i int) uint64 {
-	u := f.uint(f.functab[2*i*f.sz:])
+	u := f.uintAt(int(f.functabOffset) + 2*i*f.sz)
 	if f.version >= ver118 {
 		u += f.textStart
 	}
@@ -301,33 +339,36 @@ func (f funcTab) pc(i int) uint64 {
 
 // funcOff returns the funcdata offset of the i'th func in f.
 func (f funcTab) funcOff(i int) uint64 {
-	return f.uint(f.functab[(2*i+1)*f.sz:])
+	return f.uintAt(int(f.functabOffset) + (2*i+1)*f.sz)
 }
 
 // uint returns the uint stored at b.
-func (f funcTab) uint(b []byte) uint64 {
+func (f funcTab) uintAt(at int) uint64 {
+	tmpbuf := f.tmpbuf[:f.sz]
+	_ = f.PCLNData.ReadAt(tmpbuf, at)
 	if f.sz == 4 {
-		return uint64(f.binary.Uint32(b))
+		return uint64(f.binary.Uint32(tmpbuf))
 	}
-	return f.binary.Uint64(b)
+	return f.binary.Uint64(tmpbuf)
 }
 
 // funcData is memory corresponding to an _func struct.
 type funcData struct {
-	t    *LineTable // LineTable this data is a part of
-	data []byte     // raw memory for the function
+	t *LineTable // LineTable this data is a part of
+	//data []byte     // raw memory for the function
+	dataOffset uint64 // offset into funcdata
 }
 
 // funcData returns the ith funcData in t.functab.
 func (t *LineTable) funcData(i uint32) funcData {
-	data := t.funcdata[t.funcTab().funcOff(int(i)):]
-	return funcData{t: t, data: data}
+	dataOffset := t.funcTab().funcOff(int(i))
+	return funcData{t: t, dataOffset: dataOffset}
 }
 
 // IsZero reports whether f is the zero value.
-func (f funcData) IsZero() bool {
-	return f.t == nil && f.data == nil
-}
+//func (f funcData) IsZero() bool {
+//	return f.t == nil && f.data == nil
+//}
 
 func (f funcData) nameOff() uint32 { return f.field(1) }
 
@@ -345,7 +386,11 @@ func (f funcData) field(n uint32) uint32 {
 		sz0 = 4
 	}
 	off := sz0 + (n-1)*4 // subsequent fields are 4 bytes each
-	data := f.data[off:]
+	dataOffset := f.dataOffset + f.t.funcdataOffset + uint64(off)
+	//data := f.data[off:]
+	data := f.t.tmpbuf[:4]
+
+	_ = f.t.PCLNData.ReadAt(data, int(dataOffset))
 	return f.t.binary.Uint32(data)
 }
 
