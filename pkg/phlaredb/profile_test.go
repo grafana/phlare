@@ -168,7 +168,7 @@ func Test_rowRangeIter(t *testing.T) {
 			result := []int64{}
 			for it.Next() {
 				result = append(result, it.At().RowNumber())
-				assert.Equal(t, model.Fingerprint(0xff), it.At().fp)
+				assert.Equal(t, model.Fingerprint(0xff), it.At().elem)
 			}
 			assert.Equal(t, tc.expected, result)
 		})
@@ -238,7 +238,7 @@ func Test_rowRangesIter(t *testing.T) {
 
 			for it.Next() {
 				rows = append(rows, it.At().RowNumber())
-				fingerprints = append(fingerprints, it.At().fp)
+				fingerprints = append(fingerprints, it.At().elem)
 			}
 			assert.Equal(t, tc.expRows, rows)
 			assert.Equal(t, tc.expFingerprints, fingerprints)

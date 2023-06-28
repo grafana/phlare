@@ -66,12 +66,12 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 	for pIt.Next() {
 		res := pIt.At()
 
-		v, ok := res.Entries[0].RowValue.(fingerprintWithRowNum)
+		v, ok := res.Entries[0].RowValue.(rowNumWithSomething[model.Fingerprint])
 		if !ok {
 			panic("no fingerprint information found")
 		}
 
-		lbls, ok := labelsPerFP[v.fp]
+		lbls, ok := labelsPerFP[v.elem]
 		if !ok {
 			panic("no profile series labels with matching fingerprint found")
 		}
@@ -83,7 +83,7 @@ func (q *headOnDiskQuerier) SelectMatchingProfiles(ctx context.Context, params *
 		}
 		profiles = append(profiles, BlockProfile{
 			labels:              lbls,
-			fp:                  v.fp,
+			fp:                  v.elem,
 			ts:                  model.TimeFromUnixNano(buf[0][0].Int64()),
 			stacktracePartition: retrieveStacktracePartition(buf, 1),
 			RowNum:              res.RowNumber[0],

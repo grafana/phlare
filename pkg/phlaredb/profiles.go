@@ -56,7 +56,7 @@ func (s rowRangesWithSeriesIndex) getSeriesIndex(rowNum int64) uint32 {
 
 type rowRanges map[rowRange]model.Fingerprint
 
-func (rR rowRanges) iter() iter.Iterator[fingerprintWithRowNum] {
+func (rR rowRanges) iter() iter.Iterator[rowNumWithSomething[model.Fingerprint]] {
 	// ensure row ranges is sorted
 	rRSlice := lo.Keys(rR)
 	sort.Slice(rRSlice, func(i, j int) bool {
@@ -68,19 +68,19 @@ func (rR rowRanges) iter() iter.Iterator[fingerprintWithRowNum] {
 		fps = append(fps, rR[elem])
 	}
 
-	return &rowRangesIter{
+	return &rowRangesIter[model.Fingerprint]{
 		r:   rRSlice,
 		fps: fps,
 		pos: 0,
 	}
 }
 
-type fingerprintWithRowNum struct {
-	fp     model.Fingerprint
+type rowNumWithSomething[A any] struct {
+	elem   A
 	rowNum int64
 }
 
-func (f fingerprintWithRowNum) RowNumber() int64 {
+func (f rowNumWithSomething[A]) RowNumber() int64 {
 	return f.rowNum
 }
 
@@ -88,20 +88,20 @@ func (r rowRanges) fingerprintsWithRowNum() query.Iterator {
 	return query.NewRowNumberIterator(r.iter())
 }
 
-type rowRangesIter struct {
+type rowRangesIter[A any] struct {
 	r   []rowRange
-	fps []model.Fingerprint
+	fps []A
 	pos int64
 }
 
-func (i *rowRangesIter) At() fingerprintWithRowNum {
-	return fingerprintWithRowNum{
+func (i *rowRangesIter[A]) At() rowNumWithSomething[A] {
+	return rowNumWithSomething[A]{
+		elem:   i.fps[0],
 		rowNum: i.pos - 1,
-		fp:     i.fps[0],
 	}
 }
 
-func (i *rowRangesIter) Next() bool {
+func (i *rowRangesIter[A]) Next() bool {
 	if len(i.r) == 0 {
 		return false
 	}
@@ -118,9 +118,9 @@ func (i *rowRangesIter) Next() bool {
 	return true
 }
 
-func (i *rowRangesIter) Close() error { return nil }
+func (i *rowRangesIter[A]) Close() error { return nil }
 
-func (i *rowRangesIter) Err() error { return nil }
+func (i *rowRangesIter[A]) Err() error { return nil }
 
 type profileSeries struct {
 	lbs phlaremodel.Labels

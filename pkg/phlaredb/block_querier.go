@@ -941,6 +941,204 @@ func retrieveStacktracePartition(buf [][]parquet.Value, pos int) uint64 {
 	return uint64(0)
 }
 
+type sortingIterator struct {
+}
+
+type rowGroupIndex struct {
+	min, max, idx int64
+}
+
+type profileMatchIterator struct {
+	err error
+	it  query.Iterator
+
+	file            *parquet.File
+	currentRowGroup int
+	rowGroups       []parquet.RowGroup
+	index           []rowGroupIndex
+	minTimeOrder    []int
+	lbls            map[int64]labelsInfo
+
+	offset        int
+	ranges        []rowRange
+	seriesIndexes []uint32
+}
+
+func newProfileMatchIterator(file *parquet.File, lbls map[int64]labelsInfo) query.Iterator {
+	it := &profileMatchIterator{file: file, lbls: lbls}
+	//timeNanosIndex, _ := query.GetColumnIndexByPath(file, "TimeNanos")
+	it.rowGroups = file.RowGroups()
+
+	/*
+		it.index = make([]rowGroupIndex, len(it.rowGroups))
+		it.minTimeOrder = make([]int, len(it.rowGroups))
+
+		for rgIdx, rg := range it.rowGroups {
+			it.minTimeOrder[rgIdx] = rgIdx
+			idx := rg.ColumnChunks()[timeNanosIndex].ColumnIndex()
+			for pgIdx := 0; pgIdx < idx.NumPages(); pgIdx++ {
+				min := idx.MinValue(pgIdx).Int64()
+				max := idx.MaxValue(pgIdx).Int64()
+				if it.index[rgIdx].max == 0 || it.index[rgIdx].max < max {
+					it.index[rgIdx].max = max
+				}
+				if it.index[rgIdx].min == 0 || it.index[rgIdx].min > min {
+					it.index[rgIdx].min = min
+				}
+			}
+
+			sort.Slice(it.minTimeOrder, func(i, j int) bool {
+				return it.index[i].min < it.index[j].min
+			})
+		}
+	*/
+
+	return it
+}
+
+type parquetUint32Reader interface {
+	ReadUint32s(values []uint32) (int, error)
+}
+
+func (it *profileMatchIterator) Seek(to query.RowNumberWithDefinitionLevel) bool {
+	return it.it.Seek(to)
+}
+
+func (it *profileMatchIterator) readNextRowGroup() error {
+	if it.currentRowGroup >= len(it.rowGroups) {
+		return io.EOF
+	}
+
+	rg := it.rowGroups[it.currentRowGroup]
+	it.currentRowGroup++
+
+	seriesIndexIndex, _ := query.GetColumnIndexByPath(it.file, "SeriesIndex")
+
+	// find series ids relevant
+	pages := rg.ColumnChunks()[seriesIndexIndex].Pages()
+
+	batch := make([]uint32, 10_000)
+
+	rangeIdx := -1
+	it.ranges = it.ranges[:0]
+	it.seriesIndexes = it.seriesIndexes[:0]
+
+	for {
+		page, err := pages.ReadPage()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+
+		reader, ok := page.Values().(parquetUint32Reader)
+		if !ok {
+			return fmt.Errorf("unexpected reader: %T", page.Values())
+		}
+
+		for {
+			valuesEOF := false
+
+			n, err := reader.ReadUint32s(batch)
+			if err == io.EOF {
+				valuesEOF = true
+			} else if err != nil {
+				return err
+			}
+
+			for idx := range batch {
+				seriesIdx := batch[idx]
+
+				_, selected := it.lbls[int64(seriesIdx)]
+				if !selected {
+					continue
+				}
+
+				// check rowRanges
+				if rangeIdx > 0 && seriesIdx == it.seriesIndexes[rangeIdx] {
+					it.ranges[rangeIdx].length += 1
+					continue
+				}
+
+				//				if rangeIdx > 0 {
+				//					fmt.Printf("rowRange finished: %+#v seriesIdx=%d offset=%d\n", it.ranges[rangeIdx], it.seriesIndexes[rangeIdx], it.offset)
+				//				}
+
+				// needs new row range
+				rangeIdx += 1
+				it.ranges = append(it.ranges, rowRange{
+					rowNum: int64(idx + it.offset),
+					length: 1,
+				})
+				it.seriesIndexes = append(it.seriesIndexes, seriesIdx)
+			}
+
+			it.offset += n
+			if valuesEOF {
+				break
+			}
+		}
+	}
+
+	var rowNumberIter iter.Iterator[rowNumWithSomething[uint32]] = &rowRangesIter[uint32]{
+		r:   it.ranges,
+		fps: it.seriesIndexes,
+		pos: 0,
+	}
+
+	it.it = query.NewRowNumberIterator(rowNumberIter)
+
+	return nil
+
+}
+
+func (it *profileMatchIterator) Next() bool {
+	err := it.next()
+	if err == io.EOF {
+		return false
+	}
+	if err != nil {
+		it.err = err
+		return false
+	}
+
+	return true
+
+}
+
+func (it *profileMatchIterator) next() error {
+	for it.it == nil || !it.it.Next() {
+		// close old iterator if required
+		if it.it != nil {
+			if err := it.it.Close(); err != nil {
+				return err
+			}
+		}
+
+		// get new iterator
+		err := it.readNextRowGroup()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (it *profileMatchIterator) Err() error {
+	return it.err
+}
+
+func (it *profileMatchIterator) Close() error {
+	// TODO
+	return nil
+}
+
+func (it *profileMatchIterator) At() *query.IteratorResult {
+	v := it.it.At()
+	return v
+}
+
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block")
 	defer sp.Finish()
@@ -992,16 +1190,18 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		joinIters []query.Iterator
 	)
 
+	seriesIndexIter := newProfileMatchIterator(b.profiles.file, lblsPerRef)
+
 	if b.meta.Version >= 2 {
 		joinIters = []query.Iterator{
-			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
+			seriesIndexIter,
 			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
 			b.profiles.columnIter(ctx, "StacktracePartition", nil, "StacktracePartition"),
 		}
 		buf = make([][]parquet.Value, 3)
 	} else {
 		joinIters = []query.Iterator{
-			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
+			seriesIndexIter,
 			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
 		}
 		buf = make([][]parquet.Value, 2)
@@ -1015,8 +1215,11 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 	var currentSeriesSlice []Profile
 	for pIt.Next() {
 		res := pIt.At()
-		buf = res.Columns(buf, "SeriesIndex", "TimeNanos", "StacktracePartition")
-		seriesIndex := buf[0][0].Int64()
+
+		seriesIndexE := res.Entries[0].RowValue.(rowNumWithSomething[uint32])
+		seriesIndex := int64(seriesIndexE.elem)
+
+		buf = res.Columns(buf, "TimeNanos", "StacktracePartition")
 		if seriesIndex != currSeriesIndex {
 			currSeriesIndex = seriesIndex
 			if len(currentSeriesSlice) > 0 {
@@ -1028,8 +1231,8 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		currentSeriesSlice = append(currentSeriesSlice, BlockProfile{
 			labels:              lblsPerRef[seriesIndex].lbs,
 			fp:                  lblsPerRef[seriesIndex].fp,
-			ts:                  model.TimeFromUnixNano(buf[1][0].Int64()),
-			stacktracePartition: retrieveStacktracePartition(buf, 2),
+			ts:                  model.TimeFromUnixNano(buf[0][0].Int64()),
+			stacktracePartition: retrieveStacktracePartition(buf, 1),
 			RowNum:              res.RowNumber[0],
 		})
 	}
