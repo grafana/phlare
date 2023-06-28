@@ -68,7 +68,6 @@ var (
 func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	obj := f
 	var err error
-	var pclntabData []byte
 	text := obj.Section(".text")
 	if text == nil {
 		return nil, errEmptyText
@@ -77,12 +76,18 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	if pclntab == nil {
 		return nil, errEmptyGoPCLNTab
 	}
+	if f.fd == nil {
+		return nil, fmt.Errorf("elf file not open")
+	}
 
-	if pclntabData, err = obj.SectionData(pclntab); err != nil {
+	pclntabReader := gosym2.NewFilePCLNData(f.fd, int(pclntab.Offset))
+
+	pclntabHeader := make([]byte, 64)
+	if err = pclntabReader.ReadAt(pclntabHeader, 0); err != nil {
 		return nil, err
 	}
 
-	textStart := gosym2.ParseRuntimeTextFromPclntab18(pclntabData)
+	textStart := gosym2.ParseRuntimeTextFromPclntab18(pclntabHeader)
 
 	if textStart == 0 {
 		// for older versions text.Addr is enough
@@ -92,7 +97,7 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	if textStart < text.Addr || textStart >= text.Addr+text.Size {
 		return nil, fmt.Errorf(" runtime.text out of .text bounds %d %d %d", textStart, text.Addr, text.Size)
 	}
-	pcln := gosym2.NewLineTable(pclntabData, textStart)
+	pcln := gosym2.NewLineTableStreaming(pclntabReader, textStart)
 
 	if !pcln.IsGo12() {
 		return nil, errGoTooOld

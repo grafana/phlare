@@ -91,7 +91,7 @@ func NewLineTable(data []byte, text uint64) *LineTable {
 	}
 }
 
-func NewLineTable2(data PCLNData, text uint64) *LineTable {
+func NewLineTableStreaming(data PCLNData, text uint64) *LineTable {
 	return &LineTable{
 		//Data: data,
 		PCLNData: data,
