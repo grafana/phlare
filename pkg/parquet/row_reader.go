@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/grafana/phlare/pkg/iter"
@@ -75,8 +74,6 @@ func (s *MergeRowReader) ReadRows(rows []parquet.Row) (int, error) {
 			return n, io.EOF
 		}
 		rows[n] = s.tree.Winner().At()
-		fmt.Println("MergeRowReader rows", rows[n][1].Int32(), " ", rows[n][11].Int64())
-
 		n++
 	}
 	return n, nil
@@ -101,7 +98,6 @@ func NewBufferedRowReaderIterator(reader parquet.RowReader, bufferSize int) *Buf
 func (r *BufferedRowReaderIterator) Next() bool {
 	if len(r.buff) > 1 {
 		r.buff = r.buff[1:]
-		// fmt.Println("Next", r.buff[0][1].Int32(), " ", r.buff[0][11].Int64())
 		return true
 	}
 
@@ -119,7 +115,6 @@ func (r *BufferedRowReaderIterator) Next() bool {
 	}
 
 	r.buff = r.buff[:n]
-	// fmt.Println("Next after read", r.buff[0][1].Int32(), " ", r.buff[0][11].Int64())
 	return true
 }
 
@@ -127,8 +122,6 @@ func (r *BufferedRowReaderIterator) At() parquet.Row {
 	if len(r.buff) == 0 {
 		return parquet.Row{}
 	}
-	// fmt.Println("At", r.buff[0][1].Int32(), " ", r.buff[0][11].Int64())
-
 	return r.buff[0]
 }
 

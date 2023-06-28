@@ -158,11 +158,11 @@ func TestMergeProfiles(t *testing.T) {
 			{SeriesIndex: 2, TimeNanos: 5},
 			{SeriesIndex: 3, TimeNanos: 6},
 		}),
-		// NewInMemoryProfilesRowReader([]InMemoryProfile{
-		// 	{SeriesIndex: 1, TimeNanos: 7},
-		// 	{SeriesIndex: 2, TimeNanos: 8},
-		// 	{SeriesIndex: 3, TimeNanos: 9},
-		// }),
+		NewInMemoryProfilesRowReader([]InMemoryProfile{
+			{SeriesIndex: 1, TimeNanos: 7},
+			{SeriesIndex: 2, TimeNanos: 8},
+			{SeriesIndex: 3, TimeNanos: 9},
+		}),
 	})
 
 	actual, err := phlareparquet.ReadAll(reader)
@@ -170,13 +170,13 @@ func TestMergeProfiles(t *testing.T) {
 	compareProfileRows(t, generateProfileRow([]InMemoryProfile{
 		{SeriesIndex: 1, TimeNanos: 1},
 		{SeriesIndex: 1, TimeNanos: 4},
-		// {SeriesIndex: 1, TimeNanos: 7},
+		{SeriesIndex: 1, TimeNanos: 7},
 		{SeriesIndex: 2, TimeNanos: 2},
 		{SeriesIndex: 2, TimeNanos: 5},
-		// {SeriesIndex: 2, TimeNanos: 8},
+		{SeriesIndex: 2, TimeNanos: 8},
 		{SeriesIndex: 3, TimeNanos: 3},
 		{SeriesIndex: 3, TimeNanos: 6},
-		// {SeriesIndex: 3, TimeNanos: 9},
+		{SeriesIndex: 3, TimeNanos: 9},
 	}), actual)
 }
 

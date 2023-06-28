@@ -441,9 +441,9 @@ func NewMergeProfilesRowReader(rowGroups []parquet.RowReader) parquet.RowReader 
 			}
 			return true
 		})
-		if sv1.Int32() == sv2.Int32() {
+		if sv1.Uint32() == sv2.Uint32() {
 			return tv1.Int64() < tv2.Int64()
 		}
-		return sv1.Int32() < sv2.Int32()
+		return sv1.Uint32() < sv2.Uint32()
 	})
 }
