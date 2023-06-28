@@ -56,26 +56,16 @@ type LineTable struct {
 	version version
 
 	// Go 1.2/1.16/1.18 state
-	binary    binary.ByteOrder
-	quantum   uint32
-	ptrsize   uint32
-	textStart uint64 // address of runtime.text symbol (1.18+)
-	//funcnametab []byte
-	//cutab       []byte
-	//funcdata []byte
-	//functab  []byte
-	funcdataOffset uint64
-	functabOffset  uint64
-	functabSize    int
-	nfunctab       uint32
-	//filetab     []byte
-	//pctab []byte // points to the pctables.
-	//nfiletab    uint32
-
+	binary            binary.ByteOrder
+	quantum           uint32
+	ptrsize           uint32
+	textStart         uint64 // address of runtime.text symbol (1.18+)
+	funcdataOffset    uint64
+	functabOffset     uint64
+	nfunctab          uint32
 	funcnametabOffset uint64
 	failed            bool
-
-	tmpbuf [8]uint8
+	tmpbuf            [8]uint8
 }
 
 // NewLineTable returns a new PC/line table
@@ -177,11 +167,9 @@ func (t *LineTable) parsePclnTab() {
 	beMagic := binary.BigEndian.Uint32(header)
 	switch {
 	case leMagic == go12magic:
-		//t.binary, possibleVersion = binary.LittleEndian, ver12
-		return
+		t.binary, possibleVersion = binary.LittleEndian, ver12
 	case beMagic == go12magic:
-		//t.binary, possibleVersion = binary.BigEndian, ver12
-		return
+		t.binary, possibleVersion = binary.BigEndian, ver12
 	case leMagic == go116magic:
 		t.binary, possibleVersion = binary.LittleEndian, ver116
 	case beMagic == go116magic:
@@ -207,48 +195,23 @@ func (t *LineTable) parsePclnTab() {
 		at := 8 + word*t.ptrsize
 		return t.uintptrAt(int(at))
 	}
-	//data := func(word uint32) []byte {
-	//	return t.Data[offset(word):]
-	//}
-
 	switch possibleVersion {
 	case ver118, ver120:
 		t.nfunctab = uint32(offset(0))
-		//t.nfiletab = uint32(offset(1))
 		t.textStart = t.PC // use the start PC instead of reading from the table, which may be unrelocated
-		//t.funcnametab = data(3)
 		t.funcnametabOffset = offset(3)
-		//t.cutab = data(4)
-		//t.filetab = data(5)
-		//t.pctab = data(6)
 		t.funcdataOffset = offset(7)
 		t.functabOffset = offset(7)
-		t.functabSize = (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
-		//t.functab = t.functab[:functabsize]
 	case ver116:
 		t.nfunctab = uint32(offset(0))
-		//t.nfiletab = uint32(offset(1))
-		//t.funcnametab = data(2)
 		t.funcnametabOffset = offset(2)
-		//t.cutab = data(3)
-		//t.filetab = data(4)
-		//t.pctab = data(5)
 		t.funcdataOffset = offset(6)
 		t.functabOffset = offset(6)
-		t.functabSize = (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
-		//t.functab = t.functab[:functabsize]
-	//case ver12:
-	//	t.nfunctab = uint32(t.uintptrAt(t.Data[8:]))
-	//	t.funcdata = t.Data
-	//	//t.funcnametab = t.Data
-	//	t.functab = t.Data[8+t.ptrsize:]
-	//	//t.pctab = t.Data
-	//	functabsize := (int(t.nfunctab)*2 + 1) * t.functabFieldSize()
-	//	//fileoff := t.binary.Uint32(t.functab[functabsize:])
-	//	t.functab = t.functab[:functabsize]
-	//	//t.filetab = t.Data[fileoff:]
-	//	//t.nfiletab = t.binary.Uint32(t.filetab)
-	//	//t.filetab = t.filetab[:t.nfiletab*4]
+	case ver12:
+		t.nfunctab = uint32(t.uintptrAt(8))
+		t.funcdataOffset = 0
+		t.funcnametabOffset = 0
+		t.functabOffset = uint64(8 + t.ptrsize)
 	default:
 		panic("unreachable")
 	}
