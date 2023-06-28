@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/require"
+
+	phlareparquet "github.com/grafana/phlare/pkg/parquet"
 )
 
 func TestInMemoryProfilesRowReader(t *testing.T) {
@@ -35,9 +37,9 @@ const samplesPerProfile = 100
 func TestRoundtripProfile(t *testing.T) {
 	profiles := generateProfiles(1000)
 	iprofiles := generateMemoryProfiles(1000)
-	actual, err := readAll(NewInMemoryProfilesRowReader(iprofiles))
+	actual, err := phlareparquet.ReadAll(NewInMemoryProfilesRowReader(iprofiles))
 	require.NoError(t, err)
-	expected, err := readAll(NewProfilesRowReader(profiles))
+	expected, err := phlareparquet.ReadAll(NewProfilesRowReader(profiles))
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
 
@@ -56,9 +58,9 @@ func TestRoundtripProfile(t *testing.T) {
 			inMemoryProfiles[i].DefaultSampleType = 0
 			inMemoryProfiles[i].KeepFrames = 0
 		}
-		expected, err := readAll(NewProfilesRowReader(profiles))
+		expected, err := phlareparquet.ReadAll(NewProfilesRowReader(profiles))
 		require.NoError(t, err)
-		actual, err := readAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
+		actual, err := phlareparquet.ReadAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
 		require.NoError(t, err)
 		require.Equal(t, expected, actual)
 	})
@@ -71,9 +73,9 @@ func TestRoundtripProfile(t *testing.T) {
 		for i := range inMemoryProfiles {
 			inMemoryProfiles[i].Comments = nil
 		}
-		expected, err := readAll(NewProfilesRowReader(profiles))
+		expected, err := phlareparquet.ReadAll(NewProfilesRowReader(profiles))
 		require.NoError(t, err)
-		actual, err := readAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
+		actual, err := phlareparquet.ReadAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
 		require.NoError(t, err)
 		require.Equal(t, expected, actual)
 	})
@@ -87,9 +89,9 @@ func TestRoundtripProfile(t *testing.T) {
 		for i := range inMemoryProfiles {
 			inMemoryProfiles[i].Samples = Samples{}
 		}
-		expected, err := readAll(NewProfilesRowReader(profiles))
+		expected, err := phlareparquet.ReadAll(NewProfilesRowReader(profiles))
 		require.NoError(t, err)
-		actual, err := readAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
+		actual, err := phlareparquet.ReadAll(NewInMemoryProfilesRowReader(inMemoryProfiles))
 		require.NoError(t, err)
 		require.Equal(t, expected, actual)
 	})
@@ -127,7 +129,7 @@ func BenchmarkRowReader(b *testing.B) {
 	b.Run("in-memory", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := readAll(NewInMemoryProfilesRowReader(iprofiles))
+			_, err := phlareparquet.ReadAll(NewInMemoryProfilesRowReader(iprofiles))
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -136,30 +138,12 @@ func BenchmarkRowReader(b *testing.B) {
 	b.Run("schema", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := readAll(NewProfilesRowReader(profiles))
+			_, err := phlareparquet.ReadAll(NewProfilesRowReader(profiles))
 			if err != nil {
 				b.Fatal(err)
 			}
 		}
 	})
-}
-
-func readAll(r parquet.RowReader) ([]parquet.Row, error) {
-	var rows []parquet.Row
-	batch := make([]parquet.Row, 1000)
-	for {
-		n, err := r.ReadRows(batch)
-		if err != nil && err != io.EOF {
-			return rows, err
-		}
-		if n != 0 {
-			rows = append(rows, batch[:n]...)
-		}
-		if n == 0 || err == io.EOF {
-			break
-		}
-	}
-	return rows, nil
 }
 
 func generateMemoryProfiles(n int) []InMemoryProfile {

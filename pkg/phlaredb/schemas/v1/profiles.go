@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"fmt"
 	"io"
+	"math"
 	"sort"
 
 	"github.com/google/uuid"
@@ -38,7 +40,16 @@ var (
 		phlareparquet.NewGroupField("Comments", parquet.List(stringRef)),
 		phlareparquet.NewGroupField("DefaultSampleType", parquet.Optional(parquet.Int(64))),
 	})
+
+	maxProfileRow parquet.Row
 )
+
+func init() {
+	maxProfileRow = deconstructMemoryProfile(InMemoryProfile{
+		SeriesIndex: math.MaxUint32,
+		TimeNanos:   math.MaxInt64,
+	}, maxProfileRow)
+}
 
 type Sample struct {
 	StacktraceID uint64             `parquet:",delta"`
@@ -385,4 +396,59 @@ func deconstructMemoryProfile(imp InMemoryProfile, row parquet.Row) parquet.Row 
 		row = append(row, parquet.Int64Value(imp.DefaultSampleType).Level(0, 1, newCol()))
 	}
 	return row
+}
+
+func NewMergeProfilesRowReader(rowGroups []parquet.RowGroup) parquet.RowReader {
+	if len(rowGroups) == 0 {
+		return phlareparquet.EmptyRowReader
+	}
+
+	readers := make([]parquet.RowReader, len(rowGroups))
+	for i, rg := range rowGroups {
+		readers[i] = rg.Rows()
+	}
+
+	seriesCol, ok := profilesSchema.Lookup("SeriesIndex")
+	if !ok {
+		return phlareparquet.NewErrRowReader(fmt.Errorf("SeriesIndex index column not found"))
+	}
+	timeCol, ok := profilesSchema.Lookup("TimeNanos")
+	if !ok {
+		return phlareparquet.NewErrRowReader(fmt.Errorf("TimeNanos column not found"))
+	}
+
+	return phlareparquet.NewMergeRowReader(readers, maxProfileRow, func(r1, r2 parquet.Row) bool {
+		var (
+			sv1, tv1 parquet.Value
+			sv2, tv2 parquet.Value
+		)
+		r1.Range(func(columnIndex int, columnValues []parquet.Value) bool {
+			if columnIndex == seriesCol.ColumnIndex {
+				sv1 = columnValues[0]
+			}
+			if columnIndex == timeCol.ColumnIndex {
+				tv1 = columnValues[0]
+			}
+			if columnIndex >= timeCol.ColumnIndex && columnIndex >= seriesCol.ColumnIndex {
+				return false
+			}
+			return true
+		})
+		r2.Range(func(columnIndex int, columnValues []parquet.Value) bool {
+			if columnIndex == seriesCol.ColumnIndex {
+				sv2 = columnValues[0]
+			}
+			if columnIndex == timeCol.ColumnIndex {
+				tv2 = columnValues[0]
+			}
+			if columnIndex >= timeCol.ColumnIndex && columnIndex >= seriesCol.ColumnIndex {
+				return false
+			}
+			return true
+		})
+		if sv1.Int32() == sv2.Int32() {
+			return tv1.Int64() < tv2.Int64()
+		}
+		return sv1.Int32() < sv2.Int32()
+	})
 }

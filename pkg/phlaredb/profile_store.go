@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,14 +17,13 @@ import (
 	"github.com/segmentio/parquet-go"
 	"go.uber.org/atomic"
 
-	"github.com/grafana/phlare/pkg/iter"
 	phlaremodel "github.com/grafana/phlare/pkg/model"
+	phlareparquet "github.com/grafana/phlare/pkg/parquet"
 	phlarecontext "github.com/grafana/phlare/pkg/phlare/context"
 	"github.com/grafana/phlare/pkg/phlaredb/block"
 	"github.com/grafana/phlare/pkg/phlaredb/query"
 	schemav1 "github.com/grafana/phlare/pkg/phlaredb/schemas/v1"
 	"github.com/grafana/phlare/pkg/util/build"
-	"github.com/grafana/phlare/pkg/util/loser"
 )
 
 type profileStore struct {
@@ -360,223 +358,6 @@ func (s *profileStore) loadProfilesToFlush(count int) uint64 {
 	return size
 }
 
-type RowGroupWriter interface {
-	parquet.RowWriter
-	Flush() error
-}
-
-// CopyRowGroups copies row groups to dst from src and flush a rowgroup per rowGroupNumCount read.
-func CopyRowGroups(dst RowGroupWriter, src parquet.RowReader, rowGroupNumCount int) (total uint64, rowGroupCount uint64, err error) {
-	if rowGroupNumCount <= 0 {
-		panic("rowGroupNumCount must be positive")
-	}
-	bufferSize := 1024
-	if rowGroupNumCount < bufferSize {
-		bufferSize = rowGroupNumCount
-	}
-	var (
-		buffer            = make([]parquet.Row, bufferSize)
-		currentGroupCount int
-	)
-
-	for {
-		n, err := src.ReadRows(buffer[:bufferSize])
-		if err != nil && err != io.EOF {
-			return 0, 0, err
-		}
-		if n == 0 {
-			break
-		}
-		buffer := buffer[:n]
-		if currentGroupCount+n >= rowGroupNumCount {
-			batchSize := rowGroupNumCount - currentGroupCount
-			written, err := dst.WriteRows(buffer[:batchSize])
-			if err != nil {
-				return 0, 0, err
-			}
-			buffer = buffer[batchSize:]
-			total += uint64(written)
-			if err := dst.Flush(); err != nil {
-				return 0, 0, err
-			}
-			rowGroupCount++
-			currentGroupCount = 0
-		}
-		if len(buffer) == 0 {
-			continue
-		}
-		written, err := dst.WriteRows(buffer)
-		if err != nil {
-			return 0, 0, err
-		}
-		total += uint64(written)
-		currentGroupCount += written
-	}
-	if currentGroupCount > 0 {
-		if err := dst.Flush(); err != nil {
-			return 0, 0, err
-		}
-		rowGroupCount++
-	}
-	return
-}
-
-type EmptyRowReader struct{}
-
-func (e *EmptyRowReader) ReadRows(rows []parquet.Row) (int, error) { return 0, io.EOF }
-
-type ErrRowReader struct{ err error }
-
-func NewErrRowReader(err error) *ErrRowReader { return &ErrRowReader{err: err} }
-
-func (e ErrRowReader) ReadRows(rows []parquet.Row) (int, error) { return 0, e.err }
-
-func NewSortedProfiles(rowGroups []parquet.RowGroup) parquet.RowReader {
-	if len(rowGroups) == 0 {
-		return &EmptyRowReader{}
-	}
-
-	readers := make([]parquet.RowReader, len(rowGroups))
-	for i, rg := range rowGroups {
-		readers[i] = rg.Rows()
-	}
-
-	schema := (&schemav1.ProfilePersister{}).Schema()
-	seriesCol, ok := schema.Lookup("SeriesIndex")
-	if !ok {
-		return NewErrRowReader(fmt.Errorf("SeriesIndex index column not found"))
-	}
-	timeCol, ok := schema.Lookup("TimeNanos")
-	if !ok {
-		return NewErrRowReader(fmt.Errorf("TimeNanos column not found"))
-	}
-	var maxVal parquet.Row
-	maxVal = schemav1.DeconstructMemoryProfile(schemav1.InMemoryProfile{
-		SeriesIndex: math.MaxUint32,
-		TimeNanos:   math.MaxInt64,
-	}, maxVal)
-	return NewSortedRowReader(readers, maxVal, func(r1, r2 parquet.Row) bool {
-		var (
-			sv1, tv1 parquet.Value
-			sv2, tv2 parquet.Value
-		)
-		r1.Range(func(columnIndex int, columnValues []parquet.Value) bool {
-			if columnIndex == seriesCol.ColumnIndex {
-				sv1 = columnValues[0]
-			}
-			if columnIndex == timeCol.ColumnIndex {
-				tv1 = columnValues[0]
-			}
-			if columnIndex >= timeCol.ColumnIndex && columnIndex >= seriesCol.ColumnIndex {
-				return false
-			}
-			return true
-		})
-		r2.Range(func(columnIndex int, columnValues []parquet.Value) bool {
-			if columnIndex == seriesCol.ColumnIndex {
-				sv2 = columnValues[0]
-			}
-			if columnIndex == timeCol.ColumnIndex {
-				tv2 = columnValues[0]
-			}
-			if columnIndex >= timeCol.ColumnIndex && columnIndex >= seriesCol.ColumnIndex {
-				return false
-			}
-			return true
-		})
-		if sv1.Int32() < sv2.Int32() {
-			return true
-		}
-		if sv1.Int32() > sv2.Int32() {
-			return false
-		}
-		return tv1.Int64() < tv2.Int64()
-	})
-}
-
-type SortedRowReader struct {
-	tree *loser.Tree[parquet.Row, iter.Iterator[parquet.Row]]
-}
-
-func (s *SortedRowReader) ReadRows(rows []parquet.Row) (int, error) {
-	var n int
-	if len(rows) == 0 {
-		return 0, nil
-	}
-	for {
-		if n == len(rows) {
-			break
-		}
-		if !s.tree.Next() {
-			return n, io.EOF
-		}
-		rows[n] = s.tree.Winner().At()
-		n++
-	}
-	return n, nil
-}
-
-func NewSortedRowReader(readers []parquet.RowReader, maxValue parquet.Row, less func(parquet.Row, parquet.Row) bool) *SortedRowReader {
-	its := make([]iter.Iterator[parquet.Row], len(readers))
-	for i, r := range readers {
-		its[i] = NewBufferedRowReaderIterator(r, 1024)
-	}
-
-	return &SortedRowReader{
-		tree: loser.New(its, maxValue, func(it iter.Iterator[parquet.Row]) parquet.Row { return it.At() }, less, func(it iter.Iterator[parquet.Row]) { it.Close() }),
-	}
-}
-
-type BufferedRowReaderIterator struct {
-	reader     parquet.RowReader
-	buff       []parquet.Row
-	bufferSize int
-	err        error
-}
-
-func NewBufferedRowReaderIterator(reader parquet.RowReader, bufferSize int) *BufferedRowReaderIterator {
-	return &BufferedRowReaderIterator{
-		reader:     reader,
-		bufferSize: bufferSize,
-	}
-}
-
-func (r *BufferedRowReaderIterator) Next() bool {
-	if len(r.buff) > 1 {
-		r.buff = r.buff[1:]
-		return true
-	}
-	if cap(r.buff) < r.bufferSize {
-		r.buff = make([]parquet.Row, r.bufferSize)
-	}
-	r.buff = r.buff[:r.bufferSize]
-	n, err := r.reader.ReadRows(r.buff)
-	if n == 0 {
-		return false
-	}
-	if err != nil && err != io.EOF {
-		r.err = err
-		return false
-	}
-	r.buff = r.buff[:n]
-	return true
-}
-
-func (r *BufferedRowReaderIterator) At() parquet.Row {
-	if len(r.buff) == 0 {
-		return parquet.Row{}
-	}
-	return r.buff[0]
-}
-
-func (r *BufferedRowReaderIterator) Err() error {
-	return r.err
-}
-
-func (r *BufferedRowReaderIterator) Close() error {
-	return r.err
-}
-
 func (s *profileStore) writeRowGroups(path string, rowGroups []parquet.RowGroup) (n uint64, numRowGroups uint64, err error) {
 	fileCloser, err := s.prepareFile(path)
 	if err != nil {
@@ -584,7 +365,7 @@ func (s *profileStore) writeRowGroups(path string, rowGroups []parquet.RowGroup)
 	}
 	defer runutil.CloseWithErrCapture(&err, fileCloser, "closing parquet file")
 
-	n, numRowGroups, err = CopyRowGroups(s.writer, NewSortedProfiles(rowGroups), s.cfg.MaxBufferRowCount)
+	n, numRowGroups, err = phlareparquet.CopyAsRowGroups(s.writer, schemav1.NewMergeProfilesRowReader(rowGroups), s.cfg.MaxBufferRowCount)
 
 	if err := s.writer.Close(); err != nil {
 		return 0, 0, err
