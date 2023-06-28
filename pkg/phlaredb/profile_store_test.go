@@ -169,13 +169,13 @@ func TestProfileStore_RowGroupSplitting(t *testing.T) {
 		expectedNumRGs  uint64
 		values          func(int) *testProfile
 	}{
-		// {
-		// 	name:            "single row group",
-		// 	cfg:             defaultParquetConfig,
-		// 	expectedNumRGs:  1,
-		// 	expectedNumRows: 100,
-		// 	values:          sameProfileStream,
-		// },
+		{
+			name:            "single row group",
+			cfg:             defaultParquetConfig,
+			expectedNumRGs:  1,
+			expectedNumRows: 100,
+			values:          sameProfileStream,
+		},
 		// {
 		// 	name:            "multiple row groups because of maximum size",
 		// 	cfg:             &ParquetConfig{MaxRowGroupBytes: 1828, MaxBufferRowCount: 100000},

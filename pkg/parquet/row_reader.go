@@ -3,9 +3,10 @@ package parquet
 import (
 	"io"
 
+	"github.com/segmentio/parquet-go"
+
 	"github.com/grafana/phlare/pkg/iter"
 	"github.com/grafana/phlare/pkg/util/loser"
-	"github.com/segmentio/parquet-go"
 )
 
 const (
