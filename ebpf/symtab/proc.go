@@ -65,6 +65,8 @@ type elfRange struct {
 func (p *ProcTable) Refresh() {
 	procMaps, err := os.ReadFile(fmt.Sprintf("/proc/%d/maps", p.options.Pid))
 	if err != nil {
+		fmt.Printf(">>>>>>>>>>>>>> proc referesh err  %v\n", err)
+
 		return // todo return err
 	}
 	p.refresh(procMaps)
