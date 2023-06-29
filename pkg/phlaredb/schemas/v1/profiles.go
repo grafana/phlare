@@ -41,7 +41,9 @@ var (
 		phlareparquet.NewGroupField("DefaultSampleType", parquet.Optional(parquet.Int(64))),
 	})
 
-	maxProfileRow parquet.Row
+	maxProfileRow       parquet.Row
+	seriesIndexColIndex int
+	timeNanoColIndex    int
 )
 
 func init() {
@@ -49,6 +51,16 @@ func init() {
 		SeriesIndex: math.MaxUint32,
 		TimeNanos:   math.MaxInt64,
 	}, maxProfileRow)
+	seriesCol, ok := profilesSchema.Lookup("SeriesIndex")
+	if !ok {
+		panic(fmt.Errorf("SeriesIndex index column not found"))
+	}
+	seriesIndexColIndex = seriesCol.ColumnIndex
+	timeCol, ok := profilesSchema.Lookup("TimeNanos")
+	if !ok {
+		panic(fmt.Errorf("TimeNanos column not found"))
+	}
+	timeNanoColIndex = timeCol.ColumnIndex
 }
 
 type Sample struct {
@@ -402,48 +414,31 @@ func NewMergeProfilesRowReader(rowGroups []parquet.RowReader) parquet.RowReader 
 	if len(rowGroups) == 0 {
 		return phlareparquet.EmptyRowReader
 	}
+	return phlareparquet.NewMergeRowReader(rowGroups, maxProfileRow, lessProfileRows)
+}
 
-	seriesCol, ok := profilesSchema.Lookup("SeriesIndex")
-	if !ok {
-		return phlareparquet.NewErrRowReader(fmt.Errorf("SeriesIndex index column not found"))
+func lessProfileRows(r1, r2 parquet.Row) bool {
+	// We can directly lookup the series index column and compare it
+	// because it's after only fixed length column
+	sv1, sv2 := r1[seriesIndexColIndex].Uint32(), r2[seriesIndexColIndex].Uint32()
+	if sv1 != sv2 {
+		return sv1 < sv2
 	}
-	timeCol, ok := profilesSchema.Lookup("TimeNanos")
-	if !ok {
-		return phlareparquet.NewErrRowReader(fmt.Errorf("TimeNanos column not found"))
-	}
-
-	return phlareparquet.NewMergeRowReader(rowGroups, maxProfileRow, func(r1, r2 parquet.Row) bool {
-		var (
-			sv1, tv1 parquet.Value
-			sv2, tv2 parquet.Value
-		)
-		r1.Range(func(columnIndex int, columnValues []parquet.Value) bool {
-			if columnIndex == seriesCol.ColumnIndex {
-				sv1 = columnValues[0]
-			}
-			if columnIndex == timeCol.ColumnIndex {
-				tv1 = columnValues[0]
-			}
-			if columnIndex >= timeCol.ColumnIndex && columnIndex >= seriesCol.ColumnIndex {
-				return false
-			}
-			return true
-		})
-		r2.Range(func(columnIndex int, columnValues []parquet.Value) bool {
-			if columnIndex == seriesCol.ColumnIndex {
-				sv2 = columnValues[0]
-			}
-			if columnIndex == timeCol.ColumnIndex {
-				tv2 = columnValues[0]
-			}
-			if columnIndex >= timeCol.ColumnIndex && columnIndex >= seriesCol.ColumnIndex {
-				return false
-			}
-			return true
-		})
-		if sv1.Uint32() == sv2.Uint32() {
-			return tv1.Int64() < tv2.Int64()
+	// we need to find the TimeNanos column and compare it
+	// but it's after repeated columns, so we search from the end to avoid
+	// going through samples
+	var ts1, ts2 int64
+	for i := len(r1) - 1; i >= 0; i-- {
+		if r1[i].Column() == timeNanoColIndex {
+			ts1 = r1[i].Int64()
+			break
 		}
-		return sv1.Uint32() < sv2.Uint32()
-	})
+	}
+	for i := len(r2) - 1; i >= 0; i-- {
+		if r2[i].Column() == timeNanoColIndex {
+			ts2 = r2[i].Int64()
+			break
+		}
+	}
+	return ts1 < ts2
 }

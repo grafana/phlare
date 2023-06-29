@@ -180,6 +180,48 @@ func TestMergeProfiles(t *testing.T) {
 	}), actual)
 }
 
+func TestLessProfileRows(t *testing.T) {
+	for _, tc := range []struct {
+		a, b     parquet.Row
+		expected bool
+	}{
+		{
+			a:        generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 1}})[0],
+			b:        generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 1}})[0],
+			expected: false,
+		},
+		{
+			a:        generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 1}})[0],
+			b:        generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 2}})[0],
+			expected: true,
+		},
+		{
+			a:        generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 1}})[0],
+			b:        generateProfileRow([]InMemoryProfile{{SeriesIndex: 2, TimeNanos: 1}})[0],
+			expected: true,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.expected, lessProfileRows(tc.a, tc.b))
+		})
+	}
+}
+
+func BenchmarkProfileRows(b *testing.B) {
+	a := generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 1}})[0]
+	a1 := generateProfileRow([]InMemoryProfile{{SeriesIndex: 1, TimeNanos: 2}})[0]
+	a2 := generateProfileRow([]InMemoryProfile{{SeriesIndex: 2, TimeNanos: 1}})[0]
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		lessProfileRows(a, a)
+		lessProfileRows(a, a1)
+		lessProfileRows(a, a2)
+	}
+}
+
 func compareProfileRows(t *testing.T, expected, actual []parquet.Row) {
 	t.Helper()
 	require.Equal(t, len(expected), len(actual))
