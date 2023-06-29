@@ -2,6 +2,7 @@ package symtab
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -73,6 +74,8 @@ func (et *ElfTable) load() {
 	me, err := elf2.NewMMapedElfFile(fsElfFilePath)
 	if err != nil {
 		et.err = err
+		fmt.Printf(">>>>>>>>>>>>>> elf table err %v\n", et.err)
+
 		return
 	}
 	defer me.Close() // todo do not close if it is the selected elf
@@ -82,7 +85,7 @@ func (et *ElfTable) load() {
 		return
 	}
 	buildID, err := me.BuildID()
-	if err != nil && err != elf2.ErrNoBuildIDSection {
+	if err != nil && !errors.Is(err, elf2.ErrNoBuildIDSection) {
 		et.err = err
 		return
 	}
@@ -96,6 +99,7 @@ func (et *ElfTable) load() {
 	fileInfo, err := os.Stat(fsElfFilePath)
 	if err != nil {
 		et.err = err
+		fmt.Printf(">>>>>>>>>>>>>> elf table err 2  %v\n", et.err)
 		return
 	}
 	symbols = et.options.ElfCache.GetSymbolsByStat(statFromFileInfo(fileInfo))
@@ -110,6 +114,8 @@ func (et *ElfTable) load() {
 		debugMe, err := elf2.NewMMapedElfFile(path.Join(et.fs, debugFilePath))
 		if err != nil {
 			et.err = err
+			fmt.Printf(">>>>>>>>>>>>>> elf table err 3  %v\n", et.err)
+
 			return
 		}
 		defer debugMe.Close() // todo do not close if it is the selected elf
@@ -128,6 +134,8 @@ func (et *ElfTable) load() {
 	level.Debug(et.logger).Log("msg", "create symbol table", "f", me.FilePath())
 	if err != nil {
 		et.err = err
+		fmt.Printf(">>>>>>>>>>>>>> elf table err 4  %v\n", et.err)
+
 		return
 	}
 

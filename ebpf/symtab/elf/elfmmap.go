@@ -99,6 +99,7 @@ func (f *MMapedElfFile) open() error {
 	fd, err := os.OpenFile(f.fpath, os.O_RDONLY, 0)
 	if err != nil {
 		f.err = err
+		fmt.Printf(">>>>>>>>>>>>>> elf open err %v\n", err)
 		return fmt.Errorf("open elf file %s %w", f.fpath, err)
 	}
 	f.fd = fd
