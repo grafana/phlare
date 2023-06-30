@@ -299,7 +299,9 @@ func (et *ElfTable) DebugInfo() elf2.SymTabDebugInfo {
 }
 
 func (et *ElfTable) onLoadError() {
-	level.Error(et.logger).Log("msg", "failed to load elf table", "err", et.err)
+	level.Error(et.logger).Log("msg", "failed to load elf table", "err", et.err,
+		"f", et.elfFilePath,
+		"fs", et.fs)
 	if et.options.Metrics != nil {
 		et.options.Metrics.ElfErrors.WithLabelValues(errorType(et.err)).Inc()
 	}
