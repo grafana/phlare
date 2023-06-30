@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 
 	"github.com/google/pprof/profile"
@@ -243,26 +244,54 @@ func skipDuplicates(ctx context.Context, its []MergeIterator) error {
 		})
 
 	defer tree.Close()
+
+	dupes := make([]MergeIterator, 0, len(its))
+	remoteSelectorStategy := make(stickyRemoteSelector)
 	duplicates := 0
 	total := 0
-	previousTs := int64(-1)
-	previousLabels := phlaremodel.Labels{}
+
 	for tree.Next() {
 		next := tree.Winner()
-		profile := next.At()
+
 		total++
-		if previousTs != profile.Timestamp || phlaremodel.CompareLabelPairs(previousLabels, profile.Labels) != 0 {
-			previousTs = profile.Timestamp
-			previousLabels = profile.Labels
-			next.Keep()
+		if len(dupes) == 0 {
+			dupes = append(dupes, next)
 			continue
 		}
-		duplicates++
+		profile := next.At()
+		if dupes[0].At().Timestamp != profile.Timestamp || phlaremodel.CompareLabelPairs(dupes[0].At().Labels, profile.Labels) != 0 {
+			duplicates += len(dupes) - 1
+			remoteSelectorStategy.Select(dupes).Keep()
+			dupes = dupes[:0]
+		}
+		dupes = append(dupes, next)
+
+	}
+	if len(dupes) > 0 {
+		duplicates += len(dupes) - 1
+		remoteSelectorStategy.Select(dupes).Keep()
 	}
 	span.LogFields(otlog.Int("duplicates", duplicates))
 	span.LogFields(otlog.Int("total", total))
 
 	return errors.Err()
+}
+
+type stickyRemoteSelector map[string]int64
+
+func (s stickyRemoteSelector) Select(remote []MergeIterator) MergeIterator {
+	for _, r := range remote {
+		profile := r.At()
+
+		if _, ok := s[profile.IngesterAddr]; ok {
+			s[profile.IngesterAddr]++
+			return r
+		}
+	}
+	// select a random one
+	r := rand.Intn(len(remote))
+	s[remote[r].At().IngesterAddr] = 1
+	return remote[r]
 }
 
 // selectMergeTree selects the  profile from each ingester by deduping them and
