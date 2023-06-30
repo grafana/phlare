@@ -194,11 +194,19 @@ func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 		unknownStacks++
 		if unknownStacks%100 == 0 && serviceName == "ebpf/pyroscope-ebpf/profiler" {
 			rawStack := strings.Builder{}
-			for _, b := range it.uStack {
-				rawStack.WriteString(fmt.Sprintf("%0x|", b))
+			for i := 0; i < len(it.uStack); i += 8 {
+				PC := binary.LittleEndian.Uint64(it.uStack[i : i+8])
+				if PC == 0 {
+					break
+				}
+				rawStack.WriteString(fmt.Sprintf("%016x|", PC))
 			}
-			for _, b := range it.kStack {
-				rawStack.WriteString(fmt.Sprintf("%0x|", b))
+			for i := 0; i < len(it.kStack); i += 8 {
+				PC := binary.LittleEndian.Uint64(it.kStack[i : i+8])
+				if PC == 0 {
+					break
+				}
+				rawStack.WriteString(fmt.Sprintf("%016x|", PC))
 			}
 			level.Debug(s.logger).Log(
 				"msg", "stack with unknown symbols",
