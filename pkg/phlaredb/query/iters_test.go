@@ -93,7 +93,7 @@ func newTestSet() []parquet.RowGroup {
 	}
 }
 
-func TestColumnIterator(t *testing.T) {
+func TestSyncIterator(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		result    []parquet.Value
@@ -121,7 +121,7 @@ func TestColumnIterator(t *testing.T) {
 				buffer [][]parquet.Value
 
 				ctx = context.Background()
-				i   = NewColumnIterator(ctx, tc.rowGroups, 0, "id", 10, nil, "id")
+				i   = NewSyncIterator(ctx, tc.rowGroups, 0, "id", 10, nil, "id")
 			)
 			for i.Next() {
 				require.Nil(t, i.Err())
