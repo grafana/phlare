@@ -2,6 +2,7 @@ package querier
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"testing"
@@ -259,4 +260,53 @@ func BenchmarkSelectMergeStacktraces(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func TestBatchDeduping(t *testing.T) {
+	ctx := context.Background()
+	labels := []*typesv1.Labels{{Labels: []*typesv1.LabelPair{{Name: "a", Value: "b"}}}}
+	clients := []*fakeBidiClientStacktraces{
+		newFakeBidiClientStacktraces(
+			[]*ingestv1.ProfileSets{
+				{
+					LabelsSets: labels,
+					Profiles:   []*ingestv1.SeriesProfile{{LabelIndex: 0, Timestamp: 1}},
+				},
+				{
+					LabelsSets: labels,
+					Profiles:   []*ingestv1.SeriesProfile{{LabelIndex: 0, Timestamp: 2}},
+				},
+			},
+		),
+		newFakeBidiClientStacktraces(
+			[]*ingestv1.ProfileSets{
+				{
+					LabelsSets: labels,
+					Profiles:   []*ingestv1.SeriesProfile{{LabelIndex: 0, Timestamp: 0}},
+				},
+				{
+					LabelsSets: labels,
+					Profiles:   []*ingestv1.SeriesProfile{{LabelIndex: 0, Timestamp: 1}},
+				},
+			},
+		),
+	}
+	its := make([]MergeIterator, len(clients))
+
+	for i := range clients {
+		its[i] = NewMergeIterator[*ingestv1.MergeProfilesStacktracesResult](ctx, ResponseFromReplica[BidiClientMerge[*ingestv1.MergeProfilesStacktracesRequest, *ingestv1.MergeProfilesStacktracesResponse]]{
+			addr:     fmt.Sprintf("%d", i),
+			response: clients[i],
+		})
+	}
+
+	err := skipDuplicates(ctx, its)
+
+	for i := range clients {
+		for _, k := range clients[i].kept {
+			t.Log(k)
+		}
+	}
+
+	require.NoError(t, err)
 }
