@@ -9,7 +9,7 @@ import (
 
 var kallsymsModule = []byte("kernel")
 
-func NewKallsyms(kallsyms []byte) (SymbolTable, error) {
+func NewKallsyms(kallsyms []byte) (*SymbolTab, error) {
 	kernelAddrSpace := uint64(0)
 	if runtime.GOARCH == "amd64" {
 		// https://www.kernel.org/doc/Documentation/x86/x86_64/mm.txt
@@ -17,7 +17,7 @@ func NewKallsyms(kallsyms []byte) (SymbolTable, error) {
 	}
 
 	var syms []Symbol
-
+	allZeros := true
 	for len(kallsyms) > 0 {
 		i := bytes.IndexByte(kallsyms, '\n')
 		var line []byte
@@ -73,7 +73,13 @@ func NewKallsyms(kallsyms []byte) (SymbolTable, error) {
 		if bytes.HasPrefix(mod, []byte{'['}) && bytes.HasSuffix(mod, []byte{']'}) {
 			mod = mod[1 : len(mod)-1]
 		}
+		if istart != 0 {
+			allZeros = false
+		}
 		syms = append(syms, Symbol{istart, string(name), string(mod)})
+	}
+	if allZeros {
+		return NewSymbolTab(nil), nil
 	}
 	return NewSymbolTab(syms), nil
 }

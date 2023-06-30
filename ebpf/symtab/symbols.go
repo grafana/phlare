@@ -44,6 +44,9 @@ func NewSymbolCache(logger log.Logger, options CacheOptions) (*SymbolCache, erro
 	if err != nil {
 		return nil, fmt.Errorf("create kallsyms %w ", err)
 	}
+	if len(kallsyms.symbols) == 0 {
+		level.Error(logger).Log("msg", "kallsyms is empty. check your permissions kptr_restrict==0 && sysctl_perf_event_paranoid <= 1 or kptr_restrict==1 &&  CAP_SYSLOG")
+	}
 	cache, err := NewGCache[PidKey, *ProcTable](options.PidCacheOptions)
 	if err != nil {
 		return nil, fmt.Errorf("create pid cache %w", err)
