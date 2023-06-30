@@ -126,6 +126,9 @@ func (p *ProcTable) getElfTable(r *elfRange) *ElfTable {
 }
 
 func (p *ProcTable) Resolve(pc uint64) Symbol {
+	if pc == 0xcccccccccccccccc || pc == 0x9090909090909090 {
+		return Symbol{Start: 0, Name: "end_of_stack", Module: "[unknown]"}
+	}
 	i, found := slices.BinarySearchFunc(p.ranges, pc, binarySearchElfRange)
 	if !found {
 		return Symbol{}
