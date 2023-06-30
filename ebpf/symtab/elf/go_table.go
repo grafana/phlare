@@ -36,6 +36,9 @@ func (g *GoTable) Refresh() {
 }
 
 func (g *GoTable) Resolve(addr uint64) string {
+	if addr == 0xcccccccccccccccc {
+		return "end_of_stack"
+	}
 	n := len(g.Index.Name)
 	if n == 0 {
 		return ""
