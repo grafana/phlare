@@ -13,7 +13,12 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type profileBssArg struct{ TgidFilter uint32 }
+type profileBssArg struct {
+	TgidFilter    uint32
+	CollectUser   uint8
+	CollectKernel uint8
+	_             [2]byte
+}
 
 type profileSampleKey struct {
 	Pid       uint32

@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -162,6 +163,9 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 		if s.options.CollectKernel {
 			s.walkStack(&sb, it.kStack, 0, &stats)
 		}
+		if len(sb.stack) == 1 {
+			continue // only comm
+		}
 		lo.Reverse(sb.stack)
 		cb(it.labels, sb.stack, uint64(it.count), it.pid)
 		s.debugDump(it, stats, sb)
@@ -175,6 +179,8 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 	return nil
 }
 
+var unknownStacks = 0
+
 func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 	m := s.options.CacheOptions.Metrics
 	serviceName := it.labels.ServiceName()
@@ -185,19 +191,23 @@ func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 	}
 	if len(sb.stack) > 2 && stats.unknownSymbols+stats.unknownModules > stats.known {
 		m.UnknownStacks.WithLabelValues(serviceName).Inc()
-		//rawStack := strings.Builder{}
-		//for _, b := range it.uStack {
-		//	rawStack.WriteString(fmt.Sprintf("%0x|", b))
-		//}
-		//for _, b := range it.kStack {
-		//	rawStack.WriteString(fmt.Sprintf("%0x|", b))
-		//}
-		//level.Debug(s.logger).Log(
-		//	"msg", "stack with unknown symbols",
-		//	"pid", it.pid,
-		//	"symbols", strings.Join(sb.stack, ";"),
-		//	"raw", rawStack.String(),
-		//)
+		unknownStacks++
+		if unknownStacks%100 == 0 && serviceName == "ebpf/pyroscope-ebpf/profiler" {
+			rawStack := strings.Builder{}
+			for _, b := range it.uStack {
+				rawStack.WriteString(fmt.Sprintf("%0x|", b))
+			}
+			for _, b := range it.kStack {
+				rawStack.WriteString(fmt.Sprintf("%0x|", b))
+			}
+			level.Debug(s.logger).Log(
+				"msg", "stack with unknown symbols",
+				"pid", it.pid,
+				"symbols", strings.Join(sb.stack, ";"),
+				"raw", rawStack.String(),
+			)
+		}
+
 	}
 }
 
@@ -234,8 +244,18 @@ func (s *session) initArgs() error {
 	} else {
 		tgidFilter = uint32(s.pid)
 	}
+	collectUser := uint8(0)
+	collectKernel := uint8(0)
+	if s.options.CollectUser {
+		collectUser = 1
+	}
+	if s.options.CollectKernel {
+		collectKernel = 1
+	}
 	arg := &profileBssArg{
-		TgidFilter: tgidFilter,
+		TgidFilter:    tgidFilter,
+		CollectUser:   collectUser,
+		CollectKernel: collectKernel,
 	}
 	if err := s.bpf.Args.Update(&zero, arg, 0); err != nil {
 		return fmt.Errorf("init args fail: %w", err)

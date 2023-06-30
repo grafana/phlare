@@ -55,8 +55,8 @@ int do_perf_event(struct bpf_perf_event_data *ctx)
 
     bpf_get_current_comm(&key.comm, sizeof(key.comm));
 
-	key.kern_stack = bpf_get_stackid(ctx, &stacks, KERN_STACKID_FLAGS);
-	key.user_stack = bpf_get_stackid(ctx, &stacks, USER_STACKID_FLAGS);
+	if (arg->collect_kernel) key.kern_stack = bpf_get_stackid(ctx, &stacks, KERN_STACKID_FLAGS);
+	if (arg->collect_user) key.user_stack = bpf_get_stackid(ctx, &stacks, USER_STACKID_FLAGS);
 
 	val = bpf_map_lookup_elem(&counts, &key);
 	if (val)

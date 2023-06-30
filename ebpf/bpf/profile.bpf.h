@@ -12,4 +12,6 @@ struct sample_key {
 
 struct bss_arg {
     __u32 tgid_filter; // 0 => profile everything
+    __u8  collect_user;
+    __u8  collect_kernel;
 };
