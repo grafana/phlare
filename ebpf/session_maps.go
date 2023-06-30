@@ -125,7 +125,7 @@ func (s *session) clearStacksMap(knownKeys map[uint32]bool) error {
 	level.Debug(s.logger).Log(
 		"msg", "clearStacksMap deleted known stacks",
 		"count", cnt,
-		"errors", errs,
+		"unsuccessful", errs,
 	)
 	return nil
 }
