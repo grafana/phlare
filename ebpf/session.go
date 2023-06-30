@@ -139,8 +139,15 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 		if labels == nil {
 			continue
 		}
-		uStack := s.getStack(ck.UserStack)
-		kStack := s.getStack(ck.KernStack)
+
+		var uStack []byte
+		var kStack []byte
+		if s.options.CollectUser {
+			uStack = s.getStack(ck.UserStack)
+		}
+		if s.options.CollectKernel {
+			kStack = s.getStack(ck.KernStack)
+		}
 		sfs = append(sfs, sf{
 			pid:    ck.Pid,
 			uStack: uStack,

@@ -40,7 +40,7 @@ int do_perf_event(struct bpf_perf_event_data *ctx)
     u64 id = bpf_get_current_pid_tgid();
     u32 tgid = id >> 32;
     u32 pid = id;
-	struct sample_key key = { .pid = tgid };
+	struct sample_key key = { .pid = tgid, .kern_stack = -1, .user_stack = -1};
 	u32 *val, one = 1, zero = 0;
 	struct bss_arg *arg = bpf_map_lookup_elem(&args, &zero);
     if (!arg) {
