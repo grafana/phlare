@@ -23,7 +23,6 @@ import (
 	"github.com/samber/lo"
 )
 
-//go:generate make -C bpf get-headers
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -Wall -fpie -Wno-unused-variable -Wno-unused-function" profile bpf/profile.bpf.c -- -I./bpf/libbpf -I./bpf/vmlinux/
 
 type SessionOptions struct {
@@ -199,7 +198,7 @@ func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 	if len(sb.stack) > 2 && stats.unknownSymbols+stats.unknownModules > stats.known {
 		m.UnknownStacks.WithLabelValues(serviceName).Inc()
 		unknownStacks++
-		if unknownStacks%100 == 0 && serviceName == "ebpf/pyroscope-ebpf/profiler" {
+		if unknownStacks%10 == 0 && serviceName == "ebpf/pyroscope-ebpf/profiler" {
 			rawStack := strings.Builder{}
 			for i := 0; i < len(it.uStack); i += 8 {
 				PC := binary.LittleEndian.Uint64(it.uStack[i : i+8])

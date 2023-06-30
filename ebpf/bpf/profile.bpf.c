@@ -40,7 +40,9 @@ int do_perf_event(struct bpf_perf_event_data *ctx)
     u64 id = bpf_get_current_pid_tgid();
     u32 tgid = id >> 32;
     u32 pid = id;
-	struct sample_key key = { .pid = tgid, .kern_stack = -1, .user_stack = -1};
+	struct sample_key key = { .pid = tgid};
+	key.kern_stack = -1;
+	key.user_stack = -1;
 	u32 *val, one = 1, zero = 0;
 	struct bss_arg *arg = bpf_map_lookup_elem(&args, &zero);
     if (!arg) {
@@ -55,8 +57,12 @@ int do_perf_event(struct bpf_perf_event_data *ctx)
 
     bpf_get_current_comm(&key.comm, sizeof(key.comm));
 
-	if (arg->collect_kernel) key.kern_stack = bpf_get_stackid(ctx, &stacks, KERN_STACKID_FLAGS);
-	if (arg->collect_user) key.user_stack = bpf_get_stackid(ctx, &stacks, USER_STACKID_FLAGS);
+	if (arg->collect_kernel) {
+	    key.kern_stack = bpf_get_stackid(ctx, &stacks, KERN_STACKID_FLAGS);
+	}
+	if (arg->collect_user)  {
+	    key.user_stack = bpf_get_stackid(ctx, &stacks, USER_STACKID_FLAGS);
+	}
 
 	val = bpf_map_lookup_elem(&counts, &key);
 	if (val)
