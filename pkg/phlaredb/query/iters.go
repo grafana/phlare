@@ -76,7 +76,7 @@ func TruncateRowNumber(t RowNumberWithDefinitionLevel) RowNumber {
 	return n
 }
 
-func (t RowNumber) Valid() bool {
+func (t *RowNumber) Valid() bool {
 	return t[0] >= 0
 }
 
@@ -96,7 +96,194 @@ func (t RowNumber) Valid() bool {
 // gb     | 1 | 3 | {  0,  2,  0,  0 }
 // null   | 0 | 1 | {  1,  0, -1, -1 }
 func (t *RowNumber) Next(repetitionLevel, definitionLevel int) {
-	// Next row at this level
+	t[repetitionLevel]++
+
+	// the following is nextSlow() unrolled
+	switch repetitionLevel {
+	case 0:
+		switch definitionLevel {
+		case 0:
+			t[1] = -1
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 1:
+			t[1] = 0
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 2:
+			t[1] = 0
+			t[2] = 0
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 3:
+			t[1] = 0
+			t[2] = 0
+			t[3] = 0
+			t[4] = -1
+			t[5] = -1
+		case 4:
+			t[1] = 0
+			t[2] = 0
+			t[3] = 0
+			t[4] = 0
+			t[5] = -1
+		case 5:
+			t[1] = 0
+			t[2] = 0
+			t[3] = 0
+			t[4] = 0
+			t[5] = 0
+		}
+	case 1:
+		switch definitionLevel {
+		case 0:
+			t[1] = -1
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 1:
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 2:
+			t[2] = 0
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 3:
+			t[2] = 0
+			t[3] = 0
+			t[4] = -1
+			t[5] = -1
+		case 4:
+			t[2] = 0
+			t[3] = 0
+			t[4] = 0
+			t[5] = -1
+		case 5:
+			t[2] = 0
+			t[3] = 0
+			t[4] = 0
+			t[5] = 0
+		}
+	case 2:
+		switch definitionLevel {
+		case 0:
+			t[1] = -1
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 1:
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 2:
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 3:
+			t[3] = 0
+			t[4] = -1
+			t[5] = -1
+		case 4:
+			t[3] = 0
+			t[4] = 0
+			t[5] = -1
+		case 5:
+			t[3] = 0
+			t[4] = 0
+			t[5] = 0
+		}
+	case 3:
+		switch definitionLevel {
+		case 0:
+			t[1] = -1
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 1:
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 2:
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 3:
+			t[4] = -1
+			t[5] = -1
+		case 4:
+			t[4] = 0
+			t[5] = -1
+		case 5:
+			t[4] = 0
+			t[5] = 0
+		}
+	case 4:
+		switch definitionLevel {
+		case 0:
+			t[1] = -1
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 1:
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 2:
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 3:
+			t[4] = -1
+			t[5] = -1
+		case 4:
+			t[5] = -1
+		case 5:
+			t[5] = 0
+		}
+	case 5:
+		switch definitionLevel {
+		case 0:
+			t[1] = -1
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 1:
+			t[2] = -1
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 2:
+			t[3] = -1
+			t[4] = -1
+			t[5] = -1
+		case 3:
+			t[4] = -1
+			t[5] = -1
+		case 4:
+			t[5] = -1
+		}
+	}
+}
+
+// nextSlow is the original implementation of next. it is kept to test against
+// the unrolled version above
+func (t *RowNumber) nextSlow(repetitionLevel, definitionLevel int) {
 	t[repetitionLevel]++
 
 	// New children up through the definition level
@@ -104,7 +291,7 @@ func (t *RowNumber) Next(repetitionLevel, definitionLevel int) {
 		t[i] = 0
 	}
 
-	// Children past the definition level are undefined
+	// // Children past the definition level are undefined
 	for i := definitionLevel + 1; i < len(t); i++ {
 		t[i] = -1
 	}
@@ -116,6 +303,26 @@ func (t *RowNumber) Skip(numRows int64) {
 	for i := 1; i < len(t); i++ {
 		t[i] = -1
 	}
+}
+
+// Preceding returns the largest representable row number that is immediately prior to this
+// one. Think of it like math.NextAfter but for segmented row numbers. Examples:
+//
+//		RowNumber 1000.0.0 (defined at 3 levels) is preceded by 999.max.max
+//	    RowNumber 1000.-1.-1 (defined at 1 level) is preceded by 999.-1.-1
+func (t RowNumber) Preceding() RowNumber {
+	for i := len(t) - 1; i >= 0; i-- {
+		switch t[i] {
+		case -1:
+			continue
+		case 0:
+			t[i] = math.MaxInt64
+		default:
+			t[i]--
+			return t
+		}
+	}
+	return t
 }
 
 // IteratorResult is a row of data with a row number and named columns of data.
@@ -940,4 +1147,426 @@ func (r *RowNumberIterator[T]) Seek(to RowNumberWithDefinitionLevel) bool {
 		}
 	}
 	return true
+}
+
+// SyncIterator is like ColumnIterator but synchronous. It scans through the given row
+// groups and column, and applies the optional predicate to each chunk, page, and value.
+// Results are read by calling Next() until it returns nil.
+type SyncIterator struct {
+	// Config
+	column     int
+	columnName string
+	rgs        []parquet.RowGroup
+	rgsMin     []RowNumber
+	rgsMax     []RowNumber // Exclusive, row number of next one past the row group
+	readSize   int
+	selectAs   string
+	filter     *InstrumentedPredicate
+
+	// Status
+	span            opentracing.Span
+	curr            RowNumber
+	currRowGroup    parquet.RowGroup
+	currRowGroupMin RowNumber
+	currRowGroupMax RowNumber
+	currChunk       parquet.ColumnChunk
+	currPages       parquet.Pages
+	currPage        parquet.Page
+	currPageMax     RowNumber
+	currValues      parquet.ValueReader
+	currBuf         []parquet.Value
+	currBufN        int
+
+	err error
+	res *IteratorResult
+}
+
+var _ Iterator = (*SyncIterator)(nil)
+
+var syncIteratorPool = sync.Pool{
+	New: func() interface{} {
+		return []parquet.Value{}
+	},
+}
+
+func syncIteratorPoolGet(capacity, len int) []parquet.Value {
+	res := syncIteratorPool.Get().([]parquet.Value)
+	if cap(res) < capacity {
+		res = make([]parquet.Value, capacity)
+	}
+	res = res[:len]
+	return res
+}
+
+func syncIteratorPoolPut(b []parquet.Value) {
+	for i := range b {
+		b[i] = parquet.Value{}
+	}
+	syncIteratorPool.Put(b) // nolint: staticcheck
+}
+
+func NewSyncIterator(ctx context.Context, rgs []parquet.RowGroup, column int, columnName string, readSize int, filter Predicate, selectAs string) *SyncIterator {
+
+	// Assign row group bounds.
+	// Lower bound is inclusive
+	// Upper bound is exclusive, points at the first row of the next group
+	rn := EmptyRowNumber()
+	rgsMin := make([]RowNumber, len(rgs))
+	rgsMax := make([]RowNumber, len(rgs))
+	for i, rg := range rgs {
+		rgsMin[i] = rn
+		rgsMax[i] = rn
+		rgsMax[i].Skip(rg.NumRows() + 1)
+		rn.Skip(rg.NumRows())
+	}
+
+	span, _ := opentracing.StartSpanFromContext(ctx, "syncIterator", opentracing.Tags{
+		"columnIndex": column,
+		"column":      columnName,
+	})
+
+	return &SyncIterator{
+		span:       span,
+		column:     column,
+		columnName: columnName,
+		rgs:        rgs,
+		readSize:   readSize,
+		selectAs:   selectAs,
+		rgsMin:     rgsMin,
+		rgsMax:     rgsMax,
+		filter:     &InstrumentedPredicate{pred: filter},
+		curr:       EmptyRowNumber(),
+	}
+}
+
+func (c *SyncIterator) At() *IteratorResult {
+	return c.res
+}
+
+func (c *SyncIterator) Next() bool {
+	rn, v, err := c.next()
+	if err != nil {
+		c.res = nil
+		c.err = err
+		return false
+	}
+	if !rn.Valid() {
+		c.res = nil
+		c.err = nil
+		return false
+	}
+	c.res = c.makeResult(rn, v)
+	return true
+}
+
+// SeekTo moves this iterator to the next result that is greater than
+// or equal to the given row number (and based on the given definition level)
+func (c *SyncIterator) Seek(to RowNumberWithDefinitionLevel) bool {
+
+	if c.seekRowGroup(to.RowNumber, to.DefinitionLevel) {
+		c.res = nil
+		c.err = nil
+		return false
+	}
+
+	done, err := c.seekPages(to.RowNumber, to.DefinitionLevel)
+	if err != nil {
+		c.res = nil
+		c.err = err
+		return false
+	}
+	if done {
+		c.res = nil
+		c.err = nil
+		return false
+	}
+
+	// The row group and page have been selected to where this value is possibly
+	// located. Now scan through the page and look for it.
+	for {
+		rn, v, err := c.next()
+		if err != nil {
+			c.res = nil
+			c.err = err
+			return false
+		}
+		if !rn.Valid() {
+			c.res = nil
+			c.err = nil
+			return false
+		}
+
+		if CompareRowNumbers(to.DefinitionLevel, rn, to.RowNumber) >= 0 {
+			c.res = c.makeResult(rn, v)
+			c.err = nil
+			return true
+		}
+	}
+}
+
+func (c *SyncIterator) popRowGroup() (parquet.RowGroup, RowNumber, RowNumber) {
+	if len(c.rgs) == 0 {
+		return nil, EmptyRowNumber(), EmptyRowNumber()
+	}
+
+	rg := c.rgs[0]
+	min := c.rgsMin[0]
+	max := c.rgsMax[0]
+
+	c.rgs = c.rgs[1:]
+	c.rgsMin = c.rgsMin[1:]
+	c.rgsMax = c.rgsMax[1:]
+
+	return rg, min, max
+}
+
+// seekRowGroup skips ahead to the row group that could contain the value at the
+// desired row number. Does nothing if the current row group is already the correct one.
+func (c *SyncIterator) seekRowGroup(seekTo RowNumber, definitionLevel int) (done bool) {
+	if c.currRowGroup != nil && CompareRowNumbers(definitionLevel, seekTo, c.currRowGroupMax) >= 0 {
+		// Done with this row group
+		c.closeCurrRowGroup()
+	}
+
+	for c.currRowGroup == nil {
+
+		rg, min, max := c.popRowGroup()
+		if rg == nil {
+			return true
+		}
+
+		if CompareRowNumbers(definitionLevel, seekTo, max) != -1 {
+			continue
+		}
+
+		cc := rg.ColumnChunks()[c.column]
+		if c.filter != nil && !c.filter.KeepColumnChunk(cc) {
+			continue
+		}
+
+		// This row group matches both row number and filter.
+		c.setRowGroup(rg, min, max)
+	}
+
+	return c.currRowGroup == nil
+}
+
+// seekPages skips ahead in the current row group to the page that could contain the value at
+// the desired row number. Does nothing if the current page is already the correct one.
+func (c *SyncIterator) seekPages(seekTo RowNumber, definitionLevel int) (done bool, err error) {
+	if c.currPage != nil && CompareRowNumbers(definitionLevel, seekTo, c.currPageMax) >= 0 {
+		// Value not in this page
+		c.setPage(nil)
+	}
+
+	if c.currPage == nil {
+
+		// TODO (mdisibio)   :((((((((
+		//    pages.SeekToRow is more costly than expected.  It doesn't reuse existing i/o
+		// so it can't be called naively every time we swap pages. We need to figure out
+		// a way to determine when it is worth calling here.
+		/*
+			// Seek into the pages. This is relative to the start of the row group
+			if seekTo[0] > 0 {
+				// Determine row delta. We subtract 1 because curr points at the previous row
+				skip := seekTo[0] - c.currRowGroupMin[0] - 1
+				if skip > 0 {
+					if err := c.currPages.SeekToRow(skip); err != nil {
+						return true, err
+					}
+					c.curr.Skip(skip)
+				}
+			}*/
+
+		for c.currPage == nil {
+			pg, err := c.currPages.ReadPage()
+			if pg == nil || err != nil {
+				// No more pages in this column chunk,
+				// cleanup and exit.
+				if err == io.EOF {
+					err = nil
+				}
+				parquet.Release(pg)
+				c.closeCurrRowGroup()
+				return true, err
+			}
+
+			// Skip based on row number?
+			newRN := c.curr
+			newRN.Skip(pg.NumRows() + 1)
+			if CompareRowNumbers(definitionLevel, seekTo, newRN) >= 0 {
+				c.curr.Skip(pg.NumRows())
+				parquet.Release(pg)
+				continue
+			}
+
+			// Skip based on filter?
+			if c.filter != nil && !c.filter.KeepPage(pg) {
+				c.curr.Skip(pg.NumRows())
+				parquet.Release(pg)
+				continue
+			}
+
+			c.setPage(pg)
+		}
+	}
+
+	return false, nil
+}
+
+// next is the core functionality of this iterator and returns the next matching result. This
+// may involve inspecting multiple row groups, pages, and values until a match is found. When
+// we run out of things to inspect, it returns nil. The reason this method is distinct from
+// Next() is because it doesn't wrap the results in an IteratorResult, which is more efficient
+// when being called multiple times and throwing away the results like in SeekTo().
+func (c *SyncIterator) next() (RowNumber, *parquet.Value, error) {
+	for {
+		if c.currRowGroup == nil {
+			rg, min, max := c.popRowGroup()
+			if rg == nil {
+				return EmptyRowNumber(), nil, nil
+			}
+
+			cc := rg.ColumnChunks()[c.column]
+			if c.filter != nil && !c.filter.KeepColumnChunk(cc) {
+				continue
+			}
+
+			c.setRowGroup(rg, min, max)
+		}
+
+		if c.currPage == nil {
+			pg, err := c.currPages.ReadPage()
+			if pg == nil || err == io.EOF {
+				// This row group is exhausted
+				c.closeCurrRowGroup()
+				continue
+			}
+			if err != nil {
+				return EmptyRowNumber(), nil, err
+			}
+			if c.filter != nil && !c.filter.KeepPage(pg) {
+				// This page filtered out
+				c.curr.Skip(pg.NumRows())
+				parquet.Release(pg)
+				continue
+			}
+			c.setPage(pg)
+		}
+
+		// Read next batch of values if needed
+		if c.currBuf == nil {
+			c.currBuf = syncIteratorPoolGet(c.readSize, 0)
+		}
+		if c.currBufN >= len(c.currBuf) || len(c.currBuf) == 0 {
+			c.currBuf = c.currBuf[:cap(c.currBuf)]
+			n, err := c.currValues.ReadValues(c.currBuf)
+			if err != nil && err != io.EOF {
+				return EmptyRowNumber(), nil, err
+			}
+			c.currBuf = c.currBuf[:n]
+			c.currBufN = 0
+			if n == 0 {
+				// This value reader and page are exhausted.
+				c.setPage(nil)
+				continue
+			}
+		}
+
+		// Consume current buffer until empty
+		for c.currBufN < len(c.currBuf) {
+			v := &c.currBuf[c.currBufN]
+
+			// Inspect all values to track the current row number,
+			// even if the value is filtered out next.
+			c.curr.Next(v.RepetitionLevel(), v.DefinitionLevel())
+			c.currBufN++
+
+			if c.filter != nil && !c.filter.KeepValue(*v) {
+				continue
+			}
+
+			return c.curr, v, nil
+		}
+	}
+}
+
+func (c *SyncIterator) setRowGroup(rg parquet.RowGroup, min, max RowNumber) {
+	c.closeCurrRowGroup()
+	c.curr = min
+	c.currRowGroup = rg
+	c.currRowGroupMin = min
+	c.currRowGroupMax = max
+	c.currChunk = rg.ColumnChunks()[c.column]
+	c.currPages = c.currChunk.Pages()
+}
+
+func (c *SyncIterator) setPage(pg parquet.Page) {
+
+	// Handle an outgoing page
+	if c.currPage != nil {
+		c.curr = c.currPageMax.Preceding() // Reposition current row number to end of this page.
+		parquet.Release(c.currPage)
+		c.currPage = nil
+	}
+
+	// Reset value buffers
+	c.currValues = nil
+	c.currPageMax = EmptyRowNumber()
+	c.currBufN = 0
+
+	// If we don't immediately have a new incoming page
+	// then return the buffer to the pool.
+	if pg == nil && c.currBuf != nil {
+		syncIteratorPoolPut(c.currBuf)
+		c.currBuf = nil
+	}
+
+	// Handle an incoming page
+	if pg != nil {
+		rn := c.curr
+		rn.Skip(pg.NumRows() + 1) // Exclusive upper bound, points at the first rownumber in the next page
+		c.currPage = pg
+		c.currPageMax = rn
+		c.currValues = pg.Values()
+	}
+}
+
+func (c *SyncIterator) closeCurrRowGroup() {
+	if c.currPages != nil {
+		c.currPages.Close()
+	}
+
+	c.currRowGroup = nil
+	c.currRowGroupMin = EmptyRowNumber()
+	c.currRowGroupMax = EmptyRowNumber()
+	c.currChunk = nil
+	c.currPages = nil
+	c.setPage(nil)
+}
+
+func (c *SyncIterator) makeResult(t RowNumber, v *parquet.Value) *IteratorResult {
+	r := columnIteratorResultPoolGet()
+	r.RowNumber = t
+	if c.selectAs != "" {
+		r.AppendValue(c.selectAs, v.Clone())
+	}
+	return r
+}
+
+func (c *SyncIterator) Err() error {
+	return c.err
+}
+
+func (c *SyncIterator) Close() error {
+	c.closeCurrRowGroup()
+
+	c.span.SetTag("inspectedColumnChunks", c.filter.InspectedColumnChunks)
+	c.span.SetTag("inspectedPages", c.filter.InspectedPages)
+	c.span.SetTag("inspectedValues", c.filter.InspectedValues)
+	c.span.SetTag("keptColumnChunks", c.filter.KeptColumnChunks)
+	c.span.SetTag("keptPages", c.filter.KeptPages)
+	c.span.SetTag("keptValues", c.filter.KeptValues)
+	c.span.Finish()
+	return nil
 }
