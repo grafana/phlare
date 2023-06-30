@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/grafana/dskit/multierror"
 	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/log"
 	"github.com/segmentio/parquet-go"
 
 	"github.com/grafana/phlare/pkg/iter"
@@ -466,265 +464,86 @@ type ColumnIterator struct {
 	err    error
 }
 
-var _ Iterator = (*ColumnIterator)(nil)
-
 type columnIteratorBuffer struct {
 	rowNumbers []RowNumber
 	values     []parquet.Value
 	err        error
 }
 
-func NewColumnIterator(ctx context.Context, rgs []parquet.RowGroup, column int, columnName string, readSize int, filter Predicate, selectAs string) *ColumnIterator {
-	c := &ColumnIterator{
-		metrics:  getMetricsFromContext(ctx),
-		table:    strings.ToLower(rgs[0].Schema().Name()) + "s",
-		rgs:      rgs,
-		col:      column,
-		colName:  columnName,
-		filter:   &InstrumentedPredicate{pred: filter},
-		selectAs: selectAs,
-		quit:     make(chan struct{}),
-		ch:       make(chan *columnIteratorBuffer, 1),
-		currN:    -1,
-	}
+type BinaryJoinIterator struct {
+	left            Iterator
+	right           Iterator
+	definitionLevel int
 
-	go c.iterate(ctx, readSize)
-	return c
+	err error
+	res *IteratorResult
 }
 
-func (c *ColumnIterator) iterate(ctx context.Context, readSize int) {
-	defer close(c.ch)
+var _ Iterator = (*BinaryJoinIterator)(nil)
 
-	span, _ := opentracing.StartSpanFromContext(ctx, "columnIterator.iterate", opentracing.Tags{
-		"columnIndex": c.col,
-		"column":      c.colName,
-	})
-	defer func() {
-		span.SetTag("inspectedColumnChunks", c.filter.InspectedColumnChunks.Load())
-		span.SetTag("inspectedPages", c.filter.InspectedPages.Load())
-		span.SetTag("inspectedValues", c.filter.InspectedValues.Load())
-		span.SetTag("keptColumnChunks", c.filter.KeptColumnChunks.Load())
-		span.SetTag("keptPages", c.filter.KeptPages.Load())
-		span.SetTag("keptValues", c.filter.KeptValues.Load())
-		span.Finish()
-	}()
+func NewBinaryJoinIterator(definitionLevel int, left, right Iterator) *BinaryJoinIterator {
+	return &BinaryJoinIterator{
+		left:            left,
+		right:           right,
+		definitionLevel: definitionLevel,
+	}
+}
 
-	rn := EmptyRowNumber()
-	buffer := make([]parquet.Value, readSize)
-
-	checkSkip := func(numRows int64) bool {
-		seekTo := c.seekTo.Load()
-		if seekTo == nil {
+func (bj *BinaryJoinIterator) Next() bool {
+	for {
+		if !bj.left.Next() {
+			bj.err = bj.left.Err()
 			return false
 		}
+		resLeft := bj.left.At()
 
-		seekToRN := seekTo.(RowNumber)
-
-		rnNext := rn
-		rnNext.Skip(numRows)
-
-		return CompareRowNumbers(0, rnNext, seekToRN) == -1
-	}
-
-	for _, rg := range c.rgs {
-		col := rg.ColumnChunks()[c.col]
-
-		if checkSkip(rg.NumRows()) {
-			// Skip column chunk
-			rn.Skip(rg.NumRows())
-			continue
+		// now seek the right iterator to the left position
+		if !bj.right.Seek(RowNumberWithDefinitionLevel{resLeft.RowNumber, bj.definitionLevel}) {
+			bj.err = bj.right.Err()
+			return false
 		}
+		resRight := bj.right.At()
 
-		if c.filter != nil {
-			if !c.filter.KeepColumnChunk(col) {
-				// Skip column chunk
-				rn.Skip(rg.NumRows())
-				continue
+		if cmp := CompareRowNumbers(bj.definitionLevel, resLeft.RowNumber, resRight.RowNumber); cmp == 0 {
+			// we have a found an element
+			bj.res = columnIteratorResultPoolGet()
+			bj.res.RowNumber = resLeft.RowNumber
+			bj.res.Append(resLeft)
+			bj.res.Append(resRight)
+			//	columnIteratorResultPoolPut(resLeft)
+			//	columnIteratorResultPoolPut(resRight)
+			return true
+		} else if cmp < 0 {
+			if !bj.left.Seek(RowNumberWithDefinitionLevel{resRight.RowNumber, bj.definitionLevel}) {
+				bj.err = bj.left.Err()
+				return false
 			}
+
+		} else {
+			// the right value can't be smaller than the left one because we seeked beyond it
+			panic("not expected to happen")
 		}
-
-		func(col parquet.ColumnChunk) {
-			pgs := col.Pages()
-			defer func() {
-				if err := pgs.Close(); err != nil {
-					span.LogKV("closing error", err)
-				}
-			}()
-			for {
-				pg, err := pgs.ReadPage()
-				if pg == nil || err == io.EOF {
-					break
-				}
-				c.metrics.pageReadsTotal.WithLabelValues(c.table, c.colName).Add(1)
-				span.LogFields(
-					log.String("msg", "reading page"),
-					log.Int64("page_num_values", pg.NumValues()),
-					log.Int64("page_size", pg.Size()),
-				)
-				if err != nil {
-					return
-				}
-
-				if checkSkip(pg.NumRows()) {
-					// Skip page
-					rn.Skip(pg.NumRows())
-					continue
-				}
-
-				if c.filter != nil {
-					if !c.filter.KeepPage(pg) {
-						// Skip page
-						rn.Skip(pg.NumRows())
-						continue
-					}
-				}
-
-				vr := pg.Values()
-				for {
-					count, err := vr.ReadValues(buffer)
-					if count > 0 {
-
-						// Assign row numbers, filter values, and collect the results.
-						newBuffer := columnIteratorPoolGet(readSize, 0)
-
-						for i := 0; i < count; i++ {
-
-							v := buffer[i]
-
-							// We have to do this for all values (even if the
-							// value is excluded by the predicate)
-							rn.Next(v.RepetitionLevel(), v.DefinitionLevel())
-
-							if c.filter != nil {
-								if !c.filter.KeepValue(v) {
-									continue
-								}
-							}
-
-							newBuffer.rowNumbers = append(newBuffer.rowNumbers, rn)
-							newBuffer.values = append(newBuffer.values, v)
-						}
-
-						if len(newBuffer.rowNumbers) > 0 {
-							select {
-							case c.ch <- newBuffer:
-							case <-c.quit:
-								return
-							case <-ctx.Done():
-								return
-							}
-						} else {
-							// All values excluded, we go ahead and immediately
-							// return the buffer to the pool.
-							columnIteratorPoolPut(newBuffer)
-						}
-					}
-
-					// Error checks MUST occur after processing any returned data
-					// following io.Reader behavior.
-					if err == io.EOF {
-						break
-					}
-					if err != nil {
-						c.ch <- &columnIteratorBuffer{err: err}
-						return
-					}
-				}
-
-			}
-		}(col)
 	}
 }
 
-// At returns the current value from the iterator.
-func (c *ColumnIterator) At() *IteratorResult {
-	return c.result
+func (bj *BinaryJoinIterator) At() *IteratorResult {
+	return bj.res
 }
 
-// Next returns the next matching value from the iterator.
-// Returns nil when finished.
-func (c *ColumnIterator) Next() bool {
-	t, v := c.next()
-	if t.Valid() {
-		c.result = c.makeResult(t, v)
-		return true
-	}
-
-	c.result = nil
-	return false
+func (bj *BinaryJoinIterator) Seek(to RowNumberWithDefinitionLevel) bool {
+	bj.left.Seek(to)
+	bj.right.Seek(to)
+	return bj.Next()
 }
 
-func (c *ColumnIterator) next() (RowNumber, parquet.Value) {
-	// Consume current buffer until exhausted
-	// then read another one from the channel.
-	if c.curr != nil {
-		for c.currN++; c.currN < len(c.curr.rowNumbers); {
-			t := c.curr.rowNumbers[c.currN]
-			if t.Valid() {
-				return t, c.curr.values[c.currN]
-			}
-		}
-
-		// Done with this buffer
-		columnIteratorPoolPut(c.curr)
-		c.curr = nil
-	}
-
-	if v, ok := <-c.ch; ok {
-		if v.err != nil {
-			c.err = v.err
-			return EmptyRowNumber(), parquet.Value{}
-		}
-		// Got next buffer, guaranteed to have at least 1 element
-		c.curr = v
-		c.currN = 0
-		return c.curr.rowNumbers[0], c.curr.values[0]
-	}
-
-	// Failed to read from the channel, means iterator is exhausted.
-	return EmptyRowNumber(), parquet.Value{}
+func (bj *BinaryJoinIterator) Close() error {
+	var merr multierror.MultiError
+	merr.Add(bj.left.Close())
+	merr.Add(bj.right.Close())
+	return merr.Err()
 }
 
-// SeekTo moves this iterator to the next result that is greater than
-// or equal to the given row number (and based on the given definition level)
-func (c *ColumnIterator) Seek(to RowNumberWithDefinitionLevel) bool {
-	var at RowNumber
-	var v parquet.Value
-
-	// Because iteration happens in the background, we signal the row
-	// to skip to, and then read until we are at the right spot. The
-	// seek is best-effort and may have no effect if the iteration
-	// already further ahead, and there may already be older data
-	// in the buffer.
-	c.seekTo.Store(to.RowNumber)
-	for at, v = c.next(); at.Valid() && CompareRowNumbers(to.DefinitionLevel, at, to.RowNumber) < 0; {
-		at, v = c.next()
-	}
-
-	if at.Valid() {
-		c.result = c.makeResult(at, v)
-		return true
-	}
-
-	c.result = nil
-	return false
-}
-
-func (c *ColumnIterator) makeResult(t RowNumber, v parquet.Value) *IteratorResult {
-	r := columnIteratorResultPoolGet()
-	r.RowNumber = t
-	if c.selectAs != "" {
-		r.AppendValue(c.selectAs, v)
-	}
-	return r
-}
-
-func (c *ColumnIterator) Close() error {
-	close(c.quit)
-	return nil
-}
-
-func (c *ColumnIterator) Err() error {
+func (c *BinaryJoinIterator) Err() error {
 	return c.err
 }
 
