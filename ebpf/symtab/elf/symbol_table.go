@@ -2,6 +2,7 @@ package elf
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -86,12 +87,12 @@ func (st *SymbolTable) Cleanup() {
 
 func (f *MMapedElfFile) NewSymbolTable() (*SymbolTable, error) {
 	sym, sectionSym, err := f.getSymbols(elf.SHT_SYMTAB)
-	if err != nil && err != ErrNoSymbols {
+	if err != nil && !errors.Is(err, ErrNoSymbols) {
 		return nil, err
 	}
 
 	dynsym, sectionDynSym, err := f.getSymbols(elf.SHT_DYNSYM)
-	if err != nil && err != ErrNoSymbols {
+	if err != nil && !errors.Is(err, ErrNoSymbols) {
 		return nil, err
 	}
 	total := len(dynsym) + len(sym)

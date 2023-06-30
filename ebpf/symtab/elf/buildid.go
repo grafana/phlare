@@ -3,6 +3,7 @@ package elf
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 )
 
@@ -32,14 +33,14 @@ var (
 
 func (f *MMapedElfFile) BuildID() (BuildID, error) {
 	id, err := f.GNUBuildID()
-	if err != nil && err != ErrNoBuildIDSection {
+	if err != nil && !errors.Is(err, ErrNoBuildIDSection) {
 		return BuildID{}, err
 	}
 	if !id.Empty() {
 		return id, nil
 	}
 	id, err = f.GoBuildID()
-	if err != nil && err != ErrNoBuildIDSection {
+	if err != nil && !errors.Is(err, ErrNoBuildIDSection) {
 		return BuildID{}, err
 	}
 	if !id.Empty() {

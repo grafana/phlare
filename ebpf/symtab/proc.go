@@ -10,6 +10,8 @@ import (
 	"github.com/grafana/phlare/ebpf/symtab/elf"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 )
 
@@ -65,6 +67,12 @@ type elfRange struct {
 func (p *ProcTable) Refresh() {
 	procMaps, err := os.ReadFile(fmt.Sprintf("/proc/%d/maps", p.options.Pid))
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			level.Error(p.logger).Log("msg", "failed to read /proc/pid/maps", "err", err)
+		}
+		if p.options.Metrics != nil {
+			p.options.Metrics.ProcErrors.WithLabelValues(errorType(err)).Inc()
+		}
 		return // todo return err
 	}
 	p.refresh(procMaps)

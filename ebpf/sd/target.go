@@ -36,8 +36,10 @@ const (
 )
 
 type Target struct {
-	labels labels.Labels
 
+	// todo make keep it a map until Append happens
+	labels                labels.Labels
+	serviceName           string
 	fingerprint           uint64
 	fingerprintCalculated bool
 }
@@ -65,8 +67,13 @@ func NewTarget(cid containerID, target DiscoveryTarget) (*Target, error) {
 		lset[labelContainerID] = string(cid)
 	}
 	return &Target{
-		labels: labels.FromMap(lset),
+		labels:      labels.FromMap(lset),
+		serviceName: serviceName,
 	}, nil
+}
+
+func (t *Target) ServiceName() string {
+	return t.serviceName
 }
 
 func inferServiceName(target DiscoveryTarget) string {

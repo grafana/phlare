@@ -25,6 +25,7 @@ import (
 	"fmt"
 )
 
+// todo consider using ReaderAt here, same as in gopcln
 func (f *MMapedElfFile) getSymbols(typ elf.SectionType) ([]SymbolIndex, uint32, error) {
 	switch f.Class {
 	case elf.ELFCLASS64:

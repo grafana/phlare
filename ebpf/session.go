@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -67,7 +68,6 @@ func NewSession(
 
 	sessionOptions SessionOptions,
 ) (Session, error) {
-
 	symCache, err := symtab.NewSymbolCache(logger, sessionOptions.CacheOptions)
 	if err != nil {
 		return nil, err
@@ -103,6 +103,15 @@ func (s *session) Start() error {
 	return nil
 }
 
+type sf struct {
+	pid    uint32
+	count  uint32
+	kStack []byte
+	uStack []byte
+	comm   string
+	labels *sd.Target
+}
+
 func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value uint64, pid uint32)) error {
 	defer s.symCache.Cleanup()
 
@@ -114,14 +123,6 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 		return fmt.Errorf("get counts map: %w", err)
 	}
 
-	type sf struct {
-		pid    uint32
-		count  uint32
-		kStack []byte
-		uStack []byte
-		comm   string
-		labels *sd.Target
-	}
 	var sfs []sf
 	knownStacks := map[uint32]bool{}
 	for i := range keys {
@@ -151,17 +152,20 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 	}
 
 	sb := stackBuilder{}
+
 	for _, it := range sfs {
+		stats := stackResolveStats{}
 		sb.rest()
 		sb.append(it.comm)
 		if s.options.CollectUser {
-			s.walkStack(&sb, it.uStack, it.pid)
+			s.walkStack(&sb, it.uStack, it.pid, &stats)
 		}
 		if s.options.CollectKernel {
-			s.walkStack(&sb, it.kStack, 0)
+			s.walkStack(&sb, it.kStack, 0, &stats)
 		}
 		lo.Reverse(sb.stack)
 		cb(it.labels, sb.stack, uint64(it.count), it.pid)
+		s.debugDump(it, stats, sb)
 	}
 	if err = s.clearCountsMap(keys, batch); err != nil {
 		return fmt.Errorf("clear counts map %w", err)
@@ -170,6 +174,32 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 		return fmt.Errorf("clear stacks map %w", err)
 	}
 	return nil
+}
+
+func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
+	m := s.options.CacheOptions.Metrics
+	serviceName := it.labels.ServiceName()
+	if m != nil {
+		m.KnownSymbols.WithLabelValues(serviceName).Add(float64(stats.known))
+		m.UnknownSymbols.WithLabelValues(serviceName).Add(float64(stats.unknownSymbols))
+		m.UnknownModules.WithLabelValues(serviceName).Add(float64(stats.unknownModules))
+	}
+	if len(sb.stack) > 2 && stats.unknownSymbols+stats.unknownModules > stats.known {
+		m.UnknownStacks.WithLabelValues(serviceName).Inc()
+		rawStack := strings.Builder{}
+		for _, b := range it.uStack {
+			rawStack.WriteString(fmt.Sprintf("%02x|", b))
+		}
+		for _, b := range it.kStack {
+			rawStack.WriteString(fmt.Sprintf("%02x|", b))
+		}
+		level.Debug(s.logger).Log(
+			"msg", "stack with unknown symbols",
+			"pid", it.pid,
+			"symbols", strings.Join(sb.stack, ";"),
+			"raw", rawStack.String(),
+		)
+	}
 }
 
 func (s *session) Stop() {
@@ -247,8 +277,20 @@ func (s *session) getStack(stackId int64) []byte {
 	return res
 }
 
+type stackResolveStats struct {
+	known          uint32
+	unknownSymbols uint32
+	unknownModules uint32
+}
+
+func (s *stackResolveStats) add(other stackResolveStats) {
+	s.known += other.known
+	s.unknownSymbols += other.unknownSymbols
+	s.unknownModules += other.unknownModules
+}
+
 // stack is an array of 127 uint64s, where each uint64 is an instruction pointer
-func (s *session) walkStack(sb *stackBuilder, stack []byte, pid uint32) {
+func (s *session) walkStack(sb *stackBuilder, stack []byte, pid uint32, stats *stackResolveStats) {
 	if len(stack) == 0 {
 		return
 	}
@@ -263,12 +305,15 @@ func (s *session) walkStack(sb *stackBuilder, stack []byte, pid uint32) {
 		var name string
 		if sym.Name != "" {
 			name = sym.Name
+			stats.known++
 		} else {
 			if sym.Module != "" {
 				//name = fmt.Sprintf("%s+%x", sym.Module, sym.Start) // todo expose an option to enable this
 				name = sym.Module
+				stats.unknownSymbols++
 			} else {
 				name = "[unknown]"
+				stats.unknownModules++
 			}
 		}
 		stackFrames = append(stackFrames, name)

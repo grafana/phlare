@@ -2,6 +2,7 @@ package symtab
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -32,6 +33,7 @@ type ElfTable struct {
 
 type ElfTableOptions struct {
 	ElfCache *ElfCache
+	Metrics  *Metrics // may be nil for tests
 }
 
 func NewElfTable(logger log.Logger, procMap *ProcMap, fs string, elfFilePath string, options ElfTableOptions) *ElfTable {
@@ -73,6 +75,7 @@ func (et *ElfTable) load() {
 	me, err := elf2.NewMMapedElfFile(fsElfFilePath)
 	if err != nil {
 		et.err = err
+		et.onLoadError()
 		return
 	}
 	defer me.Close() // todo do not close if it is the selected elf
@@ -82,8 +85,9 @@ func (et *ElfTable) load() {
 		return
 	}
 	buildID, err := me.BuildID()
-	if err != nil && err != elf2.ErrNoBuildIDSection {
+	if err != nil && !errors.Is(err, elf2.ErrNoBuildIDSection) {
 		et.err = err
+		et.onLoadError()
 		return
 	}
 
@@ -96,6 +100,7 @@ func (et *ElfTable) load() {
 	fileInfo, err := os.Stat(fsElfFilePath)
 	if err != nil {
 		et.err = err
+		et.onLoadError()
 		return
 	}
 	symbols = et.options.ElfCache.GetSymbolsByStat(statFromFileInfo(fileInfo))
@@ -110,6 +115,7 @@ func (et *ElfTable) load() {
 		debugMe, err := elf2.NewMMapedElfFile(path.Join(et.fs, debugFilePath))
 		if err != nil {
 			et.err = err
+			et.onLoadError()
 			return
 		}
 		defer debugMe.Close() // todo do not close if it is the selected elf
@@ -117,6 +123,7 @@ func (et *ElfTable) load() {
 		symbols, err = et.createSymbolTable(debugMe)
 		if err != nil {
 			et.err = err
+			et.onLoadError()
 			return
 		}
 		et.table = symbols
@@ -128,12 +135,16 @@ func (et *ElfTable) load() {
 	level.Debug(et.logger).Log("msg", "create symbol table", "f", me.FilePath())
 	if err != nil {
 		et.err = err
+		et.onLoadError()
 		return
 	}
 
 	et.table = symbols
-	et.options.ElfCache.CacheByBuildID(buildID, symbols)
-	et.options.ElfCache.CacheByStat(statFromFileInfo(fileInfo), symbols)
+	if buildID.Empty() {
+		et.options.ElfCache.CacheByStat(statFromFileInfo(fileInfo), symbols)
+	} else {
+		et.options.ElfCache.CacheByBuildID(buildID, symbols)
+	}
 }
 
 func (et *ElfTable) createSymbolTable(me *elf2.MMapedElfFile) (SymbolNameResolver, error) {
@@ -285,4 +296,27 @@ type ElfDebugInfo struct {
 
 func (et *ElfTable) DebugInfo() elf2.SymTabDebugInfo {
 	return et.table.DebugInfo()
+}
+
+func (et *ElfTable) onLoadError() {
+	level.Error(et.logger).Log("msg", "failed to load elf table", "err", et.err)
+	if et.options.Metrics != nil {
+		et.options.Metrics.ElfErrors.WithLabelValues(errorType(et.err)).Inc()
+	}
+}
+
+func errorType(err error) string {
+	if errors.Is(err, os.ErrNotExist) {
+		return "ErrNotExist"
+	}
+	if errors.Is(err, os.ErrPermission) {
+		return "ErrPermission"
+	}
+	if errors.Is(err, os.ErrClosed) {
+		return "ErrClosed"
+	}
+	if errors.Is(err, os.ErrInvalid) {
+		return "ErrInvalid"
+	}
+	return "Other"
 }
