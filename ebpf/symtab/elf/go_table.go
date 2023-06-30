@@ -60,7 +60,7 @@ func (g *GoTable) Cleanup() {
 
 var (
 	errEmptyText         = errors.New("empty .text")
-	errEmptyGoPCLNTab    = errors.New("empty .gopclntab")
+	errGoPCLNTabNotFound = errors.New(".gopclntab not found")
 	errGoTooOld          = errors.New("gosymtab: go sym tab too old")
 	errGoParseFailed     = errors.New("gosymtab: go sym tab parse failed")
 	errGoFailed          = errors.New("gosymtab: go sym tab  failed")
@@ -77,7 +77,7 @@ func (f *MMapedElfFile) NewGoTable() (*GoTable, error) {
 	}
 	pclntab := obj.Section(".gopclntab")
 	if pclntab == nil {
-		return nil, errEmptyGoPCLNTab
+		return nil, errGoPCLNTabNotFound
 	}
 	if f.fd == nil {
 		return nil, fmt.Errorf("elf file not open")
