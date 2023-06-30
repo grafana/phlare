@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
-	"strings"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -186,19 +185,19 @@ func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 	}
 	if len(sb.stack) > 2 && stats.unknownSymbols+stats.unknownModules > stats.known {
 		m.UnknownStacks.WithLabelValues(serviceName).Inc()
-		rawStack := strings.Builder{}
-		for _, b := range it.uStack {
-			rawStack.WriteString(fmt.Sprintf("%0x|", b))
-		}
-		for _, b := range it.kStack {
-			rawStack.WriteString(fmt.Sprintf("%0x|", b))
-		}
-		level.Debug(s.logger).Log(
-			"msg", "stack with unknown symbols",
-			"pid", it.pid,
-			"symbols", strings.Join(sb.stack, ";"),
-			"raw", rawStack.String(),
-		)
+		//rawStack := strings.Builder{}
+		//for _, b := range it.uStack {
+		//	rawStack.WriteString(fmt.Sprintf("%0x|", b))
+		//}
+		//for _, b := range it.kStack {
+		//	rawStack.WriteString(fmt.Sprintf("%0x|", b))
+		//}
+		//level.Debug(s.logger).Log(
+		//	"msg", "stack with unknown symbols",
+		//	"pid", it.pid,
+		//	"symbols", strings.Join(sb.stack, ";"),
+		//	"raw", rawStack.String(),
+		//)
 	}
 }
 
