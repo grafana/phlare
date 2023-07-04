@@ -53,7 +53,7 @@ require (
 	github.com/xlab/treeprint v1.2.0
 	go.uber.org/atomic v1.10.0
 	go.uber.org/goleak v1.2.1
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
+	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/net v0.11.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/sys v0.9.0
