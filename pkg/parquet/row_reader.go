@@ -107,11 +107,11 @@ func (r *BufferedRowReaderIterator) Next() bool {
 	}
 	r.buff = r.buff[:r.bufferSize]
 	n, err := r.reader.ReadRows(r.buff)
-	if n == 0 {
-		return false
-	}
 	if err != nil && err != io.EOF {
 		r.err = err
+		return false
+	}
+	if n == 0 {
 		return false
 	}
 
