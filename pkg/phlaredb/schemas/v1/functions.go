@@ -1,40 +1,40 @@
 package v1
 
-import (
-	"github.com/segmentio/parquet-go"
+import "github.com/segmentio/parquet-go"
 
-	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
-)
-
-var functionsSchema = parquet.SchemaOf(&profilev1.Function{})
+var functionsSchema = parquet.SchemaOf(new(InMemoryFunction))
 
 type FunctionPersister struct{}
 
-func (*FunctionPersister) Name() string {
-	return "functions"
-}
+func (*FunctionPersister) Name() string { return "functions" }
 
-func (*FunctionPersister) Schema() *parquet.Schema {
-	return functionsSchema
-}
+func (*FunctionPersister) Schema() *parquet.Schema { return functionsSchema }
 
-func (*FunctionPersister) SortingColumns() parquet.SortingOption {
-	return parquet.SortingColumns(
-		parquet.Ascending("Id"),
-		parquet.Ascending("Name"),
-		parquet.Ascending("FileName"),
-	)
-}
+func (*FunctionPersister) SortingColumns() parquet.SortingOption { return parquet.SortingColumns() }
 
-func (*FunctionPersister) Deconstruct(row parquet.Row, id uint64, l *profilev1.Function) parquet.Row {
+func (*FunctionPersister) Deconstruct(row parquet.Row, _ uint64, l *InMemoryFunction) parquet.Row {
 	row = functionsSchema.Deconstruct(row, l)
 	return row
 }
 
-func (*FunctionPersister) Reconstruct(row parquet.Row) (id uint64, l *profilev1.Function, err error) {
-	var function profilev1.Function
+func (*FunctionPersister) Reconstruct(row parquet.Row) (uint64, *InMemoryFunction, error) {
+	var function InMemoryFunction
 	if err := functionsSchema.Reconstruct(&function, row); err != nil {
 		return 0, nil, err
 	}
 	return 0, &function, nil
+}
+
+type InMemoryFunction struct {
+	// Unique nonzero id for the function.
+	Id uint64
+	// Name of the function, in human-readable form if available.
+	Name uint32
+	// Name of the function, as identified by the system.
+	// For instance, it can be a C++ mangled name.
+	SystemName uint32
+	// Source file containing the function.
+	Filename uint32
+	// Line number in source file.
+	StartLine uint32
 }

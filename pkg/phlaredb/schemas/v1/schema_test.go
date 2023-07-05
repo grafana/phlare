@@ -58,6 +58,82 @@ func TestStacktracesRoundTrip(t *testing.T) {
 	assert.Equal(t, newStacktraces(), sRead)
 }
 
+func TestLocationsRoundTrip(t *testing.T) {
+	var (
+		s = []*InMemoryLocation{
+			{
+				Id:        8,
+				Address:   9,
+				MappingId: 10,
+				Line: []InMemoryLine{
+					{
+						FunctionId: 11,
+						Line:       12,
+					},
+					{
+						FunctionId: 13,
+						Line:       14,
+					},
+				},
+				IsFolded: true,
+			},
+			{
+				Id:        1,
+				Address:   2,
+				MappingId: 3,
+				Line: []InMemoryLine{
+					{
+						FunctionId: 4,
+						Line:       5,
+					},
+					{
+						FunctionId: 6,
+						Line:       7,
+					},
+				},
+				IsFolded: false,
+			},
+		}
+		w   = &ReadWriter[*InMemoryLocation, *LocationPersister]{}
+		buf bytes.Buffer
+	)
+
+	require.NoError(t, w.WriteParquetFile(&buf, s))
+
+	sRead, err := w.ReadParquetFile(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	assert.Equal(t, s, sRead)
+}
+
+func TestFunctionsRoundTrip(t *testing.T) {
+	var (
+		s = []*InMemoryFunction{
+			{
+				Id:         6,
+				Name:       7,
+				SystemName: 8,
+				Filename:   9,
+				StartLine:  10,
+			},
+			{
+				Id:         1,
+				Name:       2,
+				SystemName: 3,
+				Filename:   4,
+				StartLine:  5,
+			},
+		}
+		w   = &ReadWriter[*InMemoryFunction, *FunctionPersister]{}
+		buf bytes.Buffer
+	)
+
+	require.NoError(t, w.WriteParquetFile(&buf, s))
+
+	sRead, err := w.ReadParquetFile(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	assert.Equal(t, s, sRead)
+}
+
 func newStrings() []string {
 	return []string{
 		"",
