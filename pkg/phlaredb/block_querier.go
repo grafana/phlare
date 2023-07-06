@@ -988,26 +988,26 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 	}
 
 	var (
-		buf       [][]parquet.Value
-		joinIters []query.Iterator
+		buf [][]parquet.Value
+	)
+
+	pIt := query.NewBinaryJoinIterator(
+		0,
+		b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
+		b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
 	)
 
 	if b.meta.Version >= 2 {
-		joinIters = []query.Iterator{
-			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
-			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
+		pIt = query.NewBinaryJoinIterator(
+			0,
+			pIt,
 			b.profiles.columnIter(ctx, "StacktracePartition", nil, "StacktracePartition"),
-		}
+		)
 		buf = make([][]parquet.Value, 3)
 	} else {
-		joinIters = []query.Iterator{
-			b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
-			b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
-		}
 		buf = make([][]parquet.Value, 2)
 	}
 
-	pIt := query.NewJoinIterator(0, joinIters, nil)
 	iters := make([]iter.Iterator[Profile], 0, len(lblsPerRef))
 	defer pIt.Close()
 
