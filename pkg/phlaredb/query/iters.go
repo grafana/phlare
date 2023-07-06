@@ -475,18 +475,6 @@ func (c *BinaryJoinIterator) Err() error {
 	return c.err
 }
 
-// JoinIterator joins two or more iterators for matches at the given definition level.
-// I.e. joining at definitionLevel=0 means that each iterator must produce a result
-// within the same root node.
-type JoinIterator struct {
-	definitionLevel int
-	iters           []Iterator
-	peeks           []*IteratorResult
-	pred            GroupPredicate
-
-	result *IteratorResult
-}
-
 // UnionIterator produces all results for all given iterators.  When iterators
 // align to the same row, based on the configured definition level, then the results
 // are returned together. Else the next matching iterator is returned.
