@@ -16,7 +16,7 @@ const (
 var (
 	_ parquet.RowReader          = (*emptyRowReader)(nil)
 	_ parquet.RowReader          = (*ErrRowReader)(nil)
-	_ parquet.RowReader          = (*MergeRowReader)(nil)
+	_ parquet.RowReader          = (*IteratorRowReader)(nil)
 	_ iter.Iterator[parquet.Row] = (*BufferedRowReaderIterator)(nil)
 
 	EmptyRowReader = &emptyRowReader{}
@@ -32,10 +32,6 @@ func NewErrRowReader(err error) *ErrRowReader { return &ErrRowReader{err: err} }
 
 func (e ErrRowReader) ReadRows(rows []parquet.Row) (int, error) { return 0, e.err }
 
-type MergeRowReader struct {
-	tree *loser.Tree[parquet.Row, iter.Iterator[parquet.Row]]
-}
-
 // NewMergeRowReader returns a RowReader that k-way merges the given readers using the less function.
 // Each reader must be sorted according to the less function already.
 func NewMergeRowReader(readers []parquet.RowReader, maxValue parquet.Row, less func(parquet.Row, parquet.Row) bool) parquet.RowReader {
@@ -50,18 +46,31 @@ func NewMergeRowReader(readers []parquet.RowReader, maxValue parquet.Row, less f
 		its[i] = NewBufferedRowReaderIterator(readers[i], defaultRowBufferSize)
 	}
 
-	return &MergeRowReader{
-		tree: loser.New(
-			its,
-			maxValue,
-			func(it iter.Iterator[parquet.Row]) parquet.Row { return it.At() },
-			less,
-			func(it iter.Iterator[parquet.Row]) { it.Close() },
+	return NewIteratorRowReader(
+		iter.NewTreeIterator[parquet.Row](
+			loser.New(
+				its,
+				maxValue,
+				func(it iter.Iterator[parquet.Row]) parquet.Row { return it.At() },
+				less,
+				func(it iter.Iterator[parquet.Row]) { _ = it.Close() },
+			),
 		),
+	)
+}
+
+type IteratorRowReader struct {
+	iter.Iterator[parquet.Row]
+}
+
+// NewIteratorRowReader returns a RowReader that reads rows from the given iterator.
+func NewIteratorRowReader(it iter.Iterator[parquet.Row]) *IteratorRowReader {
+	return &IteratorRowReader{
+		Iterator: it,
 	}
 }
 
-func (s *MergeRowReader) ReadRows(rows []parquet.Row) (int, error) {
+func (it *IteratorRowReader) ReadRows(rows []parquet.Row) (int, error) {
 	var n int
 	if len(rows) == 0 {
 		return 0, nil
@@ -70,11 +79,13 @@ func (s *MergeRowReader) ReadRows(rows []parquet.Row) (int, error) {
 		if n == len(rows) {
 			break
 		}
-		if !s.tree.Next() {
-			s.tree.Close()
+		if !it.Next() {
+			if err := it.Close(); err != nil {
+				return n, err
+			}
 			return n, io.EOF
 		}
-		rows[n] = s.tree.Winner().At()
+		rows[n] = it.At()
 		n++
 	}
 	return n, nil

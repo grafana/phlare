@@ -141,3 +141,26 @@ func TestNewMergeRowReader(t *testing.T) {
 		})
 	}
 }
+
+func TestIteratorRowReader(t *testing.T) {
+	it := NewIteratorRowReader(
+		NewBufferedRowReaderIterator(NewBatchReader([][]parquet.Row{
+			{{parquet.Int32Value(1)}, {parquet.Int32Value(2)}, {parquet.Int32Value(3)}},
+			{{parquet.Int32Value(4)}, {parquet.Int32Value(5)}, {parquet.Int32Value(6)}},
+			{{parquet.Int32Value(7)}, {parquet.Int32Value(8)}, {parquet.Int32Value(9)}},
+		}), 4),
+	)
+	actual, err := ReadAllWithBufferSize(it, 3)
+	require.NoError(t, err)
+	require.Equal(t, []parquet.Row{
+		{parquet.Int32Value(1)},
+		{parquet.Int32Value(2)},
+		{parquet.Int32Value(3)},
+		{parquet.Int32Value(4)},
+		{parquet.Int32Value(5)},
+		{parquet.Int32Value(6)},
+		{parquet.Int32Value(7)},
+		{parquet.Int32Value(8)},
+		{parquet.Int32Value(9)},
+	}, actual)
+}
