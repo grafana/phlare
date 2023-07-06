@@ -998,7 +998,7 @@ func (c *SyncIterator) seekPages(seekTo RowNumber, definitionLevel int) (done bo
 			}
 			c.metrics.pageReadsTotal.WithLabelValues(c.table, c.columnName).Add(1)
 			c.span.LogFields(
-				log.String("msg", "reading page"),
+				log.String("msg", "reading page (seekPages)"),
 				log.Int64("page_num_values", pg.NumValues()),
 				log.Int64("page_size", pg.Size()),
 			)
@@ -1057,6 +1057,13 @@ func (c *SyncIterator) next() (RowNumber, *parquet.Value, error) {
 			if err != nil {
 				return EmptyRowNumber(), nil, err
 			}
+			c.metrics.pageReadsTotal.WithLabelValues(c.table, c.columnName).Add(1)
+			c.span.LogFields(
+				log.String("msg", "reading page (next)"),
+				log.Int64("page_num_values", pg.NumValues()),
+				log.Int64("page_size", pg.Size()),
+			)
+
 			if c.filter != nil && !c.filter.KeepPage(pg) {
 				// This page filtered out
 				c.curr.Skip(pg.NumRows())
