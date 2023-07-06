@@ -180,7 +180,7 @@ docker-image/phlare/build-debug: frontend/build go/bin-debug $(BIN)/dlv
 docker-image/phlare/build: GOOS=linux
 docker-image/phlare/build: GOARCH=amd64
 docker-image/phlare/build: frontend/build go/bin
-	$(call docker_buildx,--load --iidfile .docker-image-id-phlare)
+	$(call docker_buildx,--load --iidfile .docker-image-id-phlare,)
 
 .PHONY: docker-image/phlare/push
 docker-image/phlare/push: GOOS=linux
