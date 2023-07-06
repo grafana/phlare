@@ -751,7 +751,7 @@ func (r *RowNumberIterator[T]) Seek(to RowNumberWithDefinitionLevel) bool {
 	return true
 }
 
-// SyncIterator is like ColumnIterator but synchronous. It scans through the given row
+// SyncIterator is a synchronous column iterator. It scans through the given row
 // groups and column, and applies the optional predicate to each chunk, page, and value.
 // Results are read by calling Next() until it returns nil.
 type SyncIterator struct {
@@ -1180,12 +1180,12 @@ func (c *SyncIterator) Err() error {
 func (c *SyncIterator) Close() error {
 	c.closeCurrRowGroup()
 
-	c.span.SetTag("inspectedColumnChunks", c.filter.InspectedColumnChunks)
-	c.span.SetTag("inspectedPages", c.filter.InspectedPages)
-	c.span.SetTag("inspectedValues", c.filter.InspectedValues)
-	c.span.SetTag("keptColumnChunks", c.filter.KeptColumnChunks)
-	c.span.SetTag("keptPages", c.filter.KeptPages)
-	c.span.SetTag("keptValues", c.filter.KeptValues)
+	c.span.SetTag("inspectedColumnChunks", c.filter.InspectedColumnChunks.Load())
+	c.span.SetTag("inspectedPages", c.filter.InspectedPages.Load())
+	c.span.SetTag("inspectedValues", c.filter.InspectedValues.Load())
+	c.span.SetTag("keptColumnChunks", c.filter.KeptColumnChunks.Load())
+	c.span.SetTag("keptPages", c.filter.KeptPages.Load())
+	c.span.SetTag("keptValues", c.filter.KeptValues.Load())
 	c.span.Finish()
 	return nil
 }
