@@ -1,11 +1,15 @@
 package query
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/require"
 )
@@ -339,14 +343,17 @@ func createFileWith[T any](t testing.TB, rows []T, rowGroups int) *parquet.File 
 	require.NoError(t, err)
 	t.Logf("Created temp file %s", f.Name())
 
-	half := len(rows) / rowGroups
+	perRG := len(rows) / rowGroups
 
 	w := parquet.NewGenericWriter[T](f)
-	_, err = w.Write(rows[0:half])
-	require.NoError(t, err)
-	require.NoError(t, w.Flush())
+	for i := 0; i < (rowGroups - 1); i++ {
+		_, err = w.Write(rows[0:perRG])
+		require.NoError(t, err)
+		require.NoError(t, w.Flush())
+		rows = rows[perRG:]
+	}
 
-	_, err = w.Write(rows[half:])
+	_, err = w.Write(rows)
 	require.NoError(t, err)
 	require.NoError(t, w.Flush())
 
@@ -368,22 +375,30 @@ func TestBinaryJoinIterator(t *testing.T) {
 	for _, tc := range []struct {
 		name                string
 		seriesPredicate     Predicate
+		seriesPageReads     int
 		timePredicate       Predicate
+		timePageReads       int
 		expectedResultCount int
 	}{
 		{
 			name:                "no predicate",
 			expectedResultCount: rowCount, // expect everything
+			seriesPageReads:     10,
+			timePageReads:       10,
 		},
 		{
 			name:                "one series ID",
-			expectedResultCount: rowCount / 8, // expect an eigth of the rows
+			expectedResultCount: rowCount / 8, // expect an eight of the rows
 			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}}),
+			seriesPageReads:     10,
+			timePageReads:       10,
 		},
 		{
 			name:                "two series IDs",
-			expectedResultCount: rowCount / 8 * 2, // expect two eigth of the rows
+			expectedResultCount: rowCount / 8 * 2, // expect two eights of the rows
 			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}, 1: {}}),
+			seriesPageReads:     10,
+			timePageReads:       10,
 		},
 		{
 			name:                "missing series",
@@ -394,20 +409,35 @@ func TestBinaryJoinIterator(t *testing.T) {
 			name:                "first two time stamps each",
 			expectedResultCount: 2 * 8, // expect two profiles for each series
 			timePredicate:       NewIntBetweenPredicate(0, 1000),
+			seriesPageReads:     1,
+			timePageReads:       1,
 		},
 		{
 			name:                "time before results",
 			expectedResultCount: 0,
 			timePredicate:       NewIntBetweenPredicate(-10, -1),
+			seriesPageReads:     1,
+			timePageReads:       0,
 		},
 		{
 			name:                "time after results",
 			expectedResultCount: 0,
 			timePredicate:       NewIntBetweenPredicate(200000, 20001000),
 			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}, 1: {}}),
+			seriesPageReads:     1,
+			timePageReads:       0,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			reg := prometheus.NewRegistry()
+			metrics := NewMetrics(reg)
+			metrics.pageReadsTotal.WithLabelValues("ts", "SeriesId").Add(0)
+			metrics.pageReadsTotal.WithLabelValues("ts", "TimeNanos").Add(0)
+			ctx = AddMetricsToContext(ctx, metrics)
+
 			seriesIt := NewSyncIterator(ctx, pf.RowGroups(), 0, "SeriesId", 1000, tc.seriesPredicate, "SeriesId")
 			timeIt := NewSyncIterator(ctx, pf.RowGroups(), 1, "TimeNanos", 1000, tc.timePredicate, "TimeNanos")
 
@@ -416,9 +446,6 @@ func TestBinaryJoinIterator(t *testing.T) {
 				seriesIt,
 				timeIt,
 			)
-			defer func() {
-				require.NoError(t, it.Close())
-			}()
 
 			results := 0
 			for it.Next() {
@@ -426,7 +453,17 @@ func TestBinaryJoinIterator(t *testing.T) {
 			}
 			require.NoError(t, it.Err())
 
+			require.NoError(t, it.Close())
+
 			require.Equal(t, tc.expectedResultCount, results)
+
+			require.NoError(t, testutil.GatherAndCompare(reg, bytes.NewReader([]byte(fmt.Sprintf(
+				`
+        # HELP pyroscopedb_page_reads_total Total number of pages read while querying
+        # TYPE pyroscopedb_page_reads_total counter
+        pyroscopedb_page_reads_total{column="SeriesId",table="ts"} %d
+        pyroscopedb_page_reads_total{column="TimeNanos",table="ts"} %d
+        `, tc.seriesPageReads, tc.timePageReads))), "pyroscopedb_page_reads_total"))
 
 		})
 	}
