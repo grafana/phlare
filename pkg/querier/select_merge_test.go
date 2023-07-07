@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
@@ -259,4 +260,34 @@ func BenchmarkSelectMergeStacktraces(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+type errorMergeIterator struct {
+	error
+}
+
+func (e errorMergeIterator) Next() bool {
+	return false
+}
+
+func (e errorMergeIterator) At() *ProfileWithLabels {
+	return nil
+}
+
+func (e errorMergeIterator) Err() error {
+	return error(e)
+}
+
+func (e errorMergeIterator) Close() error {
+	return nil
+}
+
+func (e errorMergeIterator) Keep() {
+}
+
+func TestErrorSkipDuplicate(t *testing.T) {
+	require.Error(t, skipDuplicates(context.Background(), []MergeIterator{
+		errorMergeIterator{errors.New("foo")},
+		errorMergeIterator{errors.New("foo")},
+	}))
 }

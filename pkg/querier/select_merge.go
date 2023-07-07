@@ -261,7 +261,9 @@ func skipDuplicates(ctx context.Context, its []MergeIterator) error {
 	}
 	span.LogFields(otlog.Int("duplicates", duplicates))
 	span.LogFields(otlog.Int("total", total))
-
+	for _, it := range its {
+		errors.Add(it.Err())
+	}
 	return errors.Err()
 }
 
