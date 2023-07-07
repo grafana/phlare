@@ -501,18 +501,23 @@ func TestBinaryJoinIterator(t *testing.T) {
 			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}, 1: {}}),
 		},
 		{
+			name:                "missing series",
+			expectedResultCount: 0,
+			seriesPredicate:     NewMapPredicate(map[int64]struct{}{10: {}}),
+		},
+		{
 			name:                "first two time stamps each",
-			expectedResultCount: 2 * 8, // expect an eigth of the rows
+			expectedResultCount: 2 * 8, // expect two profiles for each series
 			timePredicate:       NewIntBetweenPredicate(0, 1000),
 		},
 		{
 			name:                "time before results",
-			expectedResultCount: 0, // expect an eigth of the rows
+			expectedResultCount: 0,
 			timePredicate:       NewIntBetweenPredicate(-10, -1),
 		},
 		{
 			name:                "time after results",
-			expectedResultCount: 0, // expect an eigth of the rows
+			expectedResultCount: 0,
 			timePredicate:       NewIntBetweenPredicate(200000, 20001000),
 			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}, 1: {}}),
 		},
