@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"testing"
@@ -12,6 +13,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/sdk/resource"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const MaxDefinitionLevel = 5
@@ -368,7 +376,109 @@ func createFileWith[T any](t testing.TB, rows []T, rowGroups int) *parquet.File 
 	return pf
 }
 
+type iteratorTracer struct {
+	it        Iterator
+	span      trace.Span
+	name      string
+	nextCount uint32
+	seekCount uint32
+}
+
+func (i iteratorTracer) Next() bool {
+	i.nextCount++
+	posBefore := i.it.At()
+	result := i.it.Next()
+	posAfter := i.it.At()
+	i.span.AddEvent("next", trace.WithAttributes(
+		attribute.String("column", i.name),
+		attribute.Bool("result", result),
+		attribute.Stringer("posBefore", posBefore),
+		attribute.Stringer("posAfter", posAfter),
+	))
+	return result
+}
+
+func (i iteratorTracer) At() *IteratorResult {
+	return i.it.At()
+}
+
+func (i iteratorTracer) Err() error {
+	return i.it.Err()
+}
+
+func (i iteratorTracer) Close() error {
+	return i.it.Close()
+}
+
+func (i iteratorTracer) Seek(pos RowNumberWithDefinitionLevel) bool {
+	i.seekCount++
+	posBefore := i.it.At()
+	result := i.it.Seek(pos)
+	posAfter := i.it.At()
+	i.span.AddEvent("seek", trace.WithAttributes(
+		attribute.String("column", i.name),
+		attribute.Bool("result", result),
+		attribute.Stringer("seekTo", &pos),
+		attribute.Stringer("posBefore", posBefore),
+		attribute.Stringer("posAfter", posAfter),
+	))
+	return result
+}
+
+func newIteratorTracer(span trace.Span, name string, it Iterator) Iterator {
+	return &iteratorTracer{
+		span: span,
+		name: name,
+		it:   it,
+	}
+}
+
+// tracerProvider returns an OpenTelemetry TracerProvider configured to use
+// the Jaeger exporter that will send spans to the provided url. The returned
+// TracerProvider will also use a Resource configured with all the information
+// about the application.
+func tracerProvider(url string) (*tracesdk.TracerProvider, error) {
+	// Create the Jaeger exporter
+	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(url)))
+	if err != nil {
+		return nil, err
+	}
+	tp := tracesdk.NewTracerProvider(
+		// Always be sure to batch in production.
+		tracesdk.WithBatcher(exp),
+		// Record information about this application in a Resource.
+		tracesdk.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName("phlare-go-test"),
+		)),
+	)
+	return tp, nil
+}
+
+func TestMain(m *testing.M) {
+	tp, err := tracerProvider("http://localhost:14268/api/traces")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Register our TracerProvider as the global so any imported
+	// instrumentation in the future will default to using it.
+	otel.SetTracerProvider(tp)
+
+	result := m.Run()
+
+	fmt.Println("shutting tracer down")
+	tp.Shutdown(context.Background())
+
+	os.Exit(result)
+}
+
 func TestBinaryJoinIterator(t *testing.T) {
+	tr := otel.Tracer("query")
+
+	_, span := tr.Start(context.Background(), "TestBinaryJoinIterator")
+	defer span.End()
+
 	rowCount := 1600
 	pf := createProfileLikeFile(t, rowCount)
 
@@ -438,8 +548,11 @@ func TestBinaryJoinIterator(t *testing.T) {
 			metrics.pageReadsTotal.WithLabelValues("ts", "TimeNanos").Add(0)
 			ctx = AddMetricsToContext(ctx, metrics)
 
-			seriesIt := NewSyncIterator(ctx, pf.RowGroups(), 0, "SeriesId", 1000, tc.seriesPredicate, "SeriesId")
-			timeIt := NewSyncIterator(ctx, pf.RowGroups(), 1, "TimeNanos", 1000, tc.timePredicate, "TimeNanos")
+			seriesIt := newIteratorTracer(span, "SeriesID", NewSyncIterator(ctx, pf.RowGroups(), 0, "SeriesId", 1000, tc.seriesPredicate, "SeriesId"))
+			timeIt := newIteratorTracer(span, "TimeNanos", NewSyncIterator(ctx, pf.RowGroups(), 1, "TimeNanos", 1000, tc.timePredicate, "TimeNanos"))
+
+			ctx, span := tr.Start(ctx, t.Name())
+			defer span.End()
 
 			it := NewBinaryJoinIterator(
 				0,
@@ -449,6 +562,9 @@ func TestBinaryJoinIterator(t *testing.T) {
 
 			results := 0
 			for it.Next() {
+				span.AddEvent("match", trace.WithAttributes(
+					attribute.Stringer("element", it.At()),
+				))
 				results++
 			}
 			require.NoError(t, it.Err())
