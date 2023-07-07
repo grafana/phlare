@@ -348,14 +348,18 @@ func createFileWith[T any](t testing.TB, rows []T, rowGroups int) *parquet.File 
 	require.NoError(t, err)
 	t.Logf("Created temp file %s", f.Name())
 
-	half := len(rows) / rowGroups
+	perRG := len(rows) / rowGroups
 
 	w := parquet.NewGenericWriter[T](f)
-	_, err = w.Write(rows[0:half])
-	require.NoError(t, err)
-	require.NoError(t, w.Flush())
 
-	_, err = w.Write(rows[half:])
+	for i := 0; i < (rowGroups - 1); i++ {
+		_, err = w.Write(rows[0:perRG])
+		require.NoError(t, err)
+		require.NoError(t, w.Flush())
+		rows = rows[perRG:]
+	}
+
+	_, err = w.Write(rows)
 	require.NoError(t, err)
 	require.NoError(t, w.Flush())
 
@@ -380,18 +384,15 @@ type iteratorTracer struct {
 
 func (i iteratorTracer) Next() bool {
 	i.nextCount++
-	//posBefore := i.it.At()
+	posBefore := i.it.At()
 	result := i.it.Next()
-	//posAfter := i.it.At()
-	/*
-		i.span.AddAttributes.LogKV(
-			"event", "next",
-			"result", result,
-			"column", i.name,
-			"posBefore", posBefore,
-			"posAfter", posAfter,
-		)
-	*/
+	posAfter := i.it.At()
+	i.span.AddEvent("next", trace.WithAttributes(
+		attribute.String("column", i.name),
+		attribute.Bool("result", result),
+		attribute.Stringer("posBefore", posBefore),
+		attribute.Stringer("posAfter", posAfter),
+	))
 	return result
 }
 
@@ -412,22 +413,13 @@ func (i iteratorTracer) Seek(pos RowNumberWithDefinitionLevel) bool {
 	posBefore := i.it.At()
 	result := i.it.Seek(pos)
 	posAfter := i.it.At()
-
 	i.span.AddEvent("seek", trace.WithAttributes(
 		attribute.String("column", i.name),
+		attribute.Bool("result", result),
+		attribute.Stringer("seekTo", &pos),
 		attribute.Stringer("posBefore", posBefore),
 		attribute.Stringer("posAfter", posAfter),
 	))
-	/*
-		i.span.LogKV(
-			"event", "seek",
-			"result", result,
-			"column", i.name,
-			"seekTo", pos,
-			"posBefore", posBefore,
-			"posAfter", posAfter,
-		)
-	*/
 	return result
 }
 
@@ -544,12 +536,9 @@ func TestBinaryJoinIterator(t *testing.T) {
 
 			results := 0
 			for it.Next() {
-				/*
-					span.LogKV(
-						"event", "match",
-						"pos", it.At().RowNumber,
-					)
-				*/
+				span.AddEvent("match", trace.WithAttributes(
+					attribute.Stringer("element", it.At()),
+				))
 				results++
 			}
 			require.NoError(t, it.Err())

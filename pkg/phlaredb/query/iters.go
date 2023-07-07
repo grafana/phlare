@@ -10,9 +10,10 @@ import (
 	"sync"
 
 	"github.com/grafana/dskit/multierror"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/log"
 	"github.com/segmentio/parquet-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/grafana/phlare/pkg/iter"
 )
@@ -37,6 +38,10 @@ type RowNumber [6]int64
 type RowNumberWithDefinitionLevel struct {
 	RowNumber       RowNumber
 	DefinitionLevel int
+}
+
+func (r *RowNumberWithDefinitionLevel) String() string {
+	return fmt.Sprintf("%v:%v", r.RowNumber, r.DefinitionLevel)
 }
 
 // EmptyRowNumber creates an empty invalid row number.
@@ -782,7 +787,7 @@ type SyncIterator struct {
 	filter     *InstrumentedPredicate
 
 	// Status
-	span            opentracing.Span
+	span            trace.Span
 	metrics         *Metrics
 	curr            RowNumber
 	currRowGroup    parquet.RowGroup
@@ -839,10 +844,12 @@ func NewSyncIterator(ctx context.Context, rgs []parquet.RowGroup, column int, co
 		rn.Skip(rg.NumRows())
 	}
 
-	span, _ := opentracing.StartSpanFromContext(ctx, "syncIterator", opentracing.Tags{
-		"columnIndex": column,
-		"column":      columnName,
-	})
+	tr := otel.Tracer("query")
+
+	ctx, span := tr.Start(ctx, "syncIterator", trace.WithAttributes(
+		attribute.String("column", columnName),
+		attribute.Int("columnIndex", column),
+	))
 
 	return &SyncIterator{
 		table:      strings.ToLower(rgs[0].Schema().Name()) + "s",
@@ -1012,11 +1019,12 @@ func (c *SyncIterator) seekPages(seekTo RowNumber, definitionLevel int) (done bo
 				return true, err
 			}
 			c.metrics.pageReadsTotal.WithLabelValues(c.table, c.columnName).Add(1)
-			c.span.LogFields(
-				log.String("msg", "reading page (seekPages)"),
-				log.Int64("page_num_values", pg.NumValues()),
-				log.Int64("page_size", pg.Size()),
-			)
+			c.span.AddEvent(
+				"read page (seekPages)",
+				trace.WithAttributes(
+					attribute.Int64("page_num_values", pg.NumValues()),
+					attribute.Int64("page_size", pg.Size()),
+				))
 
 			// Skip based on row number?
 			newRN := c.curr
@@ -1073,11 +1081,12 @@ func (c *SyncIterator) next() (RowNumber, *parquet.Value, error) {
 				return EmptyRowNumber(), nil, err
 			}
 			c.metrics.pageReadsTotal.WithLabelValues(c.table, c.columnName).Add(1)
-			c.span.LogFields(
-				log.String("msg", "reading page (next)"),
-				log.Int64("page_num_values", pg.NumValues()),
-				log.Int64("page_size", pg.Size()),
-			)
+			c.span.AddEvent(
+				"read page (next)",
+				trace.WithAttributes(
+					attribute.Int64("page_num_values", pg.NumValues()),
+					attribute.Int64("page_size", pg.Size()),
+				))
 
 			if c.filter != nil && !c.filter.KeepPage(pg) {
 				// This page filtered out
@@ -1195,12 +1204,14 @@ func (c *SyncIterator) Err() error {
 func (c *SyncIterator) Close() error {
 	c.closeCurrRowGroup()
 
-	c.span.SetTag("inspectedColumnChunks", c.filter.InspectedColumnChunks.Load())
-	c.span.SetTag("inspectedPages", c.filter.InspectedPages.Load())
-	c.span.SetTag("inspectedValues", c.filter.InspectedValues.Load())
-	c.span.SetTag("keptColumnChunks", c.filter.KeptColumnChunks.Load())
-	c.span.SetTag("keptPages", c.filter.KeptPages.Load())
-	c.span.SetTag("keptValues", c.filter.KeptValues.Load())
-	c.span.Finish()
+	c.span.SetAttributes(attribute.Int64("inspectedColumnChunks", c.filter.InspectedColumnChunks.Load()))
+	/*
+		c.span.SetTag("inspectedPages", c.filter.InspectedPages.Load())
+		c.span.SetTag("inspectedValues", c.filter.InspectedValues.Load())
+		c.span.SetTag("keptColumnChunks", c.filter.KeptColumnChunks.Load())
+		c.span.SetTag("keptPages", c.filter.KeptPages.Load())
+		c.span.SetTag("keptValues", c.filter.KeptValues.Load())
+	*/
+	c.span.End()
 	return nil
 }
