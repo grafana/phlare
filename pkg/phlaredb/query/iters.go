@@ -417,6 +417,15 @@ func NewBinaryJoinIterator(definitionLevel int, left, right Iterator) *BinaryJoi
 	}
 }
 
+// nextOrSeek will use next if the iterator is exactly one row aways
+func (bj *BinaryJoinIterator) nextOrSeek(to RowNumberWithDefinitionLevel, it Iterator) bool {
+	// Seek when definition level is higher then 0, there is not previous iteration or when the difference between current position and to is not 1
+	if to.DefinitionLevel != 0 || it.At() == nil || to.RowNumber.Preceding() != it.At().RowNumber {
+		return it.Seek(to)
+	}
+	return it.Next()
+}
+
 func (bj *BinaryJoinIterator) Next() bool {
 	for {
 		if !bj.left.Next() {
@@ -426,7 +435,7 @@ func (bj *BinaryJoinIterator) Next() bool {
 		resLeft := bj.left.At()
 
 		// now seek the right iterator to the left position
-		if !bj.right.Seek(RowNumberWithDefinitionLevel{resLeft.RowNumber, bj.definitionLevel}) {
+		if !bj.nextOrSeek(RowNumberWithDefinitionLevel{resLeft.RowNumber, bj.definitionLevel}, bj.right) {
 			bj.err = bj.right.Err()
 			return false
 		}
@@ -446,7 +455,7 @@ func (bj *BinaryJoinIterator) Next() bool {
 			makeResult()
 			return true
 		} else if cmp < 0 {
-			if !bj.left.Seek(RowNumberWithDefinitionLevel{resRight.RowNumber, bj.definitionLevel}) {
+			if !bj.nextOrSeek(RowNumberWithDefinitionLevel{resRight.RowNumber, bj.definitionLevel}, bj.left) {
 				bj.err = bj.left.Err()
 				return false
 			}
