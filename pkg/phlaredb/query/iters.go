@@ -369,6 +369,14 @@ func (r *IteratorResult) Columns(buffer [][]parquet.Value, names ...string) [][]
 	return buffer
 }
 
+func (r *IteratorResult) String() string {
+	if r == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("rowNum=%d entries=%+#v", r.RowNumber[0], r.ToMap())
+
+}
+
 // iterator - Every iterator follows this interface and can be composed.
 type Iterator = iter.SeekIterator[*IteratorResult, RowNumberWithDefinitionLevel]
 
