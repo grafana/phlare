@@ -432,19 +432,29 @@ func (bj *BinaryJoinIterator) Next() bool {
 		}
 		resRight := bj.right.At()
 
-		if cmp := CompareRowNumbers(bj.definitionLevel, resLeft.RowNumber, resRight.RowNumber); cmp == 0 {
-			// we have a found an element
+		makeResult := func() {
 			bj.res = iteratorResultPoolGet()
 			bj.res.RowNumber = resLeft.RowNumber
 			bj.res.Append(resLeft)
 			bj.res.Append(resRight)
-			//	columnIteratorResultPoolPut(resLeft)
-			//	columnIteratorResultPoolPut(resRight)
+			iteratorResultPoolPut(resLeft)
+			iteratorResultPoolPut(resRight)
+		}
+
+		if cmp := CompareRowNumbers(bj.definitionLevel, resLeft.RowNumber, resRight.RowNumber); cmp == 0 {
+			// we have a found an element
+			makeResult()
 			return true
 		} else if cmp < 0 {
 			if !bj.left.Seek(RowNumberWithDefinitionLevel{resRight.RowNumber, bj.definitionLevel}) {
 				bj.err = bj.left.Err()
 				return false
+			}
+			resLeft = bj.left.At()
+
+			if cmp := CompareRowNumbers(bj.definitionLevel, resLeft.RowNumber, resRight.RowNumber); cmp == 0 {
+				makeResult()
+				return true
 			}
 
 		} else {
