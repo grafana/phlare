@@ -28,7 +28,6 @@ import (
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
 	"github.com/thanos-io/objstore"
-	"golang.org/x/exp/constraints"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 
@@ -460,58 +459,6 @@ func (b *singleBlockQuerier) Close() error {
 
 func (b *singleBlockQuerier) Bounds() (model.Time, model.Time) {
 	return b.meta.MinTime, b.meta.MaxTime
-}
-
-type mapPredicate[K constraints.Integer, V any] struct {
-	min K
-	max K
-	m   map[K]V
-}
-
-func newMapPredicate[K constraints.Integer, V any](m map[K]V) query.Predicate {
-	p := &mapPredicate[K, V]{
-		m: m,
-	}
-
-	first := true
-	for k := range m {
-		if first || p.max < k {
-			p.max = k
-		}
-		if first || p.min > k {
-			p.min = k
-		}
-		first = false
-	}
-
-	return p
-}
-
-func (m *mapPredicate[K, V]) KeepColumnChunk(c parquet.ColumnChunk) bool {
-	if ci := c.ColumnIndex(); ci != nil {
-		for i := 0; i < ci.NumPages(); i++ {
-			min := K(ci.MinValue(i).Int64())
-			max := K(ci.MaxValue(i).Int64())
-			if m.max >= min && m.min <= max {
-				return true
-			}
-		}
-		return false
-	}
-
-	return true
-}
-
-func (m *mapPredicate[K, V]) KeepPage(page parquet.Page) bool {
-	if min, max, ok := page.Bounds(); ok {
-		return m.max >= K(min.Int64()) && m.min <= K(max.Int64())
-	}
-	return true
-}
-
-func (m *mapPredicate[K, V]) KeepValue(v parquet.Value) bool {
-	_, exists := m.m[K(v.Int64())]
-	return exists
 }
 
 type labelsInfo struct {
@@ -993,7 +940,7 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 
 	pIt := query.NewBinaryJoinIterator(
 		0,
-		b.profiles.columnIter(ctx, "SeriesIndex", newMapPredicate(lblsPerRef), "SeriesIndex"),
+		b.profiles.columnIter(ctx, "SeriesIndex", query.NewMapPredicate(lblsPerRef), "SeriesIndex"),
 		b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
 	)
 
