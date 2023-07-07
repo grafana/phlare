@@ -201,7 +201,7 @@ func TestColumnIteratorExitEarly(t *testing.T) {
 		rows = append(rows, T{i})
 	}
 
-	pf := createFileWith(t, rows)
+	pf := createFileWith(t, rows, 2)
 	idx, _ := GetColumnIndexByPath(pf, "A")
 	readSize := 1000
 
@@ -299,15 +299,47 @@ func createTestFile(t testing.TB, count int) *parquet.File {
 		rows = append(rows, T{i})
 	}
 
-	pf := createFileWith(t, rows)
+	pf := createFileWith(t, rows, 2)
 	return pf
 }
 
-func createFileWith[T any](t testing.TB, rows []T) *parquet.File {
+func createProfileLikeFile(t testing.TB, count int) *parquet.File {
+	type T struct {
+		SeriesID  uint32
+		TimeNanos int64
+	}
+
+	// every row group is ordered by serieID and then time nanos
+	// time is always increasing between rowgroups
+
+	rowGroups := 10
+	series := 8
+
+	rows := make([]T, count)
+	for i := range rows {
+
+		rowsPerRowGroup := count / rowGroups
+		seriesPerRowGroup := rowsPerRowGroup / series
+		rowGroupNum := i / rowsPerRowGroup
+
+		seriesID := uint32(i % (count / rowGroups) / (rowsPerRowGroup / series))
+		rows[i] = T{
+			SeriesID:  seriesID,
+			TimeNanos: int64(i%seriesPerRowGroup+rowGroupNum*seriesPerRowGroup) * 1000,
+		}
+
+	}
+
+	return createFileWith[T](t, rows, rowGroups)
+
+}
+
+func createFileWith[T any](t testing.TB, rows []T, rowGroups int) *parquet.File {
 	f, err := os.CreateTemp(t.TempDir(), "data.parquet")
 	require.NoError(t, err)
+	t.Logf("Created temp file %s", f.Name())
 
-	half := len(rows) / 2
+	half := len(rows) / rowGroups
 
 	w := parquet.NewGenericWriter[T](f)
 	_, err = w.Write(rows[0:half])
@@ -327,4 +359,70 @@ func createFileWith[T any](t testing.TB, rows []T) *parquet.File {
 	require.NoError(t, err)
 
 	return pf
+}
+
+func TestBinaryJoinIterator(t *testing.T) {
+	rowCount := 1600
+	pf := createProfileLikeFile(t, rowCount)
+
+	for _, tc := range []struct {
+		name                string
+		seriesPredicate     Predicate
+		timePredicate       Predicate
+		expectedResultCount int
+	}{
+		{
+			name:                "no predicate",
+			expectedResultCount: rowCount, // expect everything
+		},
+		{
+			name:                "one series ID",
+			expectedResultCount: rowCount / 8, // expect an eigth of the rows
+			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}}),
+		},
+		{
+			name:                "two series IDs",
+			expectedResultCount: rowCount / 8 * 2, // expect two eigth of the rows
+			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}, 1: {}}),
+		},
+		{
+			name:                "first two time stamps each",
+			expectedResultCount: 2 * 8, // expect an eigth of the rows
+			timePredicate:       NewIntBetweenPredicate(0, 1000),
+		},
+		{
+			name:                "time before results",
+			expectedResultCount: 0, // expect an eigth of the rows
+			timePredicate:       NewIntBetweenPredicate(-10, -1),
+		},
+		{
+			name:                "time after results",
+			expectedResultCount: 0, // expect an eigth of the rows
+			timePredicate:       NewIntBetweenPredicate(200000, 20001000),
+			seriesPredicate:     NewMapPredicate(map[int64]struct{}{0: {}, 1: {}}),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seriesIt := NewSyncIterator(ctx, pf.RowGroups(), 0, "SeriesId", 1000, tc.seriesPredicate, "SeriesId")
+			timeIt := NewSyncIterator(ctx, pf.RowGroups(), 1, "TimeNanos", 1000, tc.timePredicate, "TimeNanos")
+
+			it := NewBinaryJoinIterator(
+				0,
+				seriesIt,
+				timeIt,
+			)
+			defer func() {
+				require.NoError(t, it.Close())
+			}()
+
+			results := 0
+			for it.Next() {
+				results++
+			}
+			require.NoError(t, it.Err())
+
+			require.Equal(t, tc.expectedResultCount, results)
+
+		})
+	}
 }
