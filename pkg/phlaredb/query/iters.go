@@ -1173,7 +1173,6 @@ func (c *SyncIterator) setPage(pg parquet.Page) {
 }
 
 func (c *SyncIterator) closeCurrRowGroup() {
-	c.cancel()
 	if c.currPages != nil {
 		c.currPages.Close()
 	}
@@ -1200,6 +1199,7 @@ func (c *SyncIterator) Err() error {
 }
 
 func (c *SyncIterator) Close() error {
+	c.cancel()
 	c.closeCurrRowGroup()
 
 	c.span.SetTag("inspectedColumnChunks", c.filter.InspectedColumnChunks.Load())
