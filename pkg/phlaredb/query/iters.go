@@ -774,6 +774,8 @@ type SyncIterator struct {
 	filter     *InstrumentedPredicate
 
 	// Status
+	ctx             context.Context
+	cancel          func()
 	span            opentracing.Span
 	metrics         *Metrics
 	curr            RowNumber
@@ -831,13 +833,17 @@ func NewSyncIterator(ctx context.Context, rgs []parquet.RowGroup, column int, co
 		rn.Skip(rg.NumRows())
 	}
 
-	span, _ := opentracing.StartSpanFromContext(ctx, "syncIterator", opentracing.Tags{
+	span, ctx := opentracing.StartSpanFromContext(ctx, "syncIterator", opentracing.Tags{
 		"columnIndex": column,
 		"column":      columnName,
 	})
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	return &SyncIterator{
 		table:      strings.ToLower(rgs[0].Schema().Name()) + "s",
+		ctx:        ctx,
+		cancel:     cancel,
 		metrics:    getMetricsFromContext(ctx),
 		span:       span,
 		column:     column,
@@ -1040,6 +1046,14 @@ func (c *SyncIterator) seekPages(seekTo RowNumber, definitionLevel int) (done bo
 // when being called multiple times and throwing away the results like in SeekTo().
 func (c *SyncIterator) next() (RowNumber, *parquet.Value, error) {
 	for {
+
+		// return if context is cancelled
+		select {
+		case <-c.ctx.Done():
+			return EmptyRowNumber(), nil, c.ctx.Err()
+		default:
+		}
+
 		if c.currRowGroup == nil {
 			rg, min, max := c.popRowGroup()
 			if rg == nil {
@@ -1159,6 +1173,7 @@ func (c *SyncIterator) setPage(pg parquet.Page) {
 }
 
 func (c *SyncIterator) closeCurrRowGroup() {
+	c.cancel()
 	if c.currPages != nil {
 		c.currPages.Close()
 	}

@@ -247,7 +247,7 @@ func TestColumnIteratorExitEarly(t *testing.T) {
 		iter := NewSyncIterator(context.TODO(), pf.RowGroups(), idx, "", readSize, nil, "A")
 		iter.Close()
 		count, err := readIter(iter)
-		require.NoError(t, err)
+		require.ErrorContains(t, err, "context canceled")
 		require.Equal(t, 0, count)
 	})
 
@@ -262,7 +262,7 @@ func TestColumnIteratorExitEarly(t *testing.T) {
 
 		// Read again = should close early
 		res2, err := readIter(iter)
-		require.NoError(t, err)
+		require.ErrorContains(t, err, "context canceled")
 		require.Less(t, readSize+res2, count)
 	})
 }
