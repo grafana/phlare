@@ -1,8 +1,12 @@
 package v1
 
-import "github.com/segmentio/parquet-go"
+import (
+	"github.com/segmentio/parquet-go"
 
-var locationsSchema = parquet.SchemaOf(new(InMemoryLocation))
+	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
+)
+
+var locationsSchema = parquet.SchemaOf(new(profilev1.Location))
 
 type LocationPersister struct{}
 
@@ -12,24 +16,67 @@ func (*LocationPersister) Schema() *parquet.Schema { return locationsSchema }
 
 func (*LocationPersister) SortingColumns() parquet.SortingOption { return parquet.SortingColumns() }
 
-func (*LocationPersister) Deconstruct(row parquet.Row, _ uint64, l *InMemoryLocation) parquet.Row {
-	// TODO: Preserve proto fields order
-	// 	Idx Name      Type
-	// 	0   Id        uint64
-	// 	1   MappingId uint64
-	// 	2   Address   uint64
-	// 	3   Line      []*Line
-	// 	4   IsFolded  bool
-	row = locationsSchema.Deconstruct(row, l)
+func (*LocationPersister) Deconstruct(row parquet.Row, _ uint64, loc *InMemoryLocation) parquet.Row {
+	var (
+		col    = -1
+		newCol = func() int {
+			col++
+			return col
+		}
+		totalCols = 4 + (2 * len(loc.Line))
+	)
+	if cap(row) < totalCols {
+		row = make(parquet.Row, 0, totalCols)
+	}
+	row = row[:0]
+	row = append(row, parquet.Int64Value(int64(loc.Id)).Level(0, 0, newCol()))
+	row = append(row, parquet.Int32Value(int32(loc.MappingId)).Level(0, 0, newCol()))
+	row = append(row, parquet.Int64Value(int64(loc.Address)).Level(0, 0, newCol()))
+
+	newCol()
+	if len(loc.Line) == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, col))
+	}
+	repetition := -1
+	for i := range loc.Line {
+		if repetition < 1 {
+			repetition++
+		}
+		row = append(row, parquet.Int32Value(int32(loc.Line[i].FunctionId)).Level(repetition, 1, col))
+	}
+
+	newCol()
+	if len(loc.Line) == 0 {
+		row = append(row, parquet.Value{}.Level(0, 0, col))
+	}
+	repetition = -1
+	for i := range loc.Line {
+		if repetition < 1 {
+			repetition++
+		}
+		row = append(row, parquet.Int32Value(loc.Line[i].Line).Level(repetition, 1, col))
+	}
+
+	row = append(row, parquet.BooleanValue(loc.IsFolded).Level(0, 0, newCol()))
 	return row
 }
 
 func (*LocationPersister) Reconstruct(row parquet.Row) (uint64, *InMemoryLocation, error) {
-	var location InMemoryLocation
-	if err := locationsSchema.Reconstruct(&location, row); err != nil {
-		return 0, nil, err
+	loc := InMemoryLocation{
+		Id:        row[0].Uint64(),
+		MappingId: uint32(row[1].Uint64()),
+		Address:   row[2].Uint64(),
+		IsFolded:  row[len(row)-1].Boolean(),
 	}
-	return 0, &location, nil
+	lines := row[3 : len(row)-1]
+	loc.Line = make([]InMemoryLine, len(lines)/2)
+	for i, v := range lines[:len(lines)/2] {
+		loc.Line[i].FunctionId = uint32(v.Uint64())
+	}
+	for i, v := range lines[len(lines)/2:] {
+		loc.Line[i].Line = int32(v.Uint64())
+	}
+	return 0, &loc, nil
 }
 
 type InMemoryLocation struct {

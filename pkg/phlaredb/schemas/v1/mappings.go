@@ -1,8 +1,12 @@
 package v1
 
-import "github.com/segmentio/parquet-go"
+import (
+	"github.com/segmentio/parquet-go"
 
-var mappingsSchema = parquet.SchemaOf(new(InMemoryMapping))
+	profilev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
+)
+
+var mappingsSchema = parquet.SchemaOf(new(profilev1.Mapping))
 
 type MappingPersister struct{}
 
@@ -13,14 +17,35 @@ func (*MappingPersister) Schema() *parquet.Schema { return mappingsSchema }
 func (*MappingPersister) SortingColumns() parquet.SortingOption { return parquet.SortingColumns() }
 
 func (*MappingPersister) Deconstruct(row parquet.Row, _ uint64, m *InMemoryMapping) parquet.Row {
-	row = mappingsSchema.Deconstruct(row, m)
+	if cap(row) < 10 {
+		row = make(parquet.Row, 0, 10)
+	}
+	row = row[:0]
+	row = append(row, parquet.Int64Value(int64(m.Id)).Level(0, 0, 0))
+	row = append(row, parquet.Int64Value(int64(m.MemoryStart)).Level(0, 0, 1))
+	row = append(row, parquet.Int64Value(int64(m.MemoryLimit)).Level(0, 0, 2))
+	row = append(row, parquet.Int64Value(int64(m.FileOffset)).Level(0, 0, 3))
+	row = append(row, parquet.Int32Value(int32(m.Filename)).Level(0, 0, 4))
+	row = append(row, parquet.Int32Value(int32(m.BuildId)).Level(0, 0, 5))
+	row = append(row, parquet.BooleanValue(m.HasFunctions).Level(0, 0, 6))
+	row = append(row, parquet.BooleanValue(m.HasFilenames).Level(0, 0, 7))
+	row = append(row, parquet.BooleanValue(m.HasLineNumbers).Level(0, 0, 8))
+	row = append(row, parquet.BooleanValue(m.HasInlineFrames).Level(0, 0, 9))
 	return row
 }
 
 func (*MappingPersister) Reconstruct(row parquet.Row) (uint64, *InMemoryMapping, error) {
-	var mapping InMemoryMapping
-	if err := mappingsSchema.Reconstruct(&mapping, row); err != nil {
-		return 0, nil, err
+	mapping := InMemoryMapping{
+		Id:              row[0].Uint64(),
+		MemoryStart:     row[1].Uint64(),
+		MemoryLimit:     row[2].Uint64(),
+		FileOffset:      row[3].Uint64(),
+		Filename:        row[4].Uint32(),
+		BuildId:         row[5].Uint32(),
+		HasFunctions:    row[6].Boolean(),
+		HasFilenames:    row[7].Boolean(),
+		HasLineNumbers:  row[8].Boolean(),
+		HasInlineFrames: row[9].Boolean(),
 	}
 	return 0, &mapping, nil
 }
