@@ -80,6 +80,7 @@
     "@szhsin/react-menu": "3.5.2",
     "graphviz-react": "^1.2.5",
     "jquery": "^3.6.4",
+    "lerna": "7.1.1",
     "pyroscope-oss": "git+https://github.com/pyroscope-io/pyroscope.git#f710852",
     "react": "^18.2.0",
     "react-datepicker": "^4.7.0",
