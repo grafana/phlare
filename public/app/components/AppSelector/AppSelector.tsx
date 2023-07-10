@@ -49,7 +49,7 @@ function queryToApp(query: Query, apps: App[]) {
   return apps.find(
     (a) =>
       a.__profile_type__ === maybeSelectedApp?.__profile_type__ &&
-      a.name === maybeSelectedApp?.name,
+      a.name === maybeSelectedApp?.name
   );
 }
 
@@ -63,9 +63,9 @@ export function AppSelector({
   const filteredApps = useMemo(
     () =>
       apps.filter((app) =>
-        app.name.toLowerCase().includes(filter.trim().toLowerCase()),
+        app.name.toLowerCase().includes(filter.trim().toLowerCase())
       ),
-    [apps, filter],
+    [apps, filter]
   );
   useEffect(() => {
     setFilter('');
@@ -109,7 +109,7 @@ export const SelectorModalWithToggler = ({
   const [selectedLeftSide, setSelectedLeftSide] = useState<string>();
   const matchedApps = findAppsWithName(
     apps,
-    selectedLeftSide || selectedApp?.name || '',
+    selectedLeftSide || selectedApp?.name || ''
   );
   const label = 'Select an application';
 
