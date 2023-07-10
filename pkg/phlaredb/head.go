@@ -66,6 +66,7 @@ func (t idConversionTable) rewriteUint64(idx *uint64) {
 	*idx = uint64(v)
 }
 
+// nolint unused
 func (t idConversionTable) rewriteUint32(idx *uint32) {
 	pos := *idx
 	v, ok := t[int64(pos)]
