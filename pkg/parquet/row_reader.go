@@ -5,7 +5,9 @@ import (
 
 	"github.com/segmentio/parquet-go"
 
+	"github.com/grafana/dskit/runutil"
 	"github.com/grafana/phlare/pkg/iter"
+	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/loser"
 )
 
@@ -80,8 +82,9 @@ func (it *IteratorRowReader) ReadRows(rows []parquet.Row) (int, error) {
 			break
 		}
 		if !it.Next() {
-			if err := it.Close(); err != nil {
-				return n, err
+			runutil.CloseWithLogOnErr(util.Logger, it.Iterator, "failed to close iterator")
+			if it.Err() != nil {
+				return n, it.Err()
 			}
 			return n, io.EOF
 		}
