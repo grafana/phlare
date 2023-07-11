@@ -2132,6 +2132,7 @@ spec:
             requests:
               cpu: 1
               memory: 8Gi
+      terminationGracePeriodSeconds: 600
       volumes:
         - name: config
           configMap:
