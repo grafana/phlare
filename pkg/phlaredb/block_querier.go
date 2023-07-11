@@ -933,15 +933,6 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		}
 	}
 
-	var (
-		buf [][]parquet.Value
-	)
-	if b.meta.Version >= 2 {
-		buf = make([][]parquet.Value, 3)
-	} else {
-		buf = make([][]parquet.Value, 2)
-	}
-
 	pItPerRG := query.NewPerRowGroupIter(b.profiles.file.RowGroups(), func(rowGroups []parquet.RowGroup, rowNumOffset int64) query.Iterator {
 		pIt := query.NewBinaryJoinIterator(
 			0,
@@ -975,6 +966,15 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		pIt := pItPerRG[idx]
 		g.Go(func() error {
 			defer pIt.Close()
+
+			var (
+				buf [][]parquet.Value
+			)
+			if b.meta.Version >= 2 {
+				buf = make([][]parquet.Value, 3)
+			} else {
+				buf = make([][]parquet.Value, 2)
+			}
 
 			currSeriesIndex := int64(-1)
 			var currentSeriesSlice []Profile
