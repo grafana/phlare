@@ -7,9 +7,10 @@ import (
 
 	"github.com/grafana/dskit/multierror"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
+	attribute "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/grafana/phlare/pkg/iter"
 )
@@ -24,7 +25,7 @@ type repeatedPageIterator[T any] struct {
 	column   int
 	readSize int
 	ctx      context.Context
-	span     opentracing.Span
+	span     trace.Span
 
 	rgs                 []parquet.RowGroup
 	startRowGroupRowNum int64
@@ -134,10 +135,10 @@ Outer:
 				return false
 			}
 			it.span.LogFields(
-				otlog.String("msg", "Page read"),
-				otlog.Int64("startRowGroupRowNum", it.startRowGroupRowNum),
-				otlog.Int64("startPageRowNum", it.startPageRowNum),
-				otlog.Int64("pageRowNum", it.currentPage.NumRows()),
+				attribute.String("msg", "Page read"),
+				attribute.Int64("startRowGroupRowNum", it.startRowGroupRowNum),
+				attribute.Int64("startPageRowNum", it.startPageRowNum),
+				attribute.Int64("pageRowNum", it.currentPage.NumRows()),
 			)
 			it.valueReader = it.currentPage.Values()
 		}

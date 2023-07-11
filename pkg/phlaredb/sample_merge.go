@@ -6,10 +6,12 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
+	"go.opentelemetry.io/otel"
+	attribute "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
@@ -20,8 +22,8 @@ import (
 )
 
 func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.Iterator[Profile]) (*ingestv1.MergeProfilesStacktracesResult, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Block")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "MergeByStacktraces - Block")
+	defer sp.End()
 
 	stacktraceAggrValues := make(stacktracesByMapping)
 	if err := mergeByStacktraces(ctx, b.profiles.file, rows, stacktraceAggrValues); err != nil {
@@ -33,8 +35,8 @@ func (b *singleBlockQuerier) MergeByStacktraces(ctx context.Context, rows iter.I
 }
 
 func (b *singleBlockQuerier) MergePprof(ctx context.Context, rows iter.Iterator[Profile]) (*profile.Profile, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByStacktraces - Block")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "MergeByStacktraces - Block")
+	defer sp.End()
 
 	stacktraceAggrValues := make(profileSampleByMapping)
 	if err := mergeByStacktraces(ctx, b.profiles.file, rows, stacktraceAggrValues); err != nil {
@@ -85,18 +87,18 @@ func (b *singleBlockQuerier) resolveLocations(ctx context.Context, mapping uint6
 }
 
 func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSampleByMapping profileSampleByMapping) (*profile.Profile, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolvePprofSymbols - Block")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "ResolvePprofSymbols - Block")
+	defer sp.End()
 
 	locationsIdsByStacktraceID := newLocationsIdsByStacktraceID(len(profileSampleByMapping) * 1024)
 
 	// gather stacktraces
 	if err := profileSampleByMapping.ForEach(func(mapping uint64, samples profileSampleMap) error {
 		stacktraceIDs := samples.Ids()
-		sp.LogFields(
-			otlog.Int("stacktraces", len(stacktraceIDs)),
-			otlog.Uint64("mapping", mapping),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.Int("stacktraces", len(stacktraceIDs)),
+			attribute.Uint64("mapping", mapping)))
+
 		return b.resolveLocations(ctx, mapping, locationsIdsByStacktraceID, stacktraceIDs)
 	}); err != nil {
 		return nil, err
@@ -245,26 +247,27 @@ func (b *singleBlockQuerier) resolvePprofSymbols(ctx context.Context, profileSam
 }
 
 func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktracesByMapping stacktracesByMapping) (*ingestv1.MergeProfilesStacktracesResult, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "ResolveSymbols - Block")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "ResolveSymbols - Block")
+	defer sp.End()
+
 	locationsIdsByStacktraceID := newLocationsIdsByStacktraceID(len(stacktracesByMapping) * 1024)
 
 	// gather stacktraces
 	if err := stacktracesByMapping.ForEach(func(mapping uint64, samples stacktraceSampleMap) error {
 		stacktraceIDs := samples.Ids()
-		sp.LogFields(
-			otlog.Int("stacktraces", len(stacktraceIDs)),
-			otlog.Uint64("mapping", mapping),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.Int("stacktraces", len(stacktraceIDs)),
+			attribute.Uint64("mapping", mapping)))
+
 		return b.resolveLocations(ctx, mapping, locationsIdsByStacktraceID, stacktraceIDs)
 	}); err != nil {
 		return nil, err
 	}
 
-	sp.LogFields(otlog.Int("locationIDs", len(locationsIdsByStacktraceID.locationIds())))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.Int("locationIDs", len(locationsIdsByStacktraceID.locationIds()))))
 
 	// gather locations
-	sp.LogFields(otlog.String("msg", "gather locations"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "gather locations")))
 	var (
 		locationIDsByFunctionID = newUniqueIDs[[]int64]()
 		locations               = b.locations.retrieveRows(ctx, locationsIdsByStacktraceID.locationIds().iterator())
@@ -279,10 +282,10 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktracesByMa
 	if err := locations.Err(); err != nil {
 		return nil, err
 	}
-	sp.LogFields(otlog.Int("functions", len(locationIDsByFunctionID)))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.Int("functions", len(locationIDsByFunctionID))))
 
 	// gather functions
-	sp.LogFields(otlog.String("msg", "gather functions"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "gather functions")))
 	var (
 		functionIDsByStringID = newUniqueIDs[[]int64]()
 		functions             = b.functions.retrieveRows(ctx, locationIDsByFunctionID.iterator())
@@ -297,7 +300,7 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktracesByMa
 	}
 
 	// gather strings
-	sp.LogFields(otlog.String("msg", "gather strings"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "gather strings")))
 	var (
 		names   = make([]string, len(functionIDsByStringID))
 		idSlice = make([][]int64, len(functionIDsByStringID))
@@ -314,7 +317,7 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktracesByMa
 		return nil, err
 	}
 
-	sp.LogFields(otlog.String("msg", "build MergeProfilesStacktracesResult"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "build MergeProfilesStacktracesResult")))
 	// idSlice contains stringIDs and gets rewritten into functionIDs
 	for nameID := range idSlice {
 		var functionIDs []int64
@@ -361,8 +364,8 @@ func (b *singleBlockQuerier) resolveSymbols(ctx context.Context, stacktracesByMa
 }
 
 func (b *singleBlockQuerier) MergeByLabels(ctx context.Context, rows iter.Iterator[Profile], by ...string) ([]*typesv1.Series, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeByLabels - Block")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "MergeByLabels - Block")
+	defer sp.End()
 
 	m := make(seriesByLabels)
 	columnName := "TotalValue"
@@ -469,8 +472,9 @@ type mapAdder interface {
 }
 
 func mergeByStacktraces(ctx context.Context, profileSource Source, rows iter.Iterator[Profile], m mapAdder) error {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "mergeByStacktraces")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "mergeByStacktraces")
+	defer sp.End()
+
 	// clone the rows to be able to iterate over them twice
 	multiRows, err := iter.CloneN(rows, 2)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/promql/parser"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/errgroup"
 
 	ingesterv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
@@ -151,8 +152,9 @@ func GetShuffleShardingSubring(ring ring.ReadRing, userID string, limits StoreGa
 }
 
 func (q *Querier) selectTreeFromStoreGateway(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*phlaremodel.Tree, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectTree StoreGateway")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "SelectTree StoreGateway")
+	defer sp.End()
+
 	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -200,8 +202,9 @@ func (q *Querier) selectTreeFromStoreGateway(ctx context.Context, req *querierv1
 }
 
 func (q *Querier) selectSeriesFromStoreGateway(ctx context.Context, req *ingesterv1.MergeProfilesLabelsRequest) ([]ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectSeries StoreGateway")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "SelectSeries StoreGateway")
+	defer sp.End()
+
 	tenantID, err := tenant.ExtractTenantIDFromContext(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)

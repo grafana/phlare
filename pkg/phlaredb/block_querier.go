@@ -21,13 +21,15 @@ import (
 	"github.com/grafana/dskit/runutil"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/samber/lo"
 	"github.com/segmentio/parquet-go"
 	"github.com/thanos-io/objstore"
+	"go.opentelemetry.io/otel"
+	attribute "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 
@@ -557,8 +559,8 @@ func SelectMatchingProfiles(ctx context.Context, request *ingestv1.SelectProfile
 }
 
 func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesStacktracesRequest, ingestv1.MergeProfilesStacktracesResponse], blockGetter BlockGetter) error {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesStacktraces")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "MergeProfilesStacktraces")
+	defer sp.End()
 
 	r, err := stream.Receive()
 	if err != nil {
@@ -572,12 +574,11 @@ func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[in
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("missing initial select request"))
 	}
 	request := r.Request
-	sp.LogFields(
-		otlog.String("start", model.Time(request.Start).Time().String()),
-		otlog.String("end", model.Time(request.End).Time().String()),
-		otlog.String("selector", request.LabelSelector),
-		otlog.String("profile_id", request.Type.ID),
-	)
+	sp.AddEvent("TODO", trace.WithAttributes(
+		attribute.String("start", model.Time(request.Start).Time().String()),
+		attribute.String("end", model.Time(request.End).Time().String()),
+		attribute.String("selector", request.LabelSelector),
+		attribute.String("profile_id", request.Type.ID)))
 
 	queriers, err := blockGetter(ctx, model.Time(request.Start), model.Time(request.End))
 	if err != nil {
@@ -621,7 +622,7 @@ func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[in
 
 	// Signals the end of the profile streaming by sending an empty response.
 	// This allows the client to not block other streaming ingesters.
-	sp.LogFields(otlog.String("msg", "signaling the end of the profile streaming"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "signaling the end of the profile streaming")))
 	if err = stream.Send(&ingestv1.MergeProfilesStacktracesResponse{}); err != nil {
 		return err
 	}
@@ -631,7 +632,7 @@ func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[in
 	}
 
 	// sends the final result to the client.
-	sp.LogFields(otlog.String("msg", "sending the final result to the client"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "sending the final result to the client")))
 	err = stream.Send(&ingestv1.MergeProfilesStacktracesResponse{
 		Result: &ingestv1.MergeProfilesStacktracesResult{
 			Format:    ingestv1.StacktracesMergeFormat_MERGE_FORMAT_TREE,
@@ -649,8 +650,8 @@ func MergeProfilesStacktraces(ctx context.Context, stream *connect.BidiStream[in
 }
 
 func MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesLabelsRequest, ingestv1.MergeProfilesLabelsResponse], blockGetter BlockGetter) error {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesLabels")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "MergeProfilesLabels")
+	defer sp.End()
 
 	r, err := stream.Receive()
 	if err != nil {
@@ -666,13 +667,12 @@ func MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv
 	request := r.Request
 	by := r.By
 	sort.Strings(by)
-	sp.LogFields(
-		otlog.String("start", model.Time(request.Start).Time().String()),
-		otlog.String("end", model.Time(request.End).Time().String()),
-		otlog.String("selector", request.LabelSelector),
-		otlog.String("profile_id", request.Type.ID),
-		otlog.String("by", strings.Join(by, ",")),
-	)
+	sp.AddEvent("TODO", trace.WithAttributes(
+		attribute.String("start", model.Time(request.Start).Time().String()),
+		attribute.String("end", model.Time(request.End).Time().String()),
+		attribute.String("selector", request.LabelSelector),
+		attribute.String("profile_id", request.Type.ID),
+		attribute.String("by", strings.Join(by, ","))))
 
 	queriers, err := blockGetter(ctx, model.Time(request.Start), model.Time(request.End))
 	if err != nil {
@@ -743,8 +743,8 @@ func MergeProfilesLabels(ctx context.Context, stream *connect.BidiStream[ingestv
 }
 
 func MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1.MergeProfilesPprofRequest, ingestv1.MergeProfilesPprofResponse], blockGetter BlockGetter) error {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "MergeProfilesPprof")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "MergeProfilesPprof")
+	defer sp.End()
 
 	r, err := stream.Receive()
 	if err != nil {
@@ -758,12 +758,11 @@ func MergeProfilesPprof(ctx context.Context, stream *connect.BidiStream[ingestv1
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("missing initial select request"))
 	}
 	request := r.Request
-	sp.LogFields(
-		otlog.String("start", model.Time(request.Start).Time().String()),
-		otlog.String("end", model.Time(request.End).Time().String()),
-		otlog.String("selector", request.LabelSelector),
-		otlog.String("profile_id", request.Type.ID),
-	)
+	sp.AddEvent("TODO", trace.WithAttributes(
+		attribute.String("start", model.Time(request.Start).Time().String()),
+		attribute.String("end", model.Time(request.End).Time().String()),
+		attribute.String("selector", request.LabelSelector),
+		attribute.String("profile_id", request.Type.ID)))
 
 	queriers, err := blockGetter(ctx, model.Time(request.Start), model.Time(request.End))
 	if err != nil {
@@ -889,8 +888,9 @@ func retrieveStacktracePartition(buf [][]parquet.Value, pos int) uint64 {
 }
 
 func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params *ingestv1.SelectProfilesRequest) (iter.Iterator[Profile], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMatchingProfiles - Block")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "SelectMatchingProfiles - Block")
+	defer sp.End()
+
 	if err := b.Open(ctx); err != nil {
 		return nil, err
 	}
@@ -1045,9 +1045,9 @@ func (q *singleBlockQuerier) openFiles(ctx context.Context) error {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "BlockQuerier - open")
 	defer func() {
 		q.metrics.blockOpeningLatency.Observe(time.Since(start).Seconds())
-		sp.LogFields(
-			otlog.String("block_ulid", q.meta.ULID.String()),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.String("block_ulid", q.meta.ULID.String())))
+
 		sp.Finish()
 	}()
 	g, ctx := errgroup.WithContext(ctx)

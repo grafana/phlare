@@ -8,6 +8,7 @@ import (
 	ring_client "github.com/grafana/dskit/ring/client"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/prometheus/promql/parser"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/errgroup"
 
 	ingesterv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
@@ -58,8 +59,9 @@ func forAllIngesters[T any](ctx context.Context, ingesterQuerier *IngesterQuerie
 }
 
 func (q *Querier) selectTreeFromIngesters(ctx context.Context, req *querierv1.SelectMergeStacktracesRequest) (*phlaremodel.Tree, error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectTree Ingesters")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "SelectTree Ingesters")
+	defer sp.End()
+
 	profileType, err := phlaremodel.ParseProfileTypeSelector(req.ProfileTypeID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -103,8 +105,9 @@ func (q *Querier) selectTreeFromIngesters(ctx context.Context, req *querierv1.Se
 }
 
 func (q *Querier) selectSeriesFromIngesters(ctx context.Context, req *ingesterv1.MergeProfilesLabelsRequest) ([]ResponseFromReplica[clientpool.BidiClientMergeProfilesLabels], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectSeries Ingesters")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "SelectSeries Ingesters")
+	defer sp.End()
+
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(ctx context.Context, ic IngesterQueryClient) (clientpool.BidiClientMergeProfilesLabels, error) {
 		return ic.MergeProfilesLabels(ctx), nil
 	})

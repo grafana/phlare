@@ -15,13 +15,15 @@ import (
 	"github.com/grafana/dskit/services"
 	"github.com/grafana/mimir/pkg/util/spanlogger"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	attribute "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
 	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
@@ -112,8 +114,8 @@ func (q *Querier) stopping(_ error) error {
 }
 
 func (q *Querier) ProfileTypes(ctx context.Context, req *connect.Request[querierv1.ProfileTypesRequest]) (*connect.Response[querierv1.ProfileTypesResponse], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "ProfileTypes")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "ProfileTypes")
+	defer sp.End()
 
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(childCtx context.Context, ic IngesterQueryClient) ([]*typesv1.ProfileType, error) {
 		res, err := ic.ProfileTypes(childCtx, connect.NewRequest(&ingestv1.ProfileTypesRequest{}))
@@ -148,9 +150,9 @@ func (q *Querier) ProfileTypes(ctx context.Context, req *connect.Request[querier
 func (q *Querier) LabelValues(ctx context.Context, req *connect.Request[typesv1.LabelValuesRequest]) (*connect.Response[typesv1.LabelValuesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "LabelValues")
 	defer func() {
-		sp.LogFields(
-			otlog.String("name", req.Msg.Name),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.String("name", req.Msg.Name)))
+
 		sp.Finish()
 	}()
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(childCtx context.Context, ic IngesterQueryClient) ([]string, error) {
@@ -173,8 +175,9 @@ func (q *Querier) LabelValues(ctx context.Context, req *connect.Request[typesv1.
 }
 
 func (q *Querier) LabelNames(ctx context.Context, req *connect.Request[typesv1.LabelNamesRequest]) (*connect.Response[typesv1.LabelNamesResponse], error) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "LabelNames")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "LabelNames")
+	defer sp.End()
+
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(childCtx context.Context, ic IngesterQueryClient) ([]string, error) {
 		res, err := ic.LabelNames(childCtx, connect.NewRequest(&typesv1.LabelNamesRequest{
 			Matchers: req.Msg.Matchers,
@@ -196,9 +199,9 @@ func (q *Querier) LabelNames(ctx context.Context, req *connect.Request[typesv1.L
 func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.SeriesRequest]) (*connect.Response[querierv1.SeriesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "Series")
 	defer func() {
-		sp.LogFields(
-			otlog.String("matchers", strings.Join(req.Msg.Matchers, ",")),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.String("matchers", strings.Join(req.Msg.Matchers, ","))))
+
 		sp.Finish()
 	}()
 	responses, err := forAllIngesters(ctx, q.ingesterQuerier, func(childCtx context.Context, ic IngesterQueryClient) ([]*typesv1.Labels, error) {
@@ -227,13 +230,13 @@ func (q *Querier) Series(ctx context.Context, req *connect.Request[querierv1.Ser
 func (q *Querier) Diff(ctx context.Context, req *connect.Request[querierv1.DiffRequest]) (*connect.Response[querierv1.DiffResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "Diff")
 	defer func() {
-		sp.LogFields(
-			otlog.String("leftStart", model.Time(req.Msg.Left.Start).Time().String()),
-			otlog.String("leftEnd", model.Time(req.Msg.Left.End).Time().String()),
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.String("leftStart", model.Time(req.Msg.Left.Start).Time().String()),
+			attribute.String("leftEnd", model.Time(req.Msg.Left.End).Time().String()),
 			// Assume are the same
-			otlog.String("selector", req.Msg.Left.LabelSelector),
-			otlog.String("profile_id", req.Msg.Left.ProfileTypeID),
-		)
+			attribute.String("selector", req.Msg.Left.LabelSelector),
+			attribute.String("profile_id", req.Msg.Left.ProfileTypeID)))
+
 		sp.Finish()
 	}()
 
@@ -409,12 +412,12 @@ func splitQueryToStores(start, end model.Time, now model.Time, queryStoreAfter t
 func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[querierv1.SelectMergeProfileRequest]) (*connect.Response[googlev1.Profile], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectMergeProfile")
 	defer func() {
-		sp.LogFields(
-			otlog.String("start", model.Time(req.Msg.Start).Time().String()),
-			otlog.String("end", model.Time(req.Msg.End).Time().String()),
-			otlog.String("selector", req.Msg.LabelSelector),
-			otlog.String("profile_id", req.Msg.ProfileTypeID),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.String("start", model.Time(req.Msg.Start).Time().String()),
+			attribute.String("end", model.Time(req.Msg.End).Time().String()),
+			attribute.String("selector", req.Msg.LabelSelector),
+			attribute.String("profile_id", req.Msg.ProfileTypeID)))
+
 		sp.Finish()
 	}()
 
@@ -467,14 +470,14 @@ func (q *Querier) SelectMergeProfile(ctx context.Context, req *connect.Request[q
 func (q *Querier) SelectSeries(ctx context.Context, req *connect.Request[querierv1.SelectSeriesRequest]) (*connect.Response[querierv1.SelectSeriesResponse], error) {
 	sp, ctx := opentracing.StartSpanFromContext(ctx, "SelectSeries")
 	defer func() {
-		sp.LogFields(
-			otlog.String("start", model.Time(req.Msg.Start).Time().String()),
-			otlog.String("end", model.Time(req.Msg.End).Time().String()),
-			otlog.String("selector", req.Msg.LabelSelector),
-			otlog.String("profile_id", req.Msg.ProfileTypeID),
-			otlog.String("group_by", strings.Join(req.Msg.GroupBy, ",")),
-			otlog.Float64("step", req.Msg.Step),
-		)
+		sp.AddEvent("TODO", trace.WithAttributes(
+			attribute.String("start", model.Time(req.Msg.Start).Time().String()),
+			attribute.String("end", model.Time(req.Msg.End).Time().String()),
+			attribute.String("selector", req.Msg.LabelSelector),
+			attribute.String("profile_id", req.Msg.ProfileTypeID),
+			attribute.String("group_by", strings.Join(req.Msg.GroupBy, ",")),
+			attribute.Float64("step", req.Msg.Step)))
+
 		sp.Finish()
 	}()
 

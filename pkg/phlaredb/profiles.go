@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 
@@ -195,8 +196,9 @@ func (pi *profilesIndex) Add(ps *schemav1.InMemoryProfile, lbs phlaremodel.Label
 }
 
 func (pi *profilesIndex) selectMatchingFPs(ctx context.Context, params *ingestv1.SelectProfilesRequest) ([]model.Fingerprint, error) {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "selectMatchingFPs - Index")
-	defer sp.Finish()
+	_, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "selectMatchingFPs - Index")
+	defer sp.End()
+
 	selectors, err := parser.ParseMetricSelector(params.LabelSelector)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "failed to parse label selectors: "+err.Error())
@@ -246,8 +248,8 @@ func (pi *profilesIndex) selectMatchingRowRanges(ctx context.Context, params *in
 	map[model.Fingerprint]phlaremodel.Labels,
 	error,
 ) {
-	sp, ctx := opentracing.StartSpanFromContext(ctx, "selectMatchingRowRanges - Index")
-	defer sp.Finish()
+	ctx, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "selectMatchingRowRanges - Index")
+	defer sp.End()
 
 	ids, err := pi.selectMatchingFPs(ctx, params)
 	if err != nil {

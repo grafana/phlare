@@ -17,13 +17,15 @@ import (
 	"github.com/google/pprof/profile"
 	"github.com/google/uuid"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	attribute "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 
@@ -533,8 +535,8 @@ func (h *Head) Queriers() Queriers {
 
 // add the location IDs to the stacktraces
 func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stacktracesByMapping) *ingestv1.MergeProfilesStacktracesResult {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "resolveStacktraces - Head")
-	defer sp.Finish()
+	_, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "resolveStacktraces - Head")
+	defer sp.End()
 
 	names := []string{}
 	functions := map[int64]int{}
@@ -548,7 +550,7 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 		h.strings.lock.RUnlock()
 	}()
 
-	sp.LogFields(otlog.String("msg", "building MergeProfilesStacktracesResult"))
+	sp.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "building MergeProfilesStacktracesResult")))
 	_ = stacktracesByMapping.ForEach(
 		func(mapping uint64, stacktraceSamples stacktraceSampleMap) error {
 			mp, ok := h.symbolDB.MappingReader(mapping)
@@ -595,8 +597,8 @@ func (h *Head) resolveStacktraces(ctx context.Context, stacktracesByMapping stac
 }
 
 func (h *Head) resolvePprof(ctx context.Context, stacktracesByMapping profileSampleByMapping) *profile.Profile {
-	sp, _ := opentracing.StartSpanFromContext(ctx, "resolvePprof - Head")
-	defer sp.Finish()
+	_, sp := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "resolvePprof - Head")
+	defer sp.End()
 
 	locations := map[int32]*profile.Location{}
 	functions := map[uint64]*profile.Function{}

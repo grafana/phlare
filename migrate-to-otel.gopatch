@@ -1,0 +1,40 @@
+@@
+var a expression
+var b expression
+var s identifier
+var t identifier
+@@
+-s, t := opentracing.StartSpanFromContext(a,b)
+-...
+- defer s.Finish()
++import "go.opentelemetry.io/otel"
++t, s := otel.Tracer("github.com/grafana/pyroscope").Start(a,b)
++defer s.End()
+
+@@
+var foo,x identifier
+@@
+
+-import foo "github.com/opentracing/opentracing-go/log"
++import foo "go.opentelemetry.io/otel/attribute"
+foo.x
+
+@@
+@@
+- otlog
++ attribute
+
+@@
+var span identifier
+var x expression
+@@
+- span.LogFields(...)
++import "go.opentelemetry.io/otel/trace"
++ span.AddEvent("TODO", trace.WithAttributes(...))
+
+
+@@
+@@
+-opentracing.Span
++import "go.opentelemetry.io/otel/trace"
++trace.Span

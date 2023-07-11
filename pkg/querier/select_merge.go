@@ -8,13 +8,6 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/grafana/dskit/multierror"
-	"github.com/opentracing/opentracing-go"
-	"github.com/prometheus/common/model"
-	"github.com/samber/lo"
-	"golang.org/x/sync/errgroup"
-
-	otlog "github.com/opentracing/opentracing-go/log"
-
 	googlev1 "github.com/grafana/phlare/api/gen/proto/go/google/v1"
 	ingestv1 "github.com/grafana/phlare/api/gen/proto/go/ingester/v1"
 	typesv1 "github.com/grafana/phlare/api/gen/proto/go/types/v1"
@@ -24,6 +17,13 @@ import (
 	"github.com/grafana/phlare/pkg/pprof"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/loser"
+	"github.com/opentracing/opentracing-go"
+	"github.com/prometheus/common/model"
+	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	attribute "go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 )
 
 type ProfileWithLabels struct {
@@ -220,8 +220,9 @@ func (s *mergeIterator[R, Req, Res]) Close() error {
 
 // skipDuplicates iterates through the iterator and skip duplicates.
 func skipDuplicates(ctx context.Context, its []MergeIterator) error {
-	span, _ := opentracing.StartSpanFromContext(ctx, "skipDuplicates")
-	defer span.Finish()
+	_, span := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "skipDuplicates")
+	defer span.End()
+
 	var errors multierror.MultiError
 	tree := loser.New(its,
 		&ProfileWithLabels{
@@ -259,8 +260,8 @@ func skipDuplicates(ctx context.Context, its []MergeIterator) error {
 		}
 		duplicates++
 	}
-	span.LogFields(otlog.Int("duplicates", duplicates))
-	span.LogFields(otlog.Int("total", total))
+	span.AddEvent("TODO", trace.WithAttributes(attribute.Int("duplicates", duplicates)))
+	span.AddEvent("TODO", trace.WithAttributes(attribute.Int("total", total)))
 
 	return errors.Err()
 }
@@ -268,8 +269,8 @@ func skipDuplicates(ctx context.Context, its []MergeIterator) error {
 // selectMergeTree selects the  profile from each ingester by deduping them and
 // returns merge of stacktrace samples represented as a tree.
 func selectMergeTree(ctx context.Context, responses []ResponseFromReplica[clientpool.BidiClientMergeProfilesStacktraces]) (*phlaremodel.Tree, error) {
-	span, ctx := opentracing.StartSpanFromContext(ctx, "selectMergeTree")
-	defer span.Finish()
+	ctx, span := otel.Tracer("github.com/grafana/pyroscope").Start(ctx, "selectMergeTree")
+	defer span.End()
 
 	mergeResults := make([]MergeResult[*ingestv1.MergeProfilesStacktracesResult], len(responses))
 	iters := make([]MergeIterator, len(responses))
@@ -294,7 +295,7 @@ func selectMergeTree(ctx context.Context, responses []ResponseFromReplica[client
 	}
 
 	// Collects the results in parallel.
-	span.LogFields(otlog.String("msg", "collecting merge results"))
+	span.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "collecting merge results")))
 	g, _ := errgroup.WithContext(ctx)
 	m := phlaremodel.NewTreeMerger()
 	sm := phlaremodel.NewStackTraceMerger()
@@ -327,7 +328,7 @@ func selectMergeTree(ctx context.Context, responses []ResponseFromReplica[client
 		}
 	}
 
-	span.LogFields(otlog.String("msg", "building tree"))
+	span.AddEvent("TODO", trace.WithAttributes(attribute.String("msg", "building tree")))
 	return m.Tree(), nil
 }
 
