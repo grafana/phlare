@@ -960,7 +960,7 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 
 	itersCh := make(chan iter.Iterator[Profile], len(pItPerRG))
 	iters := make([]iter.Iterator[Profile], 0, len(lblsPerRef))
-	resultsReceived := make(chan struct{}, 0)
+	resultsReceived := make(chan struct{})
 	go func() {
 		for it := range itersCh {
 			iters = append(iters, it)
@@ -971,7 +971,8 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 	g, ctx := errgroup.WithContext(ctx)
 
 	// pull the profiles in parallel per rg
-	for _, pIt := range pItPerRG {
+	for idx := range pItPerRG {
+		pIt := pItPerRG[idx]
 		g.Go(func() error {
 			defer pIt.Close()
 
