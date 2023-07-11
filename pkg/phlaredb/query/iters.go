@@ -467,8 +467,7 @@ func (bj *BinaryJoinIterator) Next() bool {
 			}
 
 		} else {
-			// the right value can't be smaller than the left one because we seeked beyond it
-			panic("not expected to happen")
+			panic("bug in iterator during join: the right iterator cannot be smaller than the left one, as it just has been Seeked beyond")
 		}
 	}
 }
