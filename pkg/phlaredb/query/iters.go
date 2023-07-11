@@ -19,6 +19,16 @@ import (
 
 const MaxDefinitionLevel = 5
 
+func NewPerRowGroupIter(rowGroups []parquet.RowGroup, makeIter func(rowGroups []parquet.RowGroup, rowNumOffset int64) Iterator) []Iterator {
+	iters := make([]Iterator, len(rowGroups))
+	var offset int64
+	for idx := range iters {
+		iters[idx] = makeIter(rowGroups[idx:idx+1], offset)
+		offset += rowGroups[idx].NumRows()
+	}
+	return iters
+}
+
 // RowNumber is the sequence of row numbers uniquely identifying a value
 // in a tree of nested columns, starting at the top-level and including
 // another row number for each level of nesting. -1 is a placeholder
@@ -836,11 +846,16 @@ func syncIteratorPoolPut(b []parquet.Value) {
 }
 
 func NewSyncIterator(ctx context.Context, rgs []parquet.RowGroup, column int, columnName string, readSize int, filter Predicate, selectAs string) *SyncIterator {
+	return NewSyncIteratorWithRowNumOffset(ctx, rgs, 0, column, columnName, readSize, filter, selectAs)
+}
+
+func NewSyncIteratorWithRowNumOffset(ctx context.Context, rgs []parquet.RowGroup, rowNumOffset int64, column int, columnName string, readSize int, filter Predicate, selectAs string) *SyncIterator {
 
 	// Assign row group bounds.
 	// Lower bound is inclusive
 	// Upper bound is exclusive, points at the first row of the next group
 	rn := EmptyRowNumber()
+	rn.Skip(rowNumOffset)
 	rgsMin := make([]RowNumber, len(rgs))
 	rgsMax := make([]RowNumber, len(rgs))
 	for i, rg := range rgs {
