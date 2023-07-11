@@ -141,3 +141,25 @@ func TestNewMergeRowReader(t *testing.T) {
 		})
 	}
 }
+
+type SomeRow struct {
+	Col1 int
+}
+
+func BenchmarkBufferedRowReader(b *testing.B) {
+	buff := parquet.NewGenericBuffer[SomeRow]()
+	for i := 0; i < 1000000; i++ {
+		_, err := buff.Write([]SomeRow{{Col1: (i)}})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+	reader := NewBufferedRowReaderIterator(buff.Rows(), 100)
+	defer reader.Close()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for reader.Next() {
+			_ = reader.At()
+		}
+	}
+}
