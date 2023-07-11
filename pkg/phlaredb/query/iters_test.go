@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"testing"
 
@@ -13,8 +14,6 @@ import (
 	"github.com/segmentio/parquet-go"
 	"github.com/stretchr/testify/require"
 )
-
-const MaxDefinitionLevel = 5
 
 type makeTestIterFn func(pf *parquet.File, idx int, filter Predicate, selectAs string) Iterator
 
@@ -27,7 +26,6 @@ var iterTestCases = []struct {
 	}},
 }
 
-/*
 // TestNext compares the unrolled Next() with the original nextSlow() to
 // prevent drift
 func TestNext(t *testing.T) {
@@ -44,7 +42,6 @@ func TestNext(t *testing.T) {
 		require.Equal(t, rn1, rn2)
 	}
 }
-*/
 
 func TestRowNumber(t *testing.T) {
 	tr := EmptyRowNumber()

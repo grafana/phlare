@@ -17,6 +17,8 @@ import (
 	"github.com/grafana/phlare/pkg/iter"
 )
 
+const MaxDefinitionLevel = 5
+
 // RowNumber is the sequence of row numbers uniquely identifying a value
 // in a tree of nested columns, starting at the top-level and including
 // another row number for each level of nesting. -1 is a placeholder
@@ -32,7 +34,7 @@ import (
 //	  E        0,  2, -1
 //
 // Currently supports 6 levels of nesting which should be enough for anybody. :)
-type RowNumber [6]int64
+type RowNumber [MaxDefinitionLevel + 1]int64
 
 type RowNumberWithDefinitionLevel struct {
 	RowNumber       RowNumber
@@ -277,6 +279,22 @@ func (t *RowNumber) Next(repetitionLevel, definitionLevel int) {
 		case 4:
 			t[5] = -1
 		}
+	}
+}
+
+// nextSlow is the original implementation of next. it is kept to test against
+// the unrolled version above
+func (t *RowNumber) nextSlow(repetitionLevel, definitionLevel int) {
+	t[repetitionLevel]++
+
+	// New children up through the definition level
+	for i := repetitionLevel + 1; i <= definitionLevel; i++ {
+		t[i] = 0
+	}
+
+	// // Children past the definition level are undefined
+	for i := definitionLevel + 1; i < len(t); i++ {
+		t[i] = -1
 	}
 }
 
