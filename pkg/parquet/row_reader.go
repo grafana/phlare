@@ -116,6 +116,7 @@ func (r *BufferedRowReaderIterator) Next() bool {
 		return true
 	}
 
+	// todo this seems to do allocations on every call since cap is always smaller
 	if cap(r.buff) < r.bufferSize {
 		r.buff = make([]parquet.Row, r.bufferSize)
 	}
