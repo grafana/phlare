@@ -1,0 +1,12 @@
+goos: darwin
+goarch: amd64
+pkg: github.com/grafana/phlare/pkg/parquet
+cpu: Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz
+BenchmarkBufferedRowReader
+BenchmarkBufferedRowReader-16            1656484               807.3 ns/op          2718 B/op          1 allocs/op
+BenchmarkBufferedRowReader-16            1669701               674.6 ns/op          2718 B/op          1 allocs/op
+BenchmarkBufferedRowReader-16            1710991               679.3 ns/op          2717 B/op          1 allocs/op
+BenchmarkBufferedRowReader-16            1737392               692.4 ns/op          2717 B/op          1 allocs/op
+BenchmarkBufferedRowReader-16            1665608               690.9 ns/op          2718 B/op          1 allocs/op
+PASS
+ok      github.com/grafana/phlare/pkg/parquet   14.778s

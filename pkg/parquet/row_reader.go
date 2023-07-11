@@ -95,7 +95,10 @@ func (it *IteratorRowReader) ReadRows(rows []parquet.Row) (int, error) {
 }
 
 type BufferedRowReaderIterator struct {
-	reader     parquet.RowReader
+	reader       parquet.RowReader
+	bufferedRows []parquet.Row
+
+	// buff keep the original slice capacity to avoid allocations
 	buff       []parquet.Row
 	bufferSize int
 	err        error
@@ -111,8 +114,8 @@ func NewBufferedRowReaderIterator(reader parquet.RowReader, bufferSize int) *Buf
 }
 
 func (r *BufferedRowReaderIterator) Next() bool {
-	if len(r.buff) > 1 {
-		r.buff = r.buff[1:]
+	if len(r.bufferedRows) > 1 {
+		r.bufferedRows = r.bufferedRows[1:]
 		return true
 	}
 
@@ -120,8 +123,8 @@ func (r *BufferedRowReaderIterator) Next() bool {
 	if cap(r.buff) < r.bufferSize {
 		r.buff = make([]parquet.Row, r.bufferSize)
 	}
-	r.buff = r.buff[:r.bufferSize]
-	n, err := r.reader.ReadRows(r.buff)
+	r.bufferedRows = r.buff[:r.bufferSize]
+	n, err := r.reader.ReadRows(r.bufferedRows)
 	if err != nil && err != io.EOF {
 		r.err = err
 		return false
@@ -130,15 +133,15 @@ func (r *BufferedRowReaderIterator) Next() bool {
 		return false
 	}
 
-	r.buff = r.buff[:n]
+	r.bufferedRows = r.bufferedRows[:n]
 	return true
 }
 
 func (r *BufferedRowReaderIterator) At() parquet.Row {
-	if len(r.buff) == 0 {
+	if len(r.bufferedRows) == 0 {
 		return parquet.Row{}
 	}
-	return r.buff[0]
+	return r.bufferedRows[0]
 }
 
 func (r *BufferedRowReaderIterator) Err() error {
