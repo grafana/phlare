@@ -3,9 +3,9 @@ package parquet
 import (
 	"io"
 
+	"github.com/grafana/dskit/runutil"
 	"github.com/segmentio/parquet-go"
 
-	"github.com/grafana/dskit/runutil"
 	"github.com/grafana/phlare/pkg/iter"
 	"github.com/grafana/phlare/pkg/util"
 	"github.com/grafana/phlare/pkg/util/loser"
