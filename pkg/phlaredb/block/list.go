@@ -41,6 +41,12 @@ func ListBlocks(path string, ulidMinTime time.Time) (map[ulid.ULID]*Meta, error)
 	return result, nil
 }
 
+// IterBlockMetas iterates over all block metas in the given time range.
+// It calls the given function for each block meta.
+// It returns the first error returned by the function.
+// It returns nil if all calls succeed.
+// The function is called concurrently.
+// Currently doesn't work with filesystem bucket.
 func IterBlockMetas(ctx context.Context, bkt phlareobj.Bucket, from, to time.Time, fn func(*Meta)) error {
 	allIDs, err := listAllBlockByPrefixes(ctx, bkt, from, to)
 	if err != nil {
