@@ -438,7 +438,7 @@ func NewBinaryJoinIterator(definitionLevel int, left, right Iterator) *BinaryJoi
 // nextOrSeek will use next if the iterator is exactly one row aways
 func (bj *BinaryJoinIterator) nextOrSeek(to RowNumberWithDefinitionLevel, it Iterator) bool {
 	// Seek when definition level is higher then 0, there is not previous iteration or when the difference between current position and to is not 1
-	if to.DefinitionLevel != 0 || it.At() == nil || to.RowNumber.Preceding() != it.At().RowNumber {
+	if to.DefinitionLevel != 0 || it.At() == nil || to.RowNumber[0] != (it.At().RowNumber[0]-1) {
 		return it.Seek(to)
 	}
 	return it.Next()
