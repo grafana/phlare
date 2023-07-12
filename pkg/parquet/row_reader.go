@@ -88,7 +88,10 @@ func (it *IteratorRowReader) ReadRows(rows []parquet.Row) (int, error) {
 			}
 			return n, io.EOF
 		}
-		rows[n] = it.At()
+		rows[n] = rows[n][:0]
+		for _, c := range it.At() {
+			rows[n] = append(rows[n], c.Clone())
+		}
 		n++
 	}
 	return n, nil
