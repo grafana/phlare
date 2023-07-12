@@ -740,11 +740,14 @@ type RowNumberIterator[T any] struct {
 	iter.Iterator[T]
 	current *IteratorResult
 	err     error
+
+	lastRowNum int64
 }
 
 func NewRowNumberIterator[T any](iter iter.Iterator[T]) *RowNumberIterator[T] {
 	return &RowNumberIterator[T]{
-		Iterator: iter,
+		Iterator:   iter,
+		lastRowNum: -1,
 	}
 }
 
@@ -761,7 +764,18 @@ func (r *RowNumberIterator[T]) Next() bool {
 		}
 		return false
 	}
+
 	r.current.RowNumber = RowNumber{rowGetter.RowNumber(), -1, -1, -1, -1, -1}
+	if r.lastRowNum >= r.current.RowNumber[0] {
+		r.err = fmt.Errorf(
+			"row number iterator: %T is not sorted, last_element=%d current_element=%d",
+			r.Iterator,
+			r.lastRowNum,
+			r.current.RowNumber[0],
+		)
+		return false
+	}
+	r.lastRowNum = r.current.RowNumber[0]
 	r.current.Entries = append(r.current.Entries, struct {
 		k        string
 		V        parquet.Value
@@ -784,6 +798,9 @@ func (r *RowNumberIterator[T]) Err() error {
 }
 
 func (r *RowNumberIterator[T]) Seek(to RowNumberWithDefinitionLevel) bool {
+	if r.current == nil && !r.Next() {
+		return false
+	}
 	for CompareRowNumbers(0, r.current.RowNumber, to.RowNumber) == -1 {
 		if !r.Next() {
 			return false
