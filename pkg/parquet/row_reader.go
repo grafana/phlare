@@ -168,7 +168,9 @@ func ReadAllWithBufferSize(r parquet.RowReader, bufferSize int) ([]parquet.Row, 
 			return rows, err
 		}
 		if n != 0 {
-			rows = append(rows, batch[:n]...)
+			for i := range batch[:n] {
+				rows = append(rows, batch[i].Clone())
+			}
 		}
 		if n == 0 || err == io.EOF {
 			break
