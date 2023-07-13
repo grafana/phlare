@@ -80,7 +80,7 @@ function removeDuplicateApps(app: App[]) {
 export async function fetchApps(): Promise<
   Result<App[], RequestError | ZodError>
 > {
-  const response = await requestWithOrgID('/querier.v1.QuerierService/Series', {
+  let response = await requestWithOrgID('/querier.v1.QuerierService/Series', {
     method: 'POST',
     body: JSON.stringify({
       matchers: [],
@@ -97,6 +97,20 @@ export async function fetchApps(): Promise<
     },
   });
 
+  if (response.isOk) {
+    return parseResponse(response, ListOfAppsSchema);
+  }
+
+  // try without labelNames in case of an error since this has been added in a later version
+  response = await requestWithOrgID('/querier.v1.QuerierService/Series', {
+    method: 'POST',
+    body: JSON.stringify({
+      matchers: [],
+    }),
+    headers: {
+      'content-type': 'application/json',
+    },
+  });
   if (response.isOk) {
     return parseResponse(response, ListOfAppsSchema);
   }
