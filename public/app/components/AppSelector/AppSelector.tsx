@@ -191,6 +191,8 @@ export const SelectorModalWithToggler = ({
 
     return 'auto';
   }, [groups, matchedApps]);
+
+  // console.log('listHeight', listHeight);
   
 
   return (
