@@ -80,11 +80,11 @@ function removeDuplicateApps(app: App[]) {
 export async function fetchApps(): Promise<
   Result<App[], RequestError | ZodError>
 > {
-  // TODO: is this the best query?
   const response = await requestWithOrgID('/querier.v1.QuerierService/Series', {
     method: 'POST',
     body: JSON.stringify({
       matchers: [],
+      labelNames: [PyroscopeAppLabel, ServiceNameLabel,'__profile_type__'],
     }),
     headers: {
       'content-type': 'application/json',
