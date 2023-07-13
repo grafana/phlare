@@ -513,6 +513,7 @@ func (bj *BinaryJoinIterator) Seek(to RowNumberWithDefinitionLevel) bool {
 
 	// if there is a match right away return true
 	if cmp := CompareRowNumbers(bj.definitionLevel, bj.left.At().RowNumber, bj.right.At().RowNumber); cmp == 0 {
+		bj.makeResult()
 		return true
 	}
 
@@ -527,8 +528,8 @@ func (bj *BinaryJoinIterator) Close() error {
 	return merr.Err()
 }
 
-func (c *BinaryJoinIterator) Err() error {
-	return c.err
+func (bj *BinaryJoinIterator) Err() error {
+	return bj.err
 }
 
 // UnionIterator produces all results for all given iterators.  When iterators
