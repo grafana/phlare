@@ -304,7 +304,12 @@ $(BIN)/dlv: Makefile go.mod
 	GOBIN=$(abspath $(@D)) CGO_ENABLED=0 $(GO) install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@$(DLV_VERSION)
 
 $(BIN)/linux_amd64/dlv: Makefile go.mod
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOPATH=$(CURDIR)/.tmp $(GO) install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@$(DLV_VERSION)
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOPATH=$(CURDIR)/.tmp $(GO) install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@$(DLV_VERSION);
+	# Create a hardlink if you are on linux_amd64, so we are able to use the same dockerfile
+	if [[ "$(shell $(GO) env GOOS)" == "linux" && "$(shell $(GO) env GOARCH)" == "amd64" ]]; then \
+		mkdir -p "$(@D)"; \
+		ln -f $(BIN)/dlv "$@"; \
+	fi
 
 $(BIN)/trunk: Makefile
 	@mkdir -p $(@D)
