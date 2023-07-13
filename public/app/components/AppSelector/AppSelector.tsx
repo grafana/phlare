@@ -104,19 +104,6 @@ export const SelectorModalWithToggler = ({
     onSelectedUpstream(app);
   };
 
-  let numItems = 30;
-
-  for (let i = 0; i < numItems; i++) {
-    let app = Object.assign({}, apps[i % apps.length]); // Duplicate an item from the original apps array
-    let randomNum = Math.floor(Math.random() * 1000); // Generate a random number between 0 and 999
-  
-    // Modify the duplicated item
-    app.name = randomNum + "-" + app.name;
-    // Modify any other properties as needed
-  
-    apps.push(app);
-  }
-
   const leftSideApps = uniqueByName(apps);
   const [isModalOpen, setModalOpenStatus] = useState(false);
   const [selectedLeftSide, setSelectedLeftSide] = useState<string>();
@@ -159,23 +146,23 @@ export const SelectorModalWithToggler = ({
       const appNamesEntries = leftSideApps.filter((app) =>
         app.name.startsWith(groupName)
       );
-  
+
       return appNamesEntries.length > 1 ? groupName : appNamesEntries[0].name;
     });
 
     return groupOrApp;
   }, [leftSideApps]);
-  
+
   const listHeight = useMemo(() => {
-    const windowHeight = (window?.innerHeight || 0)
+    const windowHeight = window?.innerHeight || 0;
     const listRequiredHeight = Math.max(groups.length, matchedApps.length) * 35;
-  
+
     if (windowHeight && listRequiredHeight) {
       return windowHeight >= listRequiredHeight ? 'auto' : `${windowHeight}px`;
     }
 
     return 'auto';
-  }, [groups, matchedApps]);  
+  }, [groups, matchedApps]);
 
   return (
     <ModalWithToggle
