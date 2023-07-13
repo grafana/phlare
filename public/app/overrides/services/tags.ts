@@ -1,61 +1,40 @@
 import { parseResponse, requestWithOrgID } from '@webapp/services/base';
 import { z } from 'zod';
 
-const seriesLabelsSchema = z.preprocess(
+const labelNamesSchema = z.preprocess(
   (a: any) => {
-    if ('labelsSet' in a) {
+    if ('names' in a) {
       return a;
     }
-
-    return { labelsSet: [{ labels: [] }] };
+    return { names: [] };
   },
   z.object({
-    labelsSet: z.array(
-      z.object({
-        labels: z.array(
-          z.object({
-            name: z.string(),
-            value: z.string(),
-          })
-        ),
-      })
-    ),
+    names: z.array(z.string()),
   })
 );
 
-async function fetchLabelsSeries<T>(
-  query: string,
-  transformFn: (t: Array<{ name: string; value: string }>) => T
-) {
+export async function fetchTags(query: string, _from: number, _until: number) {
   const profileTypeID = query.replace(/\{.*/g, '');
-  const response = await requestWithOrgID('/querier.v1.QuerierService/Series', {
-    method: 'POST',
-    body: JSON.stringify({
-      matchers: [`{__profile_type__=\"${profileTypeID}\"}`],
-    }),
-    headers: {
-      'content-type': 'application/json',
-    },
-  });
+  const response = await requestWithOrgID(
+    '/querier.v1.QuerierService/LabelNames',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        matchers: [`{__profile_type__=\"${profileTypeID}\"}`],
+      }),
+      headers: {
+        'content-type': 'application/json',
+      },
+    }
+  );
   const isMetaTag = (tag: string) => tag.startsWith('__') && tag.endsWith('__');
 
-  return parseResponse<T>(
+  return parseResponse(
     response,
-    seriesLabelsSchema
-      .transform((res) => {
-        return res.labelsSet
-          .flatMap((a) => a.labels)
-          .filter((a) => !isMetaTag(a.name));
-      })
-      .transform(transformFn)
+    labelNamesSchema.transform((res) => {
+      return Array.from(new Set(res.names.filter((a) => !isMetaTag(a))));
+    })
   );
-}
-
-export async function fetchTags(query: string, _from: number, _until: number) {
-  return fetchLabelsSeries(query, function (t) {
-    const labelNames = t.map((a) => a.name);
-    return Array.from(new Set(labelNames));
-  });
 }
 
 export async function fetchLabelValues(
@@ -64,8 +43,25 @@ export async function fetchLabelValues(
   _from: number,
   _until: number
 ) {
-  return fetchLabelsSeries(query, function (t) {
-    const labelValues = t.filter((l) => label === l.name).map((a) => a.value);
-    return Array.from(new Set(labelValues));
-  });
+  const profileTypeID = query.replace(/\{.*/g, '');
+  const response = await requestWithOrgID(
+    '/querier.v1.QuerierService/LabelValues',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        matchers: [`{__profile_type__=\"${profileTypeID}\"}`],
+        name: label,
+      }),
+      headers: {
+        'content-type': 'application/json',
+      },
+    }
+  );
+
+  return parseResponse(
+    response,
+    labelNamesSchema.transform((res) => {
+      return Array.from(new Set(res.names));
+    })
+  );
 }
