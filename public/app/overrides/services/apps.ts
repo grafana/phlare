@@ -84,7 +84,7 @@ export async function fetchApps(): Promise<
     method: 'POST',
     body: JSON.stringify({
       matchers: [],
-      labelNames: [PyroscopeAppLabel, ServiceNameLabel,'__profile_type__'],
+      labelNames: [PyroscopeAppLabel, ServiceNameLabel, '__profile_type__'],
     }),
     headers: {
       'content-type': 'application/json',
