@@ -149,21 +149,12 @@ export const SelectorModalWithToggler = ({
 
   const groups = useMemo(() => {
     const allGroups = leftSideApps.map((app) => app.name.split('-')[0]);
-
-    // console.log('leftSideApps', leftSideApps);
-    // console.log('allGroups', allGroups);
-
-
     const uniqGroups = Array.from(new Set(allGroups));
 
-    // console.log('uniqGroups', uniqGroups);
-  
     const dedupedUniqGroups = uniqGroups.filter((x) => {
       return !uniqGroups.find((y) => x !== y && y.startsWith(x));
     });
 
-    // console.log('dedupedUniqGroups', dedupedUniqGroups);
-  
     const groupOrApp = dedupedUniqGroups.map((groupName) => {
       const appNamesEntries = leftSideApps.filter((app) =>
         app.name.startsWith(groupName)
@@ -172,28 +163,19 @@ export const SelectorModalWithToggler = ({
       return appNamesEntries.length > 1 ? groupName : appNamesEntries[0].name;
     });
 
-    // console.log('groupOrApp', groupOrApp);
-  
     return groupOrApp;
   }, [leftSideApps]);
   
   const listHeight = useMemo(() => {
-    // const height = window.innerHeight || 0;
     const windowHeight = (window?.innerHeight || 0)
     const listRequiredHeight = Math.max(groups.length, matchedApps.length) * 35;
   
-    // console.log('windowHeight', windowHeight);
-    // console.log('listRequiredHeight', listRequiredHeight);
-
     if (windowHeight && listRequiredHeight) {
       return windowHeight >= listRequiredHeight ? 'auto' : `${windowHeight}px`;
     }
 
     return 'auto';
-  }, [groups, matchedApps]);
-
-  // console.log('listHeight', listHeight);
-  
+  }, [groups, matchedApps]);  
 
   return (
     <ModalWithToggle
