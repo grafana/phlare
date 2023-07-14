@@ -6,7 +6,7 @@
 // with the following changes:
 // 1. unsupportedMemcgAccounting = &internal.UnsupportedFeatureError replaced with unsupportedMemcgAccounting = errors.New
 // to avoid importing internal package
-// 2. global haveMemcgAccounting removed, it is checked locally under rlimitMu lock in RemoveMemlock
+// 2. haveMemcgAccounting is initialized once during RemoveMemlock
 package rlimit
 
 import (
