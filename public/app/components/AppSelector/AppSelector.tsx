@@ -55,9 +55,42 @@ function queryToApp(query: Query, apps: App[]) {
 
 export function AppSelector({
   onSelected,
-  apps,
+  apps: appsOriginal,
   selectedQuery,
 }: AppSelectorProps) {
+  console.log(appsOriginal);
+
+  // Fake multiple apps
+  const apps = [
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+    ...appsOriginal,
+  ].map((a) => {
+    return {
+      ...a,
+      name: a.name + Math.floor(Math.random() * 6) + 1,
+      __name__: a.__name__ + Math.random(),
+    };
+  });
+
   const maybeSelectedApp = queryToApp(selectedQuery, apps);
   const [filter, setFilter] = useState('');
   const filteredApps = useMemo(

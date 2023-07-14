@@ -2,6 +2,10 @@
   /* upstream code is positioned based on a label */
   left: initial !important;
   max-width: calc(100vw - 290px);
+
+  [data-testid="modal-body"] {
+    max-height: calc(100vh - 220px);
+  }
 }
 
 .search {
