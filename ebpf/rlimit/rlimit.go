@@ -7,6 +7,7 @@
 // 1. unsupportedMemcgAccounting = &internal.UnsupportedFeatureError replaced with unsupportedMemcgAccounting = errors.New
 // to avoid importing internal package
 // 2. haveMemcgAccounting is initialized once during RemoveMemlock
+// 3. a bunch of internals copied to rlimit/internal/internal_mirror.go
 package rlimit
 
 import (
