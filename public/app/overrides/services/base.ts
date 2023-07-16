@@ -38,8 +38,6 @@ export async function requestWithOrgID(
   });
 }
 
-
-
 async function connectRequest(
   request: RequestInfo,
   config?: RequestInit

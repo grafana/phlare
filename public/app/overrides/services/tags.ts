@@ -32,7 +32,7 @@ export async function fetchTags(query: string, _from: number, _until: number) {
 
   return parseResponse<string[]>(
     response,
-    labelNamesSchema.transform((res)  =>  {
+    labelNamesSchema.transform((res) => {
       return Array.from(new Set(res.names.filter((a) => !isMetaTag(a))));
     })
   );

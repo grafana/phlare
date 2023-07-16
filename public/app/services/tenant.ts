@@ -7,11 +7,11 @@ export async function isMultiTenancyEnabled() {
     // Which doesn't tell us whether multitenancy is enabled or not
     headers: {
       'X-Scope-OrgID': '',
-       'content-type': 'application/json',
+      'content-type': 'application/json',
     },
     method: 'POST',
     body: JSON.stringify({
-      matchers: ['{__profile_type__=\"app\"}'],
+      matchers: ['{__profile_type__="app"}'],
     }),
   });
 
