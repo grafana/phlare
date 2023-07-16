@@ -13,15 +13,31 @@ const labelNamesSchema = z.preprocess(
   })
 );
 
+// Turns a Pyroscope query "goroutine:goroutine:count:goroutine:count{service_name="cortex-dev-01/ruler"}"
+// into a list of labels matchers
+export function queryToMatchers(query: string) {
+  const labelsIndex = query.indexOf('{');
+  if (labelsIndex > 0) {
+    const profileTypeID = query.substring(0, labelsIndex);
+    return [
+      `{__profile_type__=\"${profileTypeID}\", ` +
+        query.substring(labelsIndex + 1, query.length),
+    ];
+  }
+  if (labelsIndex === 0) {
+    return [query];
+  }
+  return [`{__profile_type__=\"${query}\"}`];
+}
+
 // todo we  should filter using matchers = [service_name="foo", tag="bar", etc]
 export async function fetchTags(query: string, _from: number, _until: number) {
-  const profileTypeID = query.replace(/\{.*/g, '');
   const response = await requestWithOrgID(
     '/querier.v1.QuerierService/LabelNames',
     {
       method: 'POST',
       body: JSON.stringify({
-        matchers: [`{__profile_type__=\"${profileTypeID}\"}`],
+        matchers: queryToMatchers(query),
       }),
       headers: {
         'content-type': 'application/json',
@@ -45,13 +61,12 @@ export async function fetchLabelValues(
   _from: number,
   _until: number
 ) {
-  const profileTypeID = query.replace(/\{.*/g, '');
   const response = await requestWithOrgID(
     '/querier.v1.QuerierService/LabelValues',
     {
       method: 'POST',
       body: JSON.stringify({
-        matchers: [`{__profile_type__=\"${profileTypeID}\"}`],
+        matchers: queryToMatchers(query),
         name: label,
       }),
       headers: {
