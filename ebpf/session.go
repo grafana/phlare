@@ -90,7 +90,13 @@ func (s *session) Start() error {
 		return err
 	}
 
-	opts := &ebpf.CollectionOptions{}
+	opts := &ebpf.CollectionOptions{
+		//Programs: ebpf.ProgramOptions{
+		//	LogLevel: ebpf.LogLevelInstruction | ebpf.LogLevelStats,
+		//	LogSize:  10 * 1024 * 1024,
+		//},
+	}
+	//todo add an option to enable full verifier log with ENV var
 	if err := loadProfileObjects(&s.bpf, opts); err != nil {
 		return fmt.Errorf("load bpf objects: %w", err)
 	}
@@ -150,10 +156,14 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 		var uStack []byte
 		var kStack []byte
 		if s.options.CollectUser {
-			uStack = s.getStack(ck.UserStack)
+			if manualStack {
+				uStack = s.getStack(s.bpf.profileMaps.ManualStacks, ck.UserStack)
+			} else {
+				uStack = s.getStack(s.bpf.profileMaps.Stacks, ck.UserStack)
+			}
 		}
 		if s.options.CollectKernel {
-			kStack = s.getStack(ck.KernStack)
+			kStack = s.getStack(s.bpf.profileMaps.Stacks, ck.KernStack)
 		}
 		sfs = append(sfs, sf{
 			pid:    ck.Pid,
@@ -282,12 +292,12 @@ func (s *session) attachPerfEvents() error {
 	return nil
 }
 
-func (s *session) getStack(stackId int64) []byte {
+func (s *session) getStack(m *ebpf.Map, stackId int64) []byte {
 	if stackId < 0 {
 		return nil
 	}
 	stackIdU32 := uint32(stackId)
-	res, err := s.bpf.profileMaps.Stacks.LookupBytes(stackIdU32)
+	res, err := m.LookupBytes(stackIdU32)
 	if err != nil {
 		return nil
 	}

@@ -99,10 +99,11 @@ int do_perf_event(struct bpf_perf_event_data *ctx) {
 
         // todo maybe ifdef kernel version
 #if defined(__TARGET_ARCH_arm64)
-        key.flags = SAMPLE_FLAG_USER_STACK_MANUAL;
         scratch_stack = bpf_map_lookup_elem(&scratch_stacks, &zero);
-
-        key.user_stack = get_arm64_user_stack_hash(&ctx->regs, scratch_stack);
+        if (scratch_stack) {
+            key.flags = SAMPLE_FLAG_USER_STACK_MANUAL;
+            key.user_stack = get_arm64_user_stack_hash(&ctx->regs, scratch_stack);
+        }
 #else
         key.user_stack = bpf_get_stackid(ctx, &stacks, USER_STACKID_FLAGS);
 #endif

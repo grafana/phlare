@@ -9,8 +9,6 @@
 #include "bpf_helpers.h"
 
 
-
-
 #define PSR_MODE32_BIT        0x00000010
 #define PSR_MODE_EL0t    0x00000000
 #define PSR_MODE_MASK    0x0000000f
