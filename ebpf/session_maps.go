@@ -79,8 +79,8 @@ func (s *session) clearCountsMap(keys []profileSampleKey, batch bool) error {
 	return nil
 }
 
-func (s *session) clearStacksMap(knownKeys map[uint32]bool) error {
-	m := s.bpf.Stacks
+func (s *session) clearStacksMap(m *ebpf.Map, knownKeys map[uint32]bool) error {
+	//m := s.bpf.Stacks
 	cnt := 0
 	errs := 0
 	if s.roundNumber%10 == 0 {
