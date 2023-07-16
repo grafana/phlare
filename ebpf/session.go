@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
-	"strings"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -23,7 +22,9 @@ import (
 	"github.com/samber/lo"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -Wall -fpie -Wno-unused-variable -Wno-unused-function" profile bpf/profile.bpf.c -- -I./bpf/libbpf -I./bpf/vmlinux/
+//todo make it not generate i386
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target arm64 -cc clang -cflags "-O2 -Wall -fpie -Wno-unused-variable -Wno-unused-function" profile bpf/profile.bpf.c -- -I./bpf/libbpf -I./bpf/vmlinux/
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -cc clang -cflags "-O2 -Wall -fpie -Wno-unused-variable -Wno-unused-function" profile bpf/profile.bpf.c -- -I./bpf/libbpf -I./bpf/vmlinux/
 
 type SessionOptions struct {
 	CollectUser   bool
@@ -124,12 +125,19 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 
 	var sfs []sf
 	knownStacks := map[uint32]bool{}
+	knownManualStacks := map[uint32]bool{}
 	for i := range keys {
 		ck := &keys[i]
 		value := values[i]
-
+		// todo generate go consts from header
+		//#define SAMPLE_FLAG_USER_STACK_MANUAL 1
+		manualStack := (ck.Flags & 1) == 1
 		if ck.UserStack >= 0 {
-			knownStacks[uint32(ck.UserStack)] = true
+			if manualStack {
+				knownManualStacks[uint32(ck.UserStack)] = true
+			} else {
+				knownStacks[uint32(ck.UserStack)] = true
+			}
 		}
 		if ck.KernStack >= 0 {
 			knownStacks[uint32(ck.KernStack)] = true
@@ -179,13 +187,14 @@ func (s *session) CollectProfiles(cb func(t *sd.Target, stack []string, value ui
 	if err = s.clearCountsMap(keys, batch); err != nil {
 		return fmt.Errorf("clear counts map %w", err)
 	}
-	if err = s.clearStacksMap(knownStacks); err != nil {
+	if err = s.clearStacksMap(s.bpf.Stacks, knownStacks); err != nil {
+		return fmt.Errorf("clear stacks map %w", err)
+	}
+	if err = s.clearStacksMap(s.bpf.ManualStacks, knownManualStacks); err != nil {
 		return fmt.Errorf("clear stacks map %w", err)
 	}
 	return nil
 }
-
-var unknownStacks = 0
 
 func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 	m := s.options.CacheOptions.Metrics
@@ -197,31 +206,6 @@ func (s *session) debugDump(it sf, stats stackResolveStats, sb stackBuilder) {
 	}
 	if len(sb.stack) > 2 && stats.unknownSymbols+stats.unknownModules > stats.known {
 		m.UnknownStacks.WithLabelValues(serviceName).Inc()
-		unknownStacks++
-		if unknownStacks%10 == 0 && serviceName == "ebpf/pyroscope-ebpf/profiler" {
-			rawStack := strings.Builder{}
-			for i := 0; i < len(it.uStack); i += 8 {
-				PC := binary.LittleEndian.Uint64(it.uStack[i : i+8])
-				if PC == 0 {
-					break
-				}
-				rawStack.WriteString(fmt.Sprintf("%016x|", PC))
-			}
-			for i := 0; i < len(it.kStack); i += 8 {
-				PC := binary.LittleEndian.Uint64(it.kStack[i : i+8])
-				if PC == 0 {
-					break
-				}
-				rawStack.WriteString(fmt.Sprintf("%016x|", PC))
-			}
-			level.Debug(s.logger).Log(
-				"msg", "stack with unknown symbols",
-				"pid", it.pid,
-				"symbols", strings.Join(sb.stack, ";"),
-				"raw", rawStack.String(),
-			)
-		}
-
 	}
 }
 
@@ -304,6 +288,18 @@ func (s *session) getStack(stackId int64) []byte {
 	}
 	stackIdU32 := uint32(stackId)
 	res, err := s.bpf.profileMaps.Stacks.LookupBytes(stackIdU32)
+	if err != nil {
+		return nil
+	}
+	return res
+}
+
+func (s *session) getStackManual(stackId int64) []byte {
+	if stackId < 0 {
+		return nil
+	}
+	stackIdU32 := uint32(stackId)
+	res, err := s.bpf.profileMaps.ManualStacks.LookupBytes(stackIdU32)
 	if err != nil {
 		return nil
 	}
