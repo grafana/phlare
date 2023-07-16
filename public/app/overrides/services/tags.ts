@@ -30,7 +30,6 @@ export function queryToMatchers(query: string) {
   return [`{__profile_type__=\"${query}\"}`];
 }
 
-// todo we  should filter using matchers = [service_name="foo", tag="bar", etc]
 export async function fetchTags(query: string, _from: number, _until: number) {
   const response = await requestWithOrgID(
     '/querier.v1.QuerierService/LabelNames',
@@ -54,7 +53,6 @@ export async function fetchTags(query: string, _from: number, _until: number) {
   );
 }
 
-// todo we  should filter using matchers = [service_name="foo", tag="bar", etc]
 export async function fetchLabelValues(
   label: string,
   query: string,
