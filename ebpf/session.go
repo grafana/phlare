@@ -334,6 +334,7 @@ func (s *session) walkStack(sb *stackBuilder, stack []byte, pid uint32, stats *s
 		return
 	}
 	var stackFrames []string
+	fmt.Println("=====================================")
 	for i := 0; i < 127; i++ {
 		instructionPointerBytes := stack[i*8 : i*8+8]
 		instructionPointer := binary.LittleEndian.Uint64(instructionPointerBytes)
@@ -347,15 +348,16 @@ func (s *session) walkStack(sb *stackBuilder, stack []byte, pid uint32, stats *s
 			stats.known++
 		} else {
 			if sym.Module != "" {
-				//name = fmt.Sprintf("%s+%x", sym.Module, sym.Start) // todo expose an option to enable this
-				name = sym.Module
+				name = fmt.Sprintf("%s+%x", sym.Module, sym.Start) // todo expose an option to enable this
+				//name = sym.Module
 				stats.unknownSymbols++
 			} else {
-				name = "[unknown]"
+				name = fmt.Sprintf("[unknown] %x", instructionPointer)
 				stats.unknownModules++
 			}
 		}
 		stackFrames = append(stackFrames, name)
+		fmt.Printf("sf %3d: %16x %s!%s\n", i, instructionPointer, sym.Module, name)
 	}
 	lo.Reverse(stackFrames)
 	for _, s := range stackFrames {
