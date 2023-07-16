@@ -13,6 +13,7 @@ const labelNamesSchema = z.preprocess(
   })
 );
 
+// todo we  should filter using matchers = [service_name="foo", tag="bar", etc]
 export async function fetchTags(query: string, _from: number, _until: number) {
   const profileTypeID = query.replace(/\{.*/g, '');
   const response = await requestWithOrgID(
@@ -29,14 +30,15 @@ export async function fetchTags(query: string, _from: number, _until: number) {
   );
   const isMetaTag = (tag: string) => tag.startsWith('__') && tag.endsWith('__');
 
-  return parseResponse(
+  return parseResponse<string[]>(
     response,
-    labelNamesSchema.transform((res) => {
+    labelNamesSchema.transform((res)  =>  {
       return Array.from(new Set(res.names.filter((a) => !isMetaTag(a))));
     })
   );
 }
 
+// todo we  should filter using matchers = [service_name="foo", tag="bar", etc]
 export async function fetchLabelValues(
   label: string,
   query: string,
@@ -58,7 +60,7 @@ export async function fetchLabelValues(
     }
   );
 
-  return parseResponse(
+  return parseResponse<string[]>(
     response,
     labelNamesSchema.transform((res) => {
       return Array.from(new Set(res.names));
