@@ -38,7 +38,7 @@ export async function requestWithOrgID(
   });
 }
 
-async function connectRequest(
+export async function connectRequest(
   request: RequestInfo,
   config?: RequestInit
 ): Promise<Result<unknown, RequestError>> {
