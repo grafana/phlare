@@ -75,13 +75,16 @@ export async function connectRequest(
       const data = JSON.parse(textBody);
 
       // Check if it's 401 unauthorized error
-      // if (response.status === 401) {
-      //   // TODO: Introduce some kind of interceptor (?)
-      //   // if (!/\/(login|signup)$/.test(window?.location?.pathname)) {
-      //   //   window.location.href = mountURL('/login');
-      //   // }
-      //   return Result.err(new RequestNotOkError(response.status, data.error));
-      // }
+      if (response.status === 401) {
+        // TODO: Introduce some kind of interceptor (?)
+        // if (!/\/(login|signup)$/.test(window?.location?.pathname)) {
+        //   window.location.href = mountURL('/login');
+        // }
+        if ('message' in data && typeof data.message === 'string') {
+          return Result.err(new RequestNotOkError(response.status, data.message));
+        }
+        return Result.err(new RequestNotOkError(response.status, data.error));
+      }
 
       // Usually it's a feedback on user's actions like form validation
       if ('errors' in data && Array.isArray(data.errors)) {

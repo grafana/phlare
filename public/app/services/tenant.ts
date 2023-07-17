@@ -29,7 +29,7 @@ function isOrgRequiredError(res: Awaited<ReturnType<typeof requestWithOrgID>>) {
     res.isErr &&
     res.error instanceof RequestNotOkError &&
     res.error.code === 401 &&
-    res.error.message.includes('no org id')
+    res.error.description.includes('no org id')
   );
 }
 
