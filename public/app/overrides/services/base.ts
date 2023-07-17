@@ -81,7 +81,9 @@ export async function connectRequest(
         //   window.location.href = mountURL('/login');
         // }
         if ('message' in data && typeof data.message === 'string') {
-          return Result.err(new RequestNotOkError(response.status, data.message));
+          return Result.err(
+            new RequestNotOkError(response.status, data.message)
+          );
         }
         return Result.err(new RequestNotOkError(response.status, data.error));
       }
