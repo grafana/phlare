@@ -44,4 +44,4 @@ git remote add phlare "${WORK_DIR}/phlare"
 git fetch phlare
 git merge phlare/main --allow-unrelated-histories -m "The new Pyroscope"
 
-git push git@github.com:simonswine/pyroscope HEAD:merged -f
+git push git@github.com:grafana/pyroscope HEAD:next -f
