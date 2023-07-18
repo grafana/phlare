@@ -933,55 +933,87 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		}
 	}
 
-	var (
-		buf [][]parquet.Value
-	)
-
-	pIt := query.NewBinaryJoinIterator(
-		0,
-		b.profiles.columnIter(ctx, "SeriesIndex", query.NewMapPredicate(lblsPerRef), "SeriesIndex"),
-		b.profiles.columnIter(ctx, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
-	)
-
-	if b.meta.Version >= 2 {
-		pIt = query.NewBinaryJoinIterator(
+	pItPerRG := query.NewPerRowGroupIter(b.profiles.file.RowGroups(), func(rowGroups []parquet.RowGroup, rowNumOffset int64) query.Iterator {
+		pIt := query.NewBinaryJoinIterator(
 			0,
-			pIt,
-			b.profiles.columnIter(ctx, "StacktracePartition", nil, "StacktracePartition"),
+			b.profiles.columnIter(ctx, rowGroups, rowNumOffset, "SeriesIndex", query.NewMapPredicate(lblsPerRef), "SeriesIndex"),
+			b.profiles.columnIter(ctx, rowGroups, rowNumOffset, "TimeNanos", query.NewIntBetweenPredicate(model.Time(params.Start).UnixNano(), model.Time(params.End).UnixNano()), "TimeNanos"),
 		)
-		buf = make([][]parquet.Value, 3)
-	} else {
-		buf = make([][]parquet.Value, 2)
-	}
-
-	iters := make([]iter.Iterator[Profile], 0, len(lblsPerRef))
-	defer pIt.Close()
-
-	currSeriesIndex := int64(-1)
-	var currentSeriesSlice []Profile
-	for pIt.Next() {
-		res := pIt.At()
-		buf = res.Columns(buf, "SeriesIndex", "TimeNanos", "StacktracePartition")
-		seriesIndex := buf[0][0].Int64()
-		if seriesIndex != currSeriesIndex {
-			currSeriesIndex = seriesIndex
-			if len(currentSeriesSlice) > 0 {
-				iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
-			}
-			currentSeriesSlice = make([]Profile, 0, 100)
+		if b.meta.Version >= 2 {
+			pIt = query.NewBinaryJoinIterator(
+				0,
+				pIt,
+				b.profiles.columnIter(ctx, rowGroups, rowNumOffset, "StacktracePartition", nil, "StacktracePartition"),
+			)
 		}
+		return pIt
+	})
 
-		currentSeriesSlice = append(currentSeriesSlice, BlockProfile{
-			labels:              lblsPerRef[seriesIndex].lbs,
-			fp:                  lblsPerRef[seriesIndex].fp,
-			ts:                  model.TimeFromUnixNano(buf[1][0].Int64()),
-			stacktracePartition: retrieveStacktracePartition(buf, 2),
-			RowNum:              res.RowNumber[0],
+	itersCh := make(chan iter.Iterator[Profile], len(pItPerRG))
+	iters := make([]iter.Iterator[Profile], 0, len(lblsPerRef))
+	resultsReceived := make(chan struct{})
+	go func() {
+		for it := range itersCh {
+			iters = append(iters, it)
+		}
+		close(resultsReceived)
+	}()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	// pull the profiles in parallel per rg
+	for idx := range pItPerRG {
+		pIt := pItPerRG[idx]
+		g.Go(func() error {
+			defer pIt.Close()
+
+			var (
+				buf [][]parquet.Value
+			)
+			if b.meta.Version >= 2 {
+				buf = make([][]parquet.Value, 3)
+			} else {
+				buf = make([][]parquet.Value, 2)
+			}
+
+			currSeriesIndex := int64(-1)
+			var currentSeriesSlice []Profile
+			for pIt.Next() {
+				res := pIt.At()
+				buf = res.Columns(buf, "SeriesIndex", "TimeNanos", "StacktracePartition")
+				seriesIndex := buf[0][0].Int64()
+				if seriesIndex != currSeriesIndex {
+					currSeriesIndex = seriesIndex
+					if len(currentSeriesSlice) > 0 {
+						itersCh <- iter.NewSliceIterator(currentSeriesSlice)
+					}
+					currentSeriesSlice = make([]Profile, 0, 100)
+				}
+
+				currentSeriesSlice = append(currentSeriesSlice, BlockProfile{
+					labels:              lblsPerRef[seriesIndex].lbs,
+					fp:                  lblsPerRef[seriesIndex].fp,
+					ts:                  model.TimeFromUnixNano(buf[1][0].Int64()),
+					stacktracePartition: retrieveStacktracePartition(buf, 2),
+					RowNum:              res.RowNumber[0],
+				})
+			}
+			if len(currentSeriesSlice) > 0 {
+				itersCh <- iter.NewSliceIterator(currentSeriesSlice)
+			}
+
+			return nil
+
 		})
 	}
-	if len(currentSeriesSlice) > 0 {
-		iters = append(iters, iter.NewSliceIterator(currentSeriesSlice))
+
+	// wait for all iters to complete
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
+
+	close(itersCh)
+	<-resultsReceived
 
 	return iter.NewMergeIterator(maxBlockProfile, false, iters...), nil
 }
@@ -1146,13 +1178,13 @@ func (r *parquetReader[M, P]) relPath() string {
 	return r.persister.Name() + block.ParquetSuffix
 }
 
-func (r *parquetReader[M, P]) columnIter(ctx context.Context, columnName string, predicate query.Predicate, alias string) query.Iterator {
+func (r *parquetReader[M, P]) columnIter(ctx context.Context, rowGroups []parquet.RowGroup, rowNumOffset int64, columnName string, predicate query.Predicate, alias string) query.Iterator {
 	index, _ := query.GetColumnIndexByPath(r.file, columnName)
 	if index == -1 {
 		return query.NewErrIterator(fmt.Errorf("column '%s' not found in parquet file '%s'", columnName, r.relPath()))
 	}
 	ctx = query.AddMetricsToContext(ctx, r.metrics.query)
-	return query.NewSyncIterator(ctx, r.file.RowGroups(), index, columnName, 1000, predicate, alias)
+	return query.NewSyncIteratorWithRowNumOffset(ctx, rowGroups, rowNumOffset, index, columnName, 1000, predicate, alias)
 }
 
 func repeatedColumnIter[T any](ctx context.Context, source Source, columnName string, rows iter.Iterator[T]) iter.Iterator[*query.RepeatedRow[T]] {

@@ -3,6 +3,8 @@ package phlaredb
 import (
 	"context"
 	"fmt"
+	"os"
+	rpprof "runtime/pprof"
 	"strings"
 	"testing"
 	"time"
@@ -187,5 +189,66 @@ func TestBlockCompatability(t *testing.T) {
 			require.Equal(t, int(meta.Stats.NumProfiles), profileCount)
 		})
 
+	}
+}
+
+func BenchmarkSelectMatchingProfilesRealBlock(t *testing.B) {
+	blockPath := os.Getenv("PROFILES_BLOCK_PATH")
+	if blockPath == "" {
+		t.Skip("PROFILES_BLOCK_PATH not set")
+	}
+
+	bucket, err := filesystem.NewBucket(blockPath)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	metas, err := NewBlockQuerier(ctx, bucket).BlockMetas(ctx)
+	require.NoError(t, err)
+
+	for _, meta := range metas {
+
+		q := NewSingleBlockQuerierFromMeta(ctx, bucket, meta)
+		require.NoError(t, q.Open(ctx))
+
+		profilesTypes, err := q.index.LabelValues("__profile_type__")
+		require.NoError(t, err)
+		t.Logf("block %s has %d profile types", meta.ULID.String(), len(profilesTypes))
+
+		for _, profileType := range profilesTypes {
+			name := fmt.Sprintf("block-%s-%s", meta.ULID.String(), profileType)
+			t.Run(name, func(t *testing.B) {
+				profileTypeParts := strings.Split(profileType, ":")
+
+				it, err := q.SelectMatchingProfiles(ctx, &ingestv1.SelectProfilesRequest{
+					LabelSelector: `{namespace="profiles-ops-001"}`,
+					Start:         0,
+					End:           time.Now().UnixMilli(),
+					Type: &typesv1.ProfileType{
+						Name:       profileTypeParts[0],
+						SampleType: profileTypeParts[1],
+						SampleUnit: profileTypeParts[2],
+						PeriodType: profileTypeParts[3],
+						PeriodUnit: profileTypeParts[4],
+					},
+				})
+				require.NoError(t, err)
+
+				f, err := os.Create("heap-after-" + name + ".pprof")
+				require.NoError(t, err)
+
+				require.NoError(t, rpprof.WriteHeapProfile(f))
+
+				require.NoError(t, f.Close())
+
+				// TODO: It would be nice actually comparing the whole profile, but at present the result is not deterministic.
+				p, err := q.MergePprof(ctx, it)
+
+				var sampleSum int64
+				for _, s := range p.Sample {
+					sampleSum += s.Value[0]
+				}
+				t.Logf("profileType=%s sum=%d", profileType, sampleSum)
+			})
+		}
 	}
 }
