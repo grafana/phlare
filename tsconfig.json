@@ -64,7 +64,7 @@
     "jsx": "react-jsx",
     "noImplicitAny": true,
     "strictNullChecks": true,
-    "experimentalDecorators": true,
+    "experimentalDecorators": true
   },
   "include": [
     "./node_modules/pyroscope-oss/lib/",
