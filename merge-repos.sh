@@ -24,7 +24,7 @@ return re.sub(b"#([0-9]+)", b"https://github.com/grafana/phlare/issues/\\1", mes
 '
 
 # move import path to new repo's
-git ls-files '*.go' go.mod go.sum | xargs sed -i 's#github.com/grafana/phlare#github.com/grafana/pyroscope#g'
+git ls-files '*.go' go.mod go.sum api/go.mod api/go.sum ebpf/go.mod ebpf/go.sum | xargs sed -i 's#github.com/grafana/phlare#github.com/grafana/pyroscope#g'
 go mod tidy
 git add -A .
 git commit -m "Rename go import path"
