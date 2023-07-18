@@ -427,6 +427,21 @@ func newStacktraceResolverV2(bucketReader phlareobj.Bucket) StacktraceDB {
 	}
 }
 
+func (b *singleBlockQuerier) Profiles() []parquet.RowGroup {
+	return b.profiles.file.RowGroups()
+}
+
+func (b *singleBlockQuerier) Index() IndexReader {
+	return b.index
+}
+
+func (b *singleBlockQuerier) Meta() block.Meta {
+	if b.meta == nil {
+		return block.Meta{}
+	}
+	return *b.meta
+}
+
 func (b *singleBlockQuerier) Close() error {
 	b.openLock.Lock()
 	defer func() {
@@ -933,9 +948,7 @@ func (b *singleBlockQuerier) SelectMatchingProfiles(ctx context.Context, params 
 		}
 	}
 
-	var (
-		buf [][]parquet.Value
-	)
+	var buf [][]parquet.Value
 
 	pIt := query.NewBinaryJoinIterator(
 		0,
